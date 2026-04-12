@@ -1,0 +1,87 @@
+@import 'tailwindcss';
+
+:root {
+  --canvas: #f3efe7;
+  --surface: rgba(255, 250, 243, 0.88);
+  --surface-strong: #fff8ef;
+  --surface-muted: #eadfce;
+  --ink: #172225;
+  --ink-soft: #556367;
+  --line: rgba(23, 34, 37, 0.11);
+  --primary: #0f766e;
+  --primary-strong: #115e59;
+  --accent: #b45309;
+  --danger: #a53a27;
+  --shadow: 0 28px 70px rgba(23, 34, 37, 0.08);
+}
+
+@theme inline {
+  --font-sans: var(--font-space-grotesk);
+  --font-mono: var(--font-plex-mono);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(180, 83, 9, 0.16), transparent 28%),
+    radial-gradient(circle at 90% 0%, rgba(15, 118, 110, 0.18), transparent 32%),
+    linear-gradient(180deg, #fbf7ef 0%, #f1e7d7 100%);
+  color: var(--ink);
+  font-family: var(--font-space-grotesk), sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(15, 118, 110, 0.2);
+}
+
+.panel {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+}
+
+.field {
+  width: 100%;
+  border-radius: 1rem;
+  border: 1px solid rgba(23, 34, 37, 0.12);
+  background: rgba(255, 248, 239, 0.95);
+  padding: 0.875rem 1rem;
+  color: var(--ink);
+}
+
+.field:focus {
+  outline: none;
+  border-color: rgba(15, 118, 110, 0.45);
+  box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.1);
+}

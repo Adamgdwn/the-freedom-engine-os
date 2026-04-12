@@ -1,0 +1,10 @@
+.next
+node_modules
+.env
+.env.local
+.supabase
+.supabase-db-password.local
+coverage
+dist
+npm-debug.log*
+tsconfig.tsbuildinfo
