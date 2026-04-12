@@ -39,3 +39,6 @@ that ties business outcomes back to freedom outcomes.
 - Phone access should reuse Adam Connect. Add this repo root to Adam Connect's
   `DESKTOP_APPROVED_ROOTS` as a comma-separated absolute path list, then launch Adam
   Connect and pair from your phone.
+- The operating rule for focus is simple:
+  if a task is interesting but off-plan, the system should challenge it, park it, or turn
+  it into a bounded experiment instead of silently expanding scope.

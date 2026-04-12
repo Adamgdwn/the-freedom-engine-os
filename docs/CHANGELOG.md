@@ -13,3 +13,4 @@
 - provisioned Supabase project `basbwglynuyfxcqxfyur`, linked the repo, and applied the
   initial migration
 - documented Adam Connect reuse as the phone-access path for Freedom Engine
+- added a focus-guardrail policy and prompt so the system can flag off-roadmap drift

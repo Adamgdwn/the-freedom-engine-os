@@ -5,6 +5,8 @@
 Freedom Engine should reuse Adam Connect for phone access instead of building a second
 mobile bridge.
 
+No migration of Adam Connect is required just to test this repo.
+
 Adam Connect already handles:
 
 - phone pairing
@@ -29,6 +31,13 @@ absolute roots. Include Freedom Engine's repo root:
 Example:
 
 `DESKTOP_APPROVED_ROOTS=/home/adamgoodwin/code/agents/codex_adam_connect,/home/adamgoodwin/code/agents/the-freedom-engine-os`
+
+Current local check:
+
+- Adam Connect is installed and provisioned
+- Freedom Engine is not yet present in Adam Connect's `DESKTOP_APPROVED_ROOTS`
+
+That means the next clean step is config, not migration.
 
 ## Launch Path
 

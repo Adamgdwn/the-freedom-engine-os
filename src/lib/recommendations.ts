@@ -65,5 +65,16 @@ export function buildRecommendations(): Recommendation[] {
       freedomGain: 'medium',
       confidence: 'medium',
     },
+    {
+      id: 'recommendation-06',
+      title: 'Flag ADHD-path drift before it becomes roadmap debt',
+      action:
+        'When a request is exciting but off-plan, ask whether it advances the current north-star objective, belongs in the parking lot, or should become a scoped experiment.',
+      rationale:
+        'Attention is a core resource. Protecting it is part of governance, not a personal productivity side quest.',
+      evidenceIds: ['evidence-05', 'evidence-07'],
+      freedomGain: 'high',
+      confidence: 'medium',
+    },
   ];
 }

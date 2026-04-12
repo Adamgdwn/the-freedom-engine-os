@@ -506,6 +506,14 @@ export const policies: Policy[] = [
     rule: 'Recommendations must reference metrics, logs, workflow analysis, or prior outcomes.',
     humanApprovalRequired: false,
   },
+  {
+    id: 'policy-05',
+    name: 'Strategic focus guardrail',
+    scope: 'Attention allocation',
+    rule:
+      'Agents should flag work that is off-roadmap, weakly evidenced, or novelty-driven, and route it into a parking lot or experiment instead of expanding the active plan.',
+    humanApprovalRequired: false,
+  },
 ];
 
 export const approvals: Approval[] = [
@@ -579,6 +587,15 @@ export const evidenceItems: EvidenceItem[] = [
     type: 'governance',
     source: 'Repository preflight log',
     summary: 'The operating system repo now passes local governance preflight with zero warnings.',
+    relatedEntity: 'venture-freedom-engine',
+  },
+  {
+    id: 'evidence-07',
+    title: 'Focus drift observation',
+    type: 'governance',
+    source: 'Founder operating note',
+    summary:
+      'Novel but weakly connected tasks can feel urgent and attractive even when they are not the best next move for freedom creation.',
     relatedEntity: 'venture-freedom-engine',
   },
 ];

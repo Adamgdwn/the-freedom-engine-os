@@ -7,6 +7,7 @@
 - replace placeholder metrics with live evidence and execution telemetry
 - add persistence wiring from the seeded layer into Supabase
 - validate Freedom Engine access through Adam Connect on a real phone
+- add focus guardrails so off-roadmap ideas are challenged instead of quietly becoming scope
 
 ## Next
 

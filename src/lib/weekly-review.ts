@@ -15,6 +15,7 @@ export function buildWeeklyReview(): WeeklyReview {
     wastedMotion: [
       'Switching across ventures without an explicit weekly allocation rule still burns strategic time.',
       'Manual PDF exception triage remains too reactive and interrupts higher-value work.',
+      'Novel side quests can steal strategic attention before they earn a place on the roadmap.',
     ],
     freedomUp: [
       'Founder hours reclaimed increased where repeatable workflow assets replaced blank-page consulting effort.',
@@ -29,6 +30,7 @@ export function buildWeeklyReview(): WeeklyReview {
       'Approve or reject the scoring-weight change before reprioritizing the portfolio.',
       'Choose whether AI Consulting Build remains the first deep integration domain for the next sprint.',
       'Decide the acceptable exception path for PDF refunds and customer-facing edge cases.',
+      'Decide which off-roadmap ideas belong in a parking lot versus a real experiment.',
     ],
   };
 }
