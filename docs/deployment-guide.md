@@ -17,9 +17,10 @@
    `npm run typecheck`
    `npm test`
    `npm run build`
-3. For local development, start with `npm run dev`.
-4. When persistence is introduced, apply the Supabase migration in
-   `supabase/migrations/202604120001_freedom_engine_v1.sql` before promoting the app.
+3. Confirm `.env.local` points at the linked Supabase project
+   `basbwglynuyfxcqxfyur`.
+4. For local development, start with `npm run dev`.
+5. Apply new Supabase migrations before promoting any environment changes.
 
 ## Rollback
 
@@ -38,4 +39,5 @@
   `/`, `/workflow-lab`, `/agent-control`, `/governance`, `/evidence-room`,
   `/weekly-review`, and `/ventures/ai-consulting-build`
 - Confirm the score workbench renders and creates simulated versions
+- Confirm the linked Supabase project exists and the migration history is current
 - Confirm build and lint remain clean

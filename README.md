@@ -23,6 +23,15 @@ Freedom in this system is tracked as outcomes, not slogans:
 - Risk tier: high
 - Production status: local governed V1 scaffold
 
+## Infrastructure Baseline
+
+- GitHub:
+  private repository at `https://github.com/Adamgdwn/the-freedom-engine-os`
+- Supabase:
+  linked hosted project `basbwglynuyfxcqxfyur` in West US (Oregon), with the V1 schema applied
+- Phone access:
+  reuse the existing Adam Connect stack instead of building a second mobile bridge
+
 ## What V1 Includes
 
 - A Next.js 16 control-plane UI with the required views:
@@ -42,11 +51,19 @@ Freedom in this system is tracked as outcomes, not slogans:
    `bash scripts/governance-preflight.sh`
 3. Start the app:
    `npm run dev`
+4. Copy environment defaults if needed:
+   `.env.example` to `.env.local`
 4. Validate changes:
    `npm run lint`
    `npm run typecheck`
    `npm test`
    `npm run build`
+
+## Mobile Access
+
+Freedom Engine can already be reached from your phone through the existing Adam Connect
+companion at `/home/adamgoodwin/code/agents/codex_adam_connect`. See
+`docs/mobile-access.md` for the exact approved-root setup and launch path.
 
 ## Documentation
 

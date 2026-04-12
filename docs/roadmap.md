@@ -6,6 +6,7 @@
 - deepen AI Consulting Build as the first integration domain
 - replace placeholder metrics with live evidence and execution telemetry
 - add persistence wiring from the seeded layer into Supabase
+- validate Freedom Engine access through Adam Connect on a real phone
 
 ## Next
 
@@ -13,6 +14,7 @@
 - persist score-weight versions, approvals, overrides, and weekly reviews
 - connect PDF Flow metrics and workflow exceptions directly into the evidence room
 - expand recommendation quality with richer evidence freshness and experiment outcomes
+- add first-class Adam Connect session presets or shortcuts for Freedom Engine workflows
 
 ## Later
 

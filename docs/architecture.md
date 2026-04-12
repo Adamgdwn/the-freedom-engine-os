@@ -25,6 +25,9 @@ seeded data layer without rewriting the UI or service boundaries.
   surfaced in the UI and represented in the schema.
 - Persistence boundary:
   Supabase migration under `supabase/migrations/` that mirrors the seeded entity model.
+- Remote companion boundary:
+  Adam Connect acts as the phone-to-desktop control surface for this repo instead of a
+  bespoke Freedom Engine mobile app.
 
 ## Data Flow
 
@@ -43,7 +46,8 @@ seeded data layer without rewriting the UI or service boundaries.
 - React 19
 - Tailwind CSS 4
 - TypeScript 5
-- Supabase SQL migration scaffold for future persistence
+- Supabase hosted project `basbwglynuyfxcqxfyur` in West US (Oregon)
+- Adam Connect at `/home/adamgoodwin/code/agents/codex_adam_connect` for mobile access
 
 ## Key Decisions
 
@@ -53,6 +57,8 @@ seeded data layer without rewriting the UI or service boundaries.
   irreversible external commitments.
 - Score weights are editable in the UI and versioned in-memory now, with schema support
   for durable history later.
+- Mobile phone access is delegated to Adam Connect so we reuse an existing trusted bridge
+  instead of rebuilding device pairing, Codex auth handoff, and realtime delivery.
 - The first integration posture centers AI Consulting Build, with PDF Flow as a live
   execution domain and GitHub as the code-control surface.
 

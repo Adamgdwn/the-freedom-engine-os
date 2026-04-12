@@ -15,6 +15,9 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   inspect evidence freshness, blocked approvals, and score-weight drift.
 - Workflow or execution state looks wrong:
   review the seed data or future persistence source before changing priorities.
+- Phone access fails through Adam Connect:
+  verify Codex login, Tailscale reachability, and that Freedom Engine's repo root is
+  present in `DESKTOP_APPROVED_ROOTS`.
 
 ## Dependencies
 
@@ -22,6 +25,7 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Next.js toolchain for build and routing
 - Supabase migration files for future database setup
 - GitHub workflow access for future code-control integration
+- Adam Connect for paired mobile access to the local workstation
 
 ## Recovery
 
@@ -31,6 +35,8 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
    version control.
 4. If the issue is architectural, document the change in `docs/architecture.md` and add
    or update an ADR before re-releasing.
+5. If phone access breaks, fall back to direct desktop use of the web app and recover the
+   Adam Connect host separately.
 
 ## Escalation
 

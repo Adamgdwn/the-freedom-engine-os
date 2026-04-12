@@ -12,7 +12,8 @@ that ties business outcomes back to freedom outcomes.
 2. Review `project-control.yaml` and confirm that exceptions remain empty or are updated
    intentionally.
 3. Install dependencies with `npm install`.
-4. Start the control plane with `npm run dev`.
+4. Copy `.env.example` to `.env.local` if local Supabase values are missing.
+5. Start the control plane with `npm run dev`.
 5. When changing behavior, update the nearest matching controlled document in `docs/`.
 6. Before finishing, run:
    `npm run lint`
@@ -30,6 +31,11 @@ that ties business outcomes back to freedom outcomes.
 ## Operator Notes
 
 - V1 is seeded and does not yet require Supabase credentials.
-- The `supabase/migrations/` directory defines the persistence target for the next build phase.
+- The repo is now linked to Supabase project `basbwglynuyfxcqxfyur`, and the initial
+  migration has been pushed.
+- The `supabase/migrations/` directory is now the canonical schema source for remote updates.
 - The scoring workbench is intended for scenario testing, not for silently changing live priorities.
 - Weekly Review is the preferred place to convert observations into approved next actions.
+- Phone access should reuse Adam Connect. Add this repo root to Adam Connect's
+  `DESKTOP_APPROVED_ROOTS` as a comma-separated absolute path list, then launch Adam
+  Connect and pair from your phone.
