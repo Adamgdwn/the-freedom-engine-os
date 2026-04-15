@@ -22,6 +22,7 @@ if [[ ! -d "${ANDROID_SDK_ROOT}" ]]; then
   exit 1
 fi
 
+
 sdk_dir_escaped="${ANDROID_SDK_ROOT//\\/\\\\}"
 sdk_dir_escaped="${sdk_dir_escaped//:/\\:}"
 cat > "${android_dir}/local.properties" <<EOF

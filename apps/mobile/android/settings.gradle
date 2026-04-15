@@ -1,5 +1,5 @@
 pluginManagement {
-    includeBuild("../node_modules/@react-native/gradle-plugin")
+    includeBuild("../../../node_modules/@react-native/gradle-plugin")
     def expoPluginsPath = new File(
         providers.exec {
             workingDir(rootDir)
@@ -22,7 +22,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
 }
 rootProject.name = 'com.adamconnectmobile'
 include ':app'
-includeBuild('../node_modules/@react-native/gradle-plugin')
+includeBuild('../../../node_modules/@react-native/gradle-plugin')
 expoAutolinking.useExpoModules()
 expoAutolinking.useExpoVersionCatalog()
 includeBuild(expoAutolinking.reactNativeGradlePlugin)
