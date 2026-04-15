@@ -69,8 +69,46 @@ export default function AgentControlPage() {
                       {request.status}
                     </span>
                   </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+                    <span>{request.executionMode.replace('-', ' ')}</span>
+                    <span>•</span>
+                    <span>{request.parallelLaneCount} lanes</span>
+                    <span>•</span>
+                    <span>{request.coordinatorSkillId.replace('skill-', '').replaceAll('-', ' ')}</span>
+                  </div>
                   <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
                     {request.routeReason}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Skill registry" eyebrow="Parallel-capable skills">
+            <div className="space-y-4">
+              {snapshot.skillDefinitions.map((skill) => (
+                <div
+                  key={skill.id}
+                  className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-[color:var(--ink)]">{skill.name}</h3>
+                      <p className="mt-2 text-sm text-[color:var(--ink-soft)]">{skill.purpose}</p>
+                    </div>
+                    <span className="rounded-full bg-[color:var(--primary)]/12 px-3 py-1 text-sm text-[color:var(--primary)]">
+                      {skill.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+                    <span>{skill.parallelMode.replace('-', ' ')}</span>
+                    <span>•</span>
+                    <span>{skill.maxConcurrentBranches} max branches</span>
+                    <span>•</span>
+                    <span>{skill.validationStatus}</span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
+                    Preferred branch split: {skill.preferredBranches.join(', ')}
                   </p>
                 </div>
               ))}
@@ -111,6 +149,38 @@ export default function AgentControlPage() {
                   </div>
                   <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
                     Escalation required: {execution.humanEscalation ? 'yes' : 'no'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Self-evolving functions" eyebrow="Learning loops">
+            <div className="space-y-4">
+              {snapshot.selfEvolvingFunctions.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-[color:var(--ink)]">{item.name}</h3>
+                      <p className="mt-2 text-sm leading-6 text-[color:var(--ink-soft)]">
+                        {item.objective}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-[color:var(--primary)]/12 px-3 py-1 text-sm text-[color:var(--primary)]">
+                      {item.status}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-[color:var(--ink)]">
+                    Trigger: {item.trigger}
+                  </p>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
+                    Active branches: {item.activeBranches.join(', ')}
+                  </p>
+                  <p className="mt-3 text-sm text-[color:var(--ink-soft)]">
+                    Next gate: {item.nextPromotionGate}
                   </p>
                 </div>
               ))}

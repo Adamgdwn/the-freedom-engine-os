@@ -12,6 +12,8 @@ import type {
   OutboundDecision,
   Override,
   Policy,
+  SelfEvolvingFunction,
+  SkillDefinition,
   ToolProfile,
   TrustedContactPolicy,
   Venture,
@@ -767,6 +769,77 @@ export const outboundDecisions: OutboundDecision[] = [
   },
 ];
 
+export const skillDefinitions: SkillDefinition[] = [
+  {
+    id: 'skill-builder-orchestrator',
+    name: 'Builder Orchestrator',
+    category: 'builder',
+    purpose:
+      'Decompose a requested capability into parallel tracks for spec, implementation, and governed artifact production.',
+    status: 'learning',
+    validationStatus: 'needs-evidence',
+    parallelMode: 'parallel-native',
+    maxConcurrentBranches: 3,
+    preferredBranches: ['spec', 'implementation', 'governance'],
+    lastLearnedAt: '2026-04-13T08:25:00.000Z',
+  },
+  {
+    id: 'skill-repo-research',
+    name: 'Repo Research',
+    category: 'research',
+    purpose:
+      'Explore codebases and docs in bounded parallel threads before a build or self-evolution decision is approved.',
+    status: 'internalized',
+    validationStatus: 'validated',
+    parallelMode: 'parallel-capable',
+    maxConcurrentBranches: 4,
+    preferredBranches: ['docs', 'runtime', 'ui', 'tests'],
+    lastLearnedAt: '2026-04-12T14:10:00.000Z',
+  },
+  {
+    id: 'skill-governance-check',
+    name: 'Governance Check',
+    category: 'validation',
+    purpose:
+      'Run policy, evidence, and release checks after branch work converges back into one governed decision.',
+    status: 'internalized',
+    validationStatus: 'validated',
+    parallelMode: 'serial-only',
+    maxConcurrentBranches: 1,
+    preferredBranches: ['policy-review'],
+    lastLearnedAt: '2026-04-12T15:40:00.000Z',
+  },
+];
+
+export const selfEvolvingFunctions: SelfEvolvingFunction[] = [
+  {
+    id: 'self-evolving-function-01',
+    name: 'Capability Internalization',
+    objective:
+      'Move repeated external build paths into validated internal skills only after they can reproduce governed outputs.',
+    status: 'building',
+    trigger: 'Repeated builder-routed requests for desktop and mobile Freedom surfaces.',
+    parallelMode: 'parallel-native',
+    activeBranches: ['spec capture', 'implementation replay', 'governance artifact diff'],
+    branchCoordinatorSkillId: 'skill-builder-orchestrator',
+    nextPromotionGate: 'Three clean governed reproductions with matching docs, tests, and audit traces.',
+    auditCorrelationId: 'audit-connect-03',
+  },
+  {
+    id: 'self-evolving-function-02',
+    name: 'Parallel Validation Learning',
+    objective:
+      'Teach Freedom when to fan work out in parallel and when to collapse back into a single approval-bearing lane.',
+    status: 'planning',
+    trigger: 'Operator requests for concurrent research, design, and implementation while keeping one assistant identity.',
+    parallelMode: 'parallel-capable',
+    activeBranches: ['routing policy draft', 'skill registry update'],
+    branchCoordinatorSkillId: 'skill-governance-check',
+    nextPromotionGate: 'Validated policy proving safe branch fan-out without bypassing builder or approval gates.',
+    auditCorrelationId: 'audit-connect-05',
+  },
+];
+
 export const agentBuildRequests: AgentBuildRequest[] = [
   {
     id: 'build-request-01',
@@ -775,6 +848,9 @@ export const agentBuildRequests: AgentBuildRequest[] = [
     requestedBy: 'Freedom',
     status: 'routed-to-builder',
     builder: 'New Build Agent',
+    executionMode: 'parallel-build',
+    parallelLaneCount: 3,
+    coordinatorSkillId: 'skill-builder-orchestrator',
     routeReason: 'Non-internalized build paths must use the external governed builder.',
     auditCorrelationId: 'audit-connect-03',
     requestedAt: '2026-04-13T08:27:00.000Z',
@@ -786,6 +862,9 @@ export const agentBuildRequests: AgentBuildRequest[] = [
     requestedBy: 'Freedom',
     status: 'pending-approval',
     builder: 'New Build Agent',
+    executionMode: 'parallel-validation',
+    parallelLaneCount: 2,
+    coordinatorSkillId: 'skill-governance-check',
     routeReason: 'Mobile UI work is allowed, but release and pairing behavior still require approval.',
     auditCorrelationId: 'audit-connect-04',
     requestedAt: '2026-04-13T08:32:00.000Z',

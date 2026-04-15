@@ -39,6 +39,10 @@ export default function PortfolioHomePage() {
                 ['Pending approvals', snapshot.approvals.filter((item) => item.status === 'pending').length.toString()],
                 ['Freedom sessions', snapshot.connectSessions.length.toString()],
                 ['Builder routes', snapshot.agentBuildRequests.length.toString()],
+                [
+                  'Parallel skills',
+                  snapshot.skillDefinitions.filter((item) => item.parallelMode !== 'serial-only').length.toString(),
+                ],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -161,6 +165,51 @@ export default function PortfolioHomePage() {
                   <span>{event.governanceImpact}</span>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">{event.summary}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <Panel title="Parallel skill system" eyebrow="Skill-based fan-out">
+          <div className="space-y-4">
+            {snapshot.skillDefinitions.map((skill) => (
+              <div
+                key={skill.id}
+                className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
+                  <span>{skill.category}</span>
+                  <span>•</span>
+                  <span>{skill.parallelMode.replace('-', ' ')}</span>
+                  <span>•</span>
+                  <span>{skill.maxConcurrentBranches} branches</span>
+                </div>
+                <h3 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">{skill.name}</h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--ink-soft)]">{skill.purpose}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Self-evolving loops" eyebrow="Parallel internalization">
+          <div className="space-y-4">
+            {snapshot.selfEvolvingFunctions.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
+                  <span>{item.status}</span>
+                  <span>•</span>
+                  <span>{item.parallelMode.replace('-', ' ')}</span>
+                </div>
+                <h3 className="mt-2 text-xl font-semibold text-[color:var(--ink)]">{item.name}</h3>
+                <p className="mt-2 text-sm leading-6 text-[color:var(--ink-soft)]">{item.objective}</p>
+                <p className="mt-3 text-sm text-[color:var(--ink)]">
+                  Active branches: {item.activeBranches.join(', ')}
+                </p>
               </div>
             ))}
           </div>

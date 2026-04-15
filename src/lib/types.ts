@@ -253,7 +253,38 @@ export type AgentBuildRequest = {
   requestedBy: string;
   status: 'routed-to-builder' | 'pending-approval' | 'internalized-path' | 'blocked';
   builder: 'New Build Agent';
+  executionMode: 'serial' | 'parallel-research' | 'parallel-build' | 'parallel-validation';
+  parallelLaneCount: number;
+  coordinatorSkillId: string;
   routeReason: string;
   auditCorrelationId: string;
   requestedAt: string;
+};
+
+export type SkillParallelMode = 'serial-only' | 'parallel-capable' | 'parallel-native';
+
+export type SkillDefinition = {
+  id: string;
+  name: string;
+  category: 'builder' | 'research' | 'validation' | 'operations';
+  purpose: string;
+  status: 'seeded' | 'learning' | 'internalized';
+  validationStatus: 'draft' | 'needs-evidence' | 'validated';
+  parallelMode: SkillParallelMode;
+  maxConcurrentBranches: number;
+  preferredBranches: string[];
+  lastLearnedAt: string;
+};
+
+export type SelfEvolvingFunction = {
+  id: string;
+  name: string;
+  objective: string;
+  status: 'observing' | 'planning' | 'building' | 'validating' | 'internalized';
+  trigger: string;
+  parallelMode: SkillParallelMode;
+  activeBranches: string[];
+  branchCoordinatorSkillId: string;
+  nextPromotionGate: string;
+  auditCorrelationId: string;
 };

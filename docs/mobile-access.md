@@ -20,7 +20,24 @@ Connect already handles:
 - Repo:
   `/home/adamgoodwin/code/agents/codex_adam_connect`
 - Current supported desktop GUI:
-  browser dashboard at `http://127.0.0.1:43111/`
+  Freedom Desktop shell launched from Connect, with a browser fallback at
+  `http://127.0.0.1:43111/`
+- Current phone companion:
+  Freedom Android app built from the Connect repo
+
+## Current Operator Loop
+
+The current mobile companion behavior is now closer to a real Freedom operator
+surface than a one-shot relay:
+
+- continuous voice loop instead of one-tap transcript capture
+- explicit barge-in interruption while Freedom is speaking
+- auto-send voice turns with review only for genuinely risky or unusually long
+  transcripts
+- spoken-reply voice picker that now labels accent, engine, quality, and any
+  safe style or gender hints Android actually exposes
+- Freedom-owned chat/build surfaces so the phone stays pointed at Freedom even
+  though Connect still carries the runtime and transport
 
 ## What To Configure
 
@@ -47,7 +64,8 @@ That means the next clean step is real-device acceptance, not migration.
 3. Confirm Tailscale or another private network path is available from the phone.
 4. Pair the phone from the dashboard.
 5. Open the Freedom desktop shell and create or restore the primary Freedom session.
-6. Chat with the local Freedom Engine workspace from the Freedom phone companion.
+6. Install the latest Freedom Android APK from the Connect repo or dashboard.
+7. Chat with the local Freedom Engine workspace from the Freedom phone companion.
 
 ## What This Means
 
@@ -59,6 +77,9 @@ desktop or workstation running Connect must stay online and reachable.
 ## Next Improvements
 
 - keep Freedom as the visible product identity while Connect remains the runtime layer
-- add a named Freedom Engine session preset in Connect
-- add shortcuts for Weekly Review and governance checks
-- validate the full phone workflow against this repo on a real device
+- connect the modeled parallel-skill and self-evolving-function registry to the
+  live runtime so Freedom can branch governed work in practice
+- add clearer builder-first actions from the desktop shell into Freedom-governed
+  build requests
+- continue tightening voice duplex behavior so barge-in stays natural without
+  Freedom hearing its own reply audio as a user interruption

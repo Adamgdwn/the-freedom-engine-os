@@ -12,6 +12,8 @@ import {
   outboundDecisions,
   overrides,
   policies,
+  selfEvolvingFunctions,
+  skillDefinitions,
   trustedContactPolicies,
   tools,
   ventures,
@@ -49,6 +51,8 @@ export function getControlPlaneSnapshot() {
     trustedContactPolicies,
     outboundDecisions,
     agentBuildRequests,
+    skillDefinitions,
+    selfEvolvingFunctions,
     recommendations: buildRecommendations(),
     weeklyReview: buildWeeklyReview(),
   };
