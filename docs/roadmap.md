@@ -16,15 +16,19 @@
 - Model Router surface: tier policy, escalation request queue, provider preference order,
   resolved decision audit trail
 - Monorepo consolidation: `codex_adam_connect` absorbed into `the-freedom-engine-os`;
-  `@freedom/*` packages native to this repo; APK buildable from `npm run build:android-release`
+  `@freedom/*` packages native to this repo; `monorepo-merge` merged to `main`
+- Android Gradle build fixed for npm workspaces; APK (68 MB) built and verified from
+  `npm run build:android-release`
+- Full runtime cutover: gateway, desktop-host, and Electron shell now running from
+  `the-freedom-engine-os`; install page at `pop-os.taildcb5c5.ts.net:43111/install`
+  serves the Freedom Engine OS APK; `codex_adam_connect` retired
 
 ## Now
 
-- merge `monorepo-merge` branch → `main` and archive `codex_adam_connect`
-- rebuild APK from the merged repo and verify sideload on device
+- verify APK sideload on device and confirm voice + gateway pairing work end-to-end
 - wire live Supabase persistence to replace seeded data (ventures, approvals, executions)
 - connect AI Consulting Build metrics and workflow exceptions into the evidence room
-- activate voice agent tools (top_venture_status, pending_approvals, weekly_metrics)
+- activate voice agent tools (`top_venture_status`, `pending_approvals`, `weekly_metrics`)
   against live Supabase data instead of stubs
 
 ## Next

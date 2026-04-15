@@ -82,6 +82,12 @@ the seeded data layer without rewriting the UI or service boundaries.
   audit correlation.
 - `codex_adam_connect` has been fully absorbed into this repo (2026-04-15) and is
   archived. All future mobile, gateway, and desktop work happens here.
+- Android Gradle build requires explicit `reactNativeDir` / `codegenDir` / `cliFile`
+  overrides and root-relative `includeBuild` paths because npm workspaces hoists
+  `node_modules` to repo root rather than `apps/mobile/node_modules`.
+- The gateway, desktop-host, and Electron shell run from repo root via
+  `npm run launch:no-open`; the install page is at
+  `pop-os.taildcb5c5.ts.net:43111/install`.
 - The first integration posture centres AI Consulting Build, with PDF Flow as a live
   execution domain and GitHub as the code-control surface.
 

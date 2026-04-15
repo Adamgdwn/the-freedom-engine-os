@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-04-15 (runtime cutover)
+
+- merged `monorepo-merge` → `main`; Freedom Engine OS is now the single canonical repo
+- fixed Android Gradle paths for npm workspaces: `settings.gradle` updated to resolve
+  `@react-native/gradle-plugin` from repo root (`../../../node_modules`); `app/build.gradle`
+  explicitly sets `reactNativeDir`, `codegenDir`, and `cliFile` to repo-root paths so Gradle
+  finds the hoisted packages
+- APK built from Freedom Engine OS: `npm run build:android-release` → 68 MB release APK at
+  `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
+- gateway, desktop-host, and Electron shell now running from `the-freedom-engine-os`; old
+  `codex_adam_connect` desktop process retired; install page at
+  `pop-os.taildcb5c5.ts.net:43111/install` serves the new APK
+- `.env` seeded in `the-freedom-engine-os` with gateway, Supabase, and outbound-email config
+
 ## 2026-04-15
 
 - absorbed `codex_adam_connect` as native monorepo — `apps/mobile`, `apps/gateway`,
