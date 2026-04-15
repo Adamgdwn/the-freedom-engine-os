@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/core" },
+    { "path": "./packages/provider-adapters" },
+    { "path": "./apps/gateway" },
+    { "path": "./apps/wake-relay" },
+    { "path": "./apps/desktop-host" },
+    { "path": "./apps/desktop" }
+  ]
+}
