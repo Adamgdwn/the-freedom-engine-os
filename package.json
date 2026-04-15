@@ -20,6 +20,7 @@
     "build:android-debug": "node scripts/write-mobile-runtime-config.mjs && bash scripts/build-android-debug.sh",
     "dev:gateway": "npm run dev --workspace @freedom/gateway",
     "dev:desktop": "npm run dev --workspace @freedom/desktop-host",
+    "app:desktop:electron": "npm run dev --workspace @freedom/desktop",
     "dev:desktop-stack": "node scripts/dev-desktop-stack.mjs",
     "dev:mobile": "npm run start --workspace @freedom/mobile",
     "dev:wake-relay": "npm run dev --workspace @freedom/wake-relay",

@@ -129,7 +129,7 @@ async function openBrowser(url) {
 async function start() {
   if (shouldUseShell) {
     process.stdout.write("Launching Freedom Desktop shell...\n");
-    const shellProcess = spawnNpmProcess("shell", ["run", "app:desktop:shell"]);
+    const shellProcess = spawnNpmProcess("shell", ["run", "app:desktop:electron"]);
     children.push(shellProcess);
     return;
   }
