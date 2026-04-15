@@ -10,6 +10,8 @@ const navigation = [
   { href: '/governance', label: 'Governance Console' },
   { href: '/evidence-room', label: 'Evidence Room' },
   { href: '/weekly-review', label: 'Weekly Review' },
+  { href: '/learning-registry', label: 'Learning Registry' },
+  { href: '/model-router', label: 'Model Router' },
 ];
 
 export function SidebarNav() {

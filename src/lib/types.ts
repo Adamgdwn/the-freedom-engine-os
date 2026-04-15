@@ -276,6 +276,164 @@ export type SkillDefinition = {
   lastLearnedAt: string;
 };
 
+// ─── Communication ───────────────────────────────────────────────────────────
+
+export type CommunicationChannel = 'wake' | 'email' | 'text' | 'voice' | 'operator_chat';
+
+// ─── Capability layer ─────────────────────────────────────────────────────────
+
+export type CapabilitySource = 'internal' | 'external-builder' | 'external-tool';
+export type CapabilityState =
+  | 'observed'
+  | 'building'
+  | 'validating'
+  | 'internalized'
+  | 'deprecated';
+export type InternalizationStatus =
+  | 'not-started'
+  | 'in-progress'
+  | 'validated'
+  | 'internalized';
+
+export type CapabilityValidationRecord = {
+  id: string;
+  capabilityId: string;
+  governanceOutputsMatch: boolean;
+  docArtifactsMatch: boolean;
+  runtimeCostRecorded: boolean;
+  validatedAt: string;
+  validatedBy: string;
+};
+
+export type BuilderDependency = {
+  id: string;
+  capabilityId: string;
+  builderName: string;
+  required: boolean;
+  replacedBy: string | null;
+};
+
+export type UpgradeDecision = {
+  id: string;
+  capabilityId: string;
+  decision: 'keep-external' | 'wrap' | 'internalize';
+  rationale: string;
+  decidedAt: string;
+};
+
+export type LearningRecord = {
+  id: string;
+  capabilityId: string;
+  event: string;
+  provenance: string;
+  modelPreference: string;
+  safetyNotes: string;
+  internalizationStatus: InternalizationStatus;
+  externalBuilderStillRequired: boolean;
+  recordedAt: string;
+};
+
+export type CapabilityDefinition = {
+  id: string;
+  name: string;
+  description: string;
+  source: CapabilitySource;
+  state: CapabilityState;
+  internalizationStatus: InternalizationStatus;
+  runtimeCost: 'low' | 'medium' | 'high';
+  modelPreference: string;
+  safetyNotes: string;
+  builderDependency: BuilderDependency | null;
+  validationRecord: CapabilityValidationRecord | null;
+  learningRecords: LearningRecord[];
+  usageCount: number;
+  lastUsedAt: string;
+  coreAdmission: boolean;
+};
+
+// ─── Agent-build contracts ────────────────────────────────────────────────────
+
+export type ModelTier =
+  | 'local-default'
+  | 'escalate-with-approval'
+  | 'human-forced-provider';
+
+export type AgentBlueprint = {
+  id: string;
+  buildRequestId: string;
+  name: string;
+  role: string;
+  tools: string[];
+  modelTier: ModelTier;
+  systemPromptSummary: string;
+  createdAt: string;
+};
+
+export type AgentGovernanceBundle = {
+  id: string;
+  buildRequestId: string;
+  policies: string[];
+  approvals: string[];
+  auditCorrelationId: string;
+  complete: boolean;
+};
+
+export type AgentValidationChecklist = {
+  id: string;
+  buildRequestId: string;
+  items: { label: string; passed: boolean }[];
+  allPassed: boolean;
+  checkedAt: string;
+};
+
+export type AgentPromotionRecord = {
+  id: string;
+  buildRequestId: string;
+  promotedAt: string;
+  promotedBy: string;
+  capabilityId: string;
+  notes: string;
+};
+
+// ─── Model routing ────────────────────────────────────────────────────────────
+
+export type ProviderRecommendation = {
+  tier: ModelTier;
+  provider: 'local' | 'codex' | 'claude-code';
+  reason: string;
+};
+
+export type EscalationRequest = {
+  id: string;
+  taskSummary: string;
+  whyLocalInsufficient: string;
+  recommendation: ProviderRecommendation;
+  expectedBenefit: string;
+  costSpeedTradeoff: string;
+  requestedAt: string;
+  status: 'pending' | 'approved' | 'denied';
+};
+
+export type EscalationDecision = {
+  id: string;
+  escalationRequestId: string;
+  decision: 'approved' | 'denied';
+  decidedBy: string;
+  outcome: string;
+  decidedAt: string;
+};
+
+export type ExecutionBudget = {
+  id: string;
+  taskId: string;
+  maxLocalAttempts: number;
+  escalationAllowed: boolean;
+  preferredProvider: 'local' | 'codex' | 'claude-code';
+  hardCap: boolean;
+};
+
+// ─── Self-evolving functions ──────────────────────────────────────────────────
+
 export type SelfEvolvingFunction = {
   id: string;
   name: string;
