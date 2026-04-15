@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-04-15
+
+- absorbed `codex_adam_connect` as native monorepo — `apps/mobile`, `apps/gateway`,
+  `apps/desktop`, `apps/desktop-host`, `apps/wake-relay`, `packages/shared`,
+  `packages/core`, `packages/provider-adapters` all live inside Freedom Engine OS
+- package scope renamed `@adam-connect/*` → `@freedom/*` throughout
+- npm workspaces configured at repo root; `tsconfig.workspace.json` and
+  `tsconfig.base.json` added for composite node package builds
+- `.npmrc` added (`legacy-peer-deps=true`) for React Native Firebase peer dep
+- `scripts/` merged from both repos; `build-android-release.sh`, `launch-adam-connect.mjs`,
+  `write-mobile-runtime-config.mjs`, and others are now runnable from Freedom root
+- `.env.example` extended with gateway, desktop-host, mobile, and wake-relay vars
+- docs from Adam Connect merged in: `outbound-email-setup`, `voice-realtime-architecture`,
+  `wake-relay-deployment`, `SECURITY_ASSUMPTIONS`
+- added Phase 2 Freedom Core type contracts: capability layer, agent-build contracts,
+  model routing types, and `CommunicationChannel`
+- added Learning Registry and Model Router control-plane surfaces (`/learning-registry`,
+  `/model-router`) with seed data for capabilities, escalation requests and decisions
+- build validated: lint ✓ typecheck ✓ build:packages ✓ Next.js build ✓ (11 routes)
+
 ## 2026-04-14
 
 - documented the current Freedom companion operator loop, including the native
