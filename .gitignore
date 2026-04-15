@@ -7,4 +7,16 @@ node_modules
 coverage
 dist
 npm-debug.log*
-tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Mobile build artifacts
+apps/mobile/android/app/build/
+apps/mobile/android/.gradle/
+apps/mobile/android/local.properties
+apps/mobile/ios/build/
+apps/mobile/ios/Pods/
+apps/mobile/.expo/
+apps/mobile/src/generated/
+
+# Desktop / gateway runtime state
+**/.local-data/

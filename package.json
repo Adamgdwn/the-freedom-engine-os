@@ -1,7 +1,11 @@
 {
   "name": "the-freedom-engine-os",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,7 +13,19 @@
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "tsx --test src/lib/scoring.test.ts",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "build:packages": "node node_modules/typescript/bin/tsc -b tsconfig.workspace.json",
+    "typecheck:workspace": "node node_modules/typescript/bin/tsc -b tsconfig.workspace.json --noEmit",
+    "build:android-release": "node scripts/write-mobile-runtime-config.mjs && bash scripts/build-android-release.sh",
+    "build:android-debug": "node scripts/write-mobile-runtime-config.mjs && bash scripts/build-android-debug.sh",
+    "dev:gateway": "npm run dev --workspace @freedom/gateway",
+    "dev:desktop": "npm run dev --workspace @freedom/desktop-host",
+    "dev:desktop-stack": "node scripts/dev-desktop-stack.mjs",
+    "dev:mobile": "npm run start --workspace @freedom/mobile",
+    "dev:wake-relay": "npm run dev --workspace @freedom/wake-relay",
+    "launch": "node scripts/launch-adam-connect.mjs",
+    "launch:no-open": "node scripts/launch-adam-connect.mjs --no-open",
+    "smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "@livekit/components-core": "^0.12.13",
@@ -28,6 +44,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^16.4.7",
     "eslint": "^9",
     "eslint-config-next": "^16.2.3",
     "prettier": "^3.8.1",
