@@ -37,6 +37,8 @@ export default function PortfolioHomePage() {
                 ['Agents', snapshot.agents.length.toString()],
                 ['Live integrations', snapshot.integrations.filter((item) => item.status === 'live').length.toString()],
                 ['Pending approvals', snapshot.approvals.filter((item) => item.status === 'pending').length.toString()],
+                ['Freedom sessions', snapshot.connectSessions.length.toString()],
+                ['Builder routes', snapshot.agentBuildRequests.length.toString()],
               ].map(([label, value]) => (
                 <div
                   key={label}
@@ -109,6 +111,61 @@ export default function PortfolioHomePage() {
           ))}
         </div>
       </Panel>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
+        <Panel
+          title="Freedom Connect"
+          eyebrow="Unified session identity"
+          aside="Desktop shell and phone companion now route into one Freedom-owned assistant surface."
+        >
+          <div className="space-y-4">
+            {snapshot.connectSessions.map((session) => (
+              <div
+                key={session.id}
+                className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-semibold text-[color:var(--ink)]">{session.title}</h3>
+                    <p className="mt-1 text-sm text-[color:var(--ink-soft)]">
+                      {session.originSurface.replace('_', ' ')} • {session.kind.replace('_', ' ')}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-[color:var(--primary)]/12 px-3 py-1 text-sm text-[color:var(--primary)]">
+                    {session.status}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
+                  {session.lastSummary}
+                </p>
+                <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
+                  {session.workspaceLabel} • audit {session.auditCorrelationId}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Recent Connect Activity" eyebrow="Phone + desktop">
+          <div className="space-y-4">
+            {snapshot.connectEvents.map((event) => (
+              <div
+                key={event.id}
+                className="rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
+                  <span>{event.source.replace('_', ' ')}</span>
+                  <span>•</span>
+                  <span>{event.intent.replace('_', ' ')}</span>
+                  <span>•</span>
+                  <span>{event.governanceImpact}</span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">{event.summary}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
 
       <Panel title="Opportunity scoring engine" eyebrow="What should we build next?">
         <ScoreWorkbench ventures={snapshot.ventures} initialWeightSets={snapshot.weightSets} />

@@ -53,6 +53,43 @@ export default function GovernancePage() {
             </div>
           </Panel>
 
+          <Panel title="Freedom Connect governance" eyebrow="Cross-surface audit">
+            <div className="space-y-4">
+              {snapshot.connectEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">
+                    <span>{event.source.replace('_', ' ')}</span>
+                    <span>•</span>
+                    <span>{event.intent.replace('_', ' ')}</span>
+                    <span>•</span>
+                    <span>{event.governanceImpact}</span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">{event.summary}</p>
+                </div>
+              ))}
+
+              {snapshot.outboundDecisions.map((decision) => (
+                <div
+                  key={decision.id}
+                  className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4"
+                >
+                  <h3 className="text-lg font-semibold text-[color:var(--ink)]">
+                    Outbound via {decision.channel}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--ink-soft)]">
+                    {decision.summary}
+                  </p>
+                  <p className="mt-3 text-sm text-[color:var(--ink)]">
+                    Recipient: {decision.recipient} • Approval: {decision.approvalState}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
           <Panel title="Overrides and humans" eyebrow="Visible exceptions">
             <div className="space-y-4">
               {snapshot.overrides.map((override) => (

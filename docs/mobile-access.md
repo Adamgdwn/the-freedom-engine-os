@@ -1,13 +1,14 @@
-# Mobile Access Via Adam Connect
+# Mobile Access Via Freedom Connect
 
 ## Decision
 
-Freedom Engine should reuse Adam Connect for phone access instead of building a second
-mobile bridge.
+Freedom Engine should present a single `Freedom` identity on desktop and phone while
+reusing the existing Connect runtime for pairing, transport, and session delivery
+instead of building a second mobile bridge.
 
 No migration of Adam Connect is required just to test this repo.
 
-Adam Connect already handles:
+Connect already handles:
 
 - phone pairing
 - Codex login dependency on the desktop
@@ -23,7 +24,7 @@ Adam Connect already handles:
 
 ## What To Configure
 
-In Adam Connect's `.env`, set `DESKTOP_APPROVED_ROOTS` as a comma-separated list of
+In Connect's `.env`, set `DESKTOP_APPROVED_ROOTS` as a comma-separated list of
 absolute roots. Include Freedom Engine's repo root:
 
 `/home/adamgoodwin/code/agents/the-freedom-engine-os`
@@ -34,28 +35,30 @@ Example:
 
 Current local check:
 
-- Adam Connect is installed and provisioned
-- Freedom Engine is not yet present in Adam Connect's `DESKTOP_APPROVED_ROOTS`
+- Connect is installed and provisioned
+- Freedom Engine is present in Connect's `DESKTOP_APPROVED_ROOTS`
 
-That means the next clean step is config, not migration.
+That means the next clean step is real-device acceptance, not migration.
 
 ## Launch Path
 
-1. In the Adam Connect repo, run `npm run launch`.
+1. In the Connect repo, run `npm run launch`.
 2. Confirm Codex is logged in on the desktop machine.
 3. Confirm Tailscale or another private network path is available from the phone.
 4. Pair the phone from the dashboard.
-5. Create a session rooted in the Freedom Engine repo.
-6. Chat with the local Freedom Engine workspace from the phone.
+5. Open the Freedom desktop shell and create or restore the primary Freedom session.
+6. Chat with the local Freedom Engine workspace from the Freedom phone companion.
 
 ## What This Means
 
-This gives you phone access to the repo and the local Codex runtime. It does not yet mean
+This gives you phone access to the repo through a Freedom-branded shell and phone
+companion while Connect stays underneath as the runtime bridge. It does not yet mean
 Freedom Engine has its own independent hosted mobile backend. For "anytime" use, the
-desktop or workstation running Adam Connect must stay online and reachable.
+desktop or workstation running Connect must stay online and reachable.
 
 ## Next Improvements
 
-- add a named Freedom Engine session preset in Adam Connect
+- keep Freedom as the visible product identity while Connect remains the runtime layer
+- add a named Freedom Engine session preset in Connect
 - add shortcuts for Weekly Review and governance checks
 - validate the full phone workflow against this repo on a real device

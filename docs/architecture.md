@@ -2,10 +2,10 @@
 
 ## Summary
 
-The Freedom Engine OS is a shared control plane for an AI-native organization. V1 is a
-seeded Next.js application that models ventures, workflows, agents, approvals,
-evidence, and recommendations in one governed interface. The current build is optimized
-for internal use first and structured so Supabase-backed persistence can replace the
+The Freedom Engine OS is a shared control plane for an AI-native organization. The
+current build is a seeded Next.js application that models ventures, workflows, agents,
+approvals, evidence, recommendations, and cross-surface Freedom Connect activity in one
+governed interface. It is structured so Supabase-backed persistence can replace the
 seeded data layer without rewriting the UI or service boundaries.
 
 ## Components
@@ -23,11 +23,15 @@ seeded data layer without rewriting the UI or service boundaries.
 - Governance fabric:
   Policies, approvals, overrides, human registry, tool registry, and execution logs
   surfaced in the UI and represented in the schema.
+- Freedom Connect:
+  Desktop shell and phone companion session identity, connect events, outbound policy,
+  and governed builder routing surfaced as Freedom-owned runtime state.
 - Persistence boundary:
-  Supabase migration under `supabase/migrations/` that mirrors the seeded entity model.
-- Remote companion boundary:
-  Adam Connect acts as the phone-to-desktop control surface for this repo instead of a
-  bespoke Freedom Engine mobile app.
+  Supabase migrations under `supabase/migrations/` mirror both the original control-plane
+  entities and the new Freedom Connect runtime entities.
+- Runtime bridge:
+  Connect at `/home/adamgoodwin/code/agents/codex_adam_connect` acts as the transport,
+  pairing, shell, and mobile runtime layer underneath the user-facing Freedom product.
 
 ## Data Flow
 
@@ -35,9 +39,11 @@ seeded data layer without rewriting the UI or service boundaries.
 2. The scoring engine calculates venture score, freedom score, and combined priority.
 3. The recommendation layer derives next actions from ranked ventures, live workflows,
    evidence items, blocked executions, and approval state.
-4. Pages render portfolio, workflow, governance, and review views from the assembled
+4. Freedom Connect sessions, events, and governed builder requests are assembled into the
+   same control-plane snapshot so phone and desktop activity stay visible in governance.
+5. Pages render portfolio, workflow, governance, and review views from the assembled
    control-plane snapshot.
-5. Future persistence will swap the seed layer for Supabase queries while preserving the
+6. Future persistence will swap the seed layer for Supabase queries while preserving the
    same entity boundaries.
 
 ## Dependencies
@@ -47,7 +53,8 @@ seeded data layer without rewriting the UI or service boundaries.
 - Tailwind CSS 4
 - TypeScript 5
 - Supabase hosted project `basbwglynuyfxcqxfyur` in West US (Oregon)
-- Adam Connect at `/home/adamgoodwin/code/agents/codex_adam_connect` for mobile access
+- Connect runtime at `/home/adamgoodwin/code/agents/codex_adam_connect` for the Freedom
+  desktop shell and Freedom mobile companion
 
 ## Key Decisions
 
@@ -57,8 +64,10 @@ seeded data layer without rewriting the UI or service boundaries.
   irreversible external commitments.
 - Score weights are editable in the UI and versioned in-memory now, with schema support
   for durable history later.
-- Mobile phone access is delegated to Adam Connect so we reuse an existing trusted bridge
-  instead of rebuilding device pairing, Codex auth handoff, and realtime delivery.
+- Freedom is the product identity on desktop and phone; Connect remains the runtime and
+  transport layer underneath that identity.
+- Mobile and desktop conversations should land in Freedom-owned session contexts with
+  shared audit correlation instead of presenting Connect as a separate assistant.
 - The first integration posture centers AI Consulting Build, with PDF Flow as a live
   execution domain and GitHub as the code-control surface.
 

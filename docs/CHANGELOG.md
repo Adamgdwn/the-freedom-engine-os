@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-04-13
+
+- added Freedom Connect domain types, seeded session activity, and governed builder
+  routing data to the control plane
+- surfaced desktop-shell and phone-companion activity directly in Portfolio Home, Agent
+  Control, and Governance Console
+- added Supabase schema support for connect sessions, connect events, outbound policy,
+  and agent build requests
+- updated mobile-access and architecture docs to make `Freedom` the product identity and
+  Connect the runtime bridge underneath it
+
 ## 2026-04-12
 
 - added repository-local governance automation so preflight passes in-repo

@@ -185,3 +185,75 @@ export type WeeklyReview = {
   recommendations: string[];
   humanJudgmentRequired: string[];
 };
+
+export type ConnectSurface = 'desktop_shell' | 'mobile_companion';
+
+export type ConnectSessionKind =
+  | 'operator'
+  | 'governed_task'
+  | 'approval'
+  | 'build_request'
+  | 'venture_action';
+
+export type CommunicationIntent =
+  | 'operator_chat'
+  | 'governed_task'
+  | 'approval'
+  | 'build_request'
+  | 'venture_action';
+
+export type OutboundApprovalState = 'not-required' | 'pending' | 'approved' | 'blocked';
+
+export type TrustedContactPolicy = {
+  id: string;
+  label: string;
+  scope: string;
+  trustedRecipients: string[];
+  approvalRequired: boolean;
+};
+
+export type OutboundDecision = {
+  id: string;
+  channel: 'email' | 'text' | 'voice';
+  recipient: string;
+  summary: string;
+  approvalState: OutboundApprovalState;
+};
+
+export type ConnectSession = {
+  id: string;
+  freedomSessionId: string;
+  title: string;
+  assistantName: 'Freedom';
+  originSurface: ConnectSurface;
+  kind: ConnectSessionKind;
+  rootPath: string;
+  workspaceLabel: string;
+  auditCorrelationId: string;
+  status: 'live' | 'idle' | 'needs-attention';
+  lastSummary: string;
+  startedAt: string;
+  lastActivityAt: string;
+};
+
+export type ConnectEvent = {
+  id: string;
+  sessionId: string;
+  source: ConnectSurface;
+  intent: CommunicationIntent;
+  summary: string;
+  governanceImpact: 'info' | 'approval-needed' | 'builder-routed';
+  createdAt: string;
+};
+
+export type AgentBuildRequest = {
+  id: string;
+  capability: string;
+  requestedFrom: ConnectSurface;
+  requestedBy: string;
+  status: 'routed-to-builder' | 'pending-approval' | 'internalized-path' | 'blocked';
+  builder: 'New Build Agent';
+  routeReason: string;
+  auditCorrelationId: string;
+  requestedAt: string;
+};

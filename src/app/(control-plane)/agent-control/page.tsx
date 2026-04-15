@@ -49,6 +49,34 @@ export default function AgentControlPage() {
         </Panel>
 
         <div className="space-y-6">
+          <Panel title="Builder routing" eyebrow="Governed agent creation">
+            <div className="space-y-4">
+              {snapshot.agentBuildRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="rounded-[1.5rem] border border-[color:var(--line)] bg-white/75 p-4"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-[color:var(--ink)]">
+                        {request.capability}
+                      </h3>
+                      <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
+                        {request.requestedFrom.replace('_', ' ')} • {request.builder}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-[color:var(--primary)]/12 px-3 py-1 text-sm text-[color:var(--primary)]">
+                      {request.status}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
+                    {request.routeReason}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
           <Panel title="Tool registry" eyebrow="Permissions">
             <div className="space-y-4">
               {snapshot.tools.map((tool) => (
@@ -83,6 +111,25 @@ export default function AgentControlPage() {
                   </div>
                   <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
                     Escalation required: {execution.humanEscalation ? 'yes' : 'no'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          <Panel title="Freedom session routing" eyebrow="Desktop + phone surfaces">
+            <div className="space-y-4">
+              {snapshot.connectSessions.map((session) => (
+                <div
+                  key={session.id}
+                  className="rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4"
+                >
+                  <h3 className="text-lg font-semibold text-[color:var(--ink)]">{session.title}</h3>
+                  <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
+                    {session.originSurface.replace('_', ' ')} • {session.kind.replace('_', ' ')}
+                  </p>
+                  <p className="mt-3 text-sm text-[color:var(--ink)]">
+                    Audit: {session.auditCorrelationId}
                   </p>
                 </div>
               ))}

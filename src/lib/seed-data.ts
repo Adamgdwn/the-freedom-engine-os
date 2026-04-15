@@ -1,14 +1,19 @@
 import type {
   AgentProfile,
+  AgentBuildRequest,
   Approval,
+  ConnectEvent,
+  ConnectSession,
   EvidenceItem,
   Execution,
   Experiment,
   HumanProfile,
   Integration,
+  OutboundDecision,
   Override,
   Policy,
   ToolProfile,
+  TrustedContactPolicy,
   Venture,
   WeightSet,
   Workflow,
@@ -661,5 +666,128 @@ export const integrations: Integration[] = [
     domain: 'Code execution and review control plane',
     status: 'live',
     note: 'Used for issue creation, branches, reviews, and protected-branch controls.',
+  },
+];
+
+export const connectSessions: ConnectSession[] = [
+  {
+    id: 'connect-session-01',
+    freedomSessionId: 'freedom-session-desktop-01',
+    title: 'Freedom',
+    assistantName: 'Freedom',
+    originSurface: 'desktop_shell',
+    kind: 'operator',
+    rootPath: '/home/adamgoodwin/code/agents/the-freedom-engine-os',
+    workspaceLabel: 'Freedom Desktop Shell',
+    auditCorrelationId: 'audit-connect-01',
+    status: 'live',
+    lastSummary: 'Desktop shell is online and sharing the primary governed operator session.',
+    startedAt: '2026-04-13T08:15:00.000Z',
+    lastActivityAt: '2026-04-13T08:28:00.000Z',
+  },
+  {
+    id: 'connect-session-02',
+    freedomSessionId: 'freedom-session-phone-01',
+    title: 'Freedom',
+    assistantName: 'Freedom',
+    originSurface: 'mobile_companion',
+    kind: 'operator',
+    rootPath: '/home/adamgoodwin/code/agents/the-freedom-engine-os',
+    workspaceLabel: 'Freedom Phone Companion',
+    auditCorrelationId: 'audit-connect-02',
+    status: 'live',
+    lastSummary: 'Phone-originated operator chat is synced through Freedom Connect metadata.',
+    startedAt: '2026-04-13T08:19:00.000Z',
+    lastActivityAt: '2026-04-13T08:31:00.000Z',
+  },
+  {
+    id: 'connect-session-03',
+    freedomSessionId: 'freedom-session-build-01',
+    title: 'Builder Routing',
+    assistantName: 'Freedom',
+    originSurface: 'mobile_companion',
+    kind: 'build_request',
+    rootPath: '/home/adamgoodwin/code/agents/the-freedom-engine-os',
+    workspaceLabel: 'Governed Builder Flow',
+    auditCorrelationId: 'audit-connect-03',
+    status: 'needs-attention',
+    lastSummary: 'Agent-build request is paused at policy review until the external builder route is confirmed.',
+    startedAt: '2026-04-13T08:24:00.000Z',
+    lastActivityAt: '2026-04-13T08:33:00.000Z',
+  },
+];
+
+export const connectEvents: ConnectEvent[] = [
+  {
+    id: 'connect-event-01',
+    sessionId: 'connect-session-02',
+    source: 'mobile_companion',
+    intent: 'operator_chat',
+    summary: 'Phone companion paired back into the primary Freedom session without creating a second assistant identity.',
+    governanceImpact: 'info',
+    createdAt: '2026-04-13T08:20:00.000Z',
+  },
+  {
+    id: 'connect-event-02',
+    sessionId: 'connect-session-03',
+    source: 'mobile_companion',
+    intent: 'build_request',
+    summary: 'Phone-originated request to evolve the desktop shell was routed into the governed builder path.',
+    governanceImpact: 'builder-routed',
+    createdAt: '2026-04-13T08:26:00.000Z',
+  },
+  {
+    id: 'connect-event-03',
+    sessionId: 'connect-session-03',
+    source: 'desktop_shell',
+    intent: 'approval',
+    summary: 'Desktop shell surfaced the pending builder approval in the control plane instead of silently executing.',
+    governanceImpact: 'approval-needed',
+    createdAt: '2026-04-13T08:29:00.000Z',
+  },
+];
+
+export const trustedContactPolicies: TrustedContactPolicy[] = [
+  {
+    id: 'trusted-contact-01',
+    label: 'Owner-approved outbound',
+    scope: 'Freedom Connect',
+    trustedRecipients: ['Adam Goodwin'],
+    approvalRequired: false,
+  },
+];
+
+export const outboundDecisions: OutboundDecision[] = [
+  {
+    id: 'outbound-decision-01',
+    channel: 'email',
+    recipient: 'Adam Goodwin',
+    summary: 'Completed session summary can be delivered externally only after an explicit in-session confirmation.',
+    approvalState: 'pending',
+  },
+];
+
+export const agentBuildRequests: AgentBuildRequest[] = [
+  {
+    id: 'build-request-01',
+    capability: 'Freedom-first desktop shell',
+    requestedFrom: 'desktop_shell',
+    requestedBy: 'Freedom',
+    status: 'routed-to-builder',
+    builder: 'New Build Agent',
+    routeReason: 'Non-internalized build paths must use the external governed builder.',
+    auditCorrelationId: 'audit-connect-03',
+    requestedAt: '2026-04-13T08:27:00.000Z',
+  },
+  {
+    id: 'build-request-02',
+    capability: 'Freedom mobile companion rebrand',
+    requestedFrom: 'mobile_companion',
+    requestedBy: 'Freedom',
+    status: 'pending-approval',
+    builder: 'New Build Agent',
+    routeReason: 'Mobile UI work is allowed, but release and pairing behavior still require approval.',
+    auditCorrelationId: 'audit-connect-04',
+    requestedAt: '2026-04-13T08:32:00.000Z',
   },
 ];

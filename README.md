@@ -30,7 +30,8 @@ Freedom in this system is tracked as outcomes, not slogans:
 - Supabase:
   linked hosted project `basbwglynuyfxcqxfyur` in West US (Oregon), with the V1 schema applied
 - Phone access:
-  reuse the existing Adam Connect stack instead of building a second mobile bridge
+  reuse the existing Connect stack as the runtime bridge, while keeping `Freedom` as the
+  user-facing desktop and phone identity
 
 ## What V1 Includes
 
@@ -61,9 +62,10 @@ Freedom in this system is tracked as outcomes, not slogans:
 
 ## Mobile Access
 
-Freedom Engine can already be reached from your phone through the existing Adam Connect
-companion at `/home/adamgoodwin/code/agents/codex_adam_connect`. See
-`docs/mobile-access.md` for the exact approved-root setup and launch path.
+Freedom Engine can already be reached from your phone through the Freedom desktop shell
+and Freedom mobile companion backed by the existing Connect runtime at
+`/home/adamgoodwin/code/agents/codex_adam_connect`. See `docs/mobile-access.md` for the
+exact approved-root setup and launch path.
 
 ## Documentation
 
