@@ -51,8 +51,8 @@ npm run dev:wake-relay
 For a production-like run:
 
 ```bash
-npm run build --workspace @adam-connect/wake-relay
-npm run start --workspace @adam-connect/wake-relay
+npm run build --workspace @freedom/wake-relay
+npm run start --workspace @freedom/wake-relay
 ```
 
 ## Validation
