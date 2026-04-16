@@ -80,6 +80,15 @@ The companion install page remains:
 
 `http://pop-os.taildcb5c5.ts.net:43111/install`
 
+## APK Release Hygiene
+
+- Every distributed Android build must use a unique `versionCode`.
+- Bump `versionName` whenever you want the human-visible release label to change.
+- Before sharing a new install link, verify the served APK matches the local release
+  artifact by size or checksum.
+- If a phone appears to "start where it left off" after reinstalling, check for
+  preserved app storage or a restored paired device token before assuming the APK is stale.
+
 ## What This Means
 
 This gives you phone access to the repo through a Freedom-branded shell and phone

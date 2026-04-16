@@ -22,6 +22,15 @@
 4. For local development, start with `npm run dev`.
 5. Apply new Supabase migrations before promoting any environment changes.
 
+## Android Companion Release
+
+When publishing a new Freedom Android APK:
+
+1. Bump `versionCode` in [apps/mobile/android/app/build.gradle](/home/adamgoodwin/code/agents/the-freedom-engine-os/apps/mobile/android/app/build.gradle:112). Every shared APK must have a unique build number.
+2. Bump `versionName` when you want the release to be visibly distinguishable in Android settings or install flows.
+3. Build the release artifact.
+4. Verify the gateway-served `latest.apk` matches the local release artifact before sending the link out.
+
 ## Rollback
 
 - Code rollback:
