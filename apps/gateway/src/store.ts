@@ -1971,7 +1971,7 @@ function isInterruptClaimStale(value: string): boolean {
 
 function migrateState(input: Partial<GatewayState>): GatewayState {
   const now = nowIso();
-  return {
+  const state = {
     hosts: (input.hosts ?? []).map((host) => {
       const record = host as Partial<HostRecord>;
       return {
@@ -2085,6 +2085,8 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
       } as AuditEvent;
     })
   };
+  backfillLegacyTasks(state);
+  return state;
 }
 
 function buildSessionIdentity(input: {
@@ -2260,5 +2262,70 @@ function requestStopForSessionTasks(state: GatewayState, sessionId: string, reas
       task.interruptClaimedAt = null;
       task.updatedAt = nowIso();
     }
+  }
+}
+
+function backfillLegacyTasks(state: GatewayState): void {
+  const now = nowIso();
+
+  for (const session of state.sessions) {
+    if (state.tasks.some((task) => task.sessionId === session.id)) {
+      continue;
+    }
+
+    const sessionMessages = state.messages
+      .filter((message) => message.sessionId === session.id)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    const latestUserMessage = [...sessionMessages].reverse().find((message) => message.role === "user") ?? null;
+    const pendingUserMessage =
+      [...sessionMessages].reverse().find((message) => message.role === "user" && message.status === "pending") ?? latestUserMessage;
+    const streamingAssistantMessage =
+      [...sessionMessages].reverse().find((message) => message.role === "assistant" && message.status === "streaming") ?? null;
+
+    const needsLegacyTask =
+      session.status === "queued" ||
+      session.status === "running" ||
+      session.status === "stopping" ||
+      Boolean(session.activeTurnId) ||
+      Boolean(session.claimedMessageId);
+
+    if (!needsLegacyTask || !pendingUserMessage) {
+      continue;
+    }
+
+    state.tasks.push({
+      id: createId("task"),
+      sessionId: session.id,
+      userMessageId: pendingUserMessage.id,
+      assistantMessageId: streamingAssistantMessage?.id ?? null,
+      title: truncatePreview(session.lastPreview ?? pendingUserMessage.content),
+      status:
+        session.status === "queued"
+          ? "queued"
+          : session.status === "running" || session.status === "stopping" || session.activeTurnId
+            ? "running"
+            : "queued",
+      priority: "normal",
+      origin: "user_message",
+      parentTaskId: null,
+      canRunInParallel: false,
+      interruptType: null,
+      threadId: session.threadId,
+      turnId: session.activeTurnId,
+      resumeContext: null,
+      toolState: null,
+      resourceKey: session.rootPath,
+      readOnly: inferTaskReadOnly(pendingUserMessage.content),
+      stopRequested: session.stopRequested,
+      interruptClaimedAt: session.stopClaimedAt,
+      lastError: session.lastError,
+      createdAt: pendingUserMessage.createdAt ?? now,
+      updatedAt: session.updatedAt ?? pendingUserMessage.updatedAt ?? now,
+      claimedAt: session.status === "queued" && session.claimedMessageId ? session.updatedAt : null
+    });
+  }
+
+  for (const session of state.sessions) {
+    syncSessionFromTasks(state, session);
   }
 }
