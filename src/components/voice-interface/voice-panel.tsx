@@ -35,8 +35,8 @@ export function VoicePanel() {
   }
 
   return (
-    <div className="rounded-[1.75rem] border border-[color:var(--line)] bg-white/75 p-4">
-      <p className="text-xs uppercase tracking-[0.25em] text-[color:var(--ink-soft)]">
+    <div className="rounded-xl border border-[color:var(--line)] bg-white/75 p-4">
+      <p className="text-[11px] uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">
         Freedom Voice
       </p>
       <div className="mt-4 flex justify-center">
@@ -72,7 +72,7 @@ export function VoicePanel() {
         </div>
       ) : null}
       {programmingRequests.some((request) => request.status === 'pending') ? (
-        <div className="mt-4 rounded-2xl border border-[color:var(--accent)]/25 bg-[color:var(--accent)]/6 px-3 py-2">
+        <div className="mt-4 rounded-lg border border-[color:var(--accent)]/25 bg-[color:var(--accent)]/6 px-3 py-2">
           <p className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
             Needs approval
           </p>
@@ -106,7 +106,7 @@ export function VoicePanel() {
             : 'Email delivery not configured yet'}
         </p>
         {pendingEmailDraft ? (
-          <div className="mt-3 rounded-2xl border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/8 p-3">
+          <div className="mt-3 rounded-lg border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/8 p-3">
             <p className="text-xs font-medium text-[color:var(--ink)]">
               {pendingEmailDraft.subject}
             </p>

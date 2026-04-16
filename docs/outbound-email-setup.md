@@ -38,7 +38,7 @@ Do not put a Google mailbox password in the repo or in Adam Connect config.
 2. Confirm email delivery shows as ready from `freedom@agoperations.ca`.
 3. Add one or more trusted recipient email addresses.
 4. Ask Freedom by voice to email a summary or update.
-5. Review the pending draft in the sidebar voice panel or the Communications page.
+5. Review the pending draft in the desktop voice console, mobile session flow, or the Communications page.
 6. Confirm the send explicitly in the UI.
 
 ## Mobile Flow (legacy Connect path)

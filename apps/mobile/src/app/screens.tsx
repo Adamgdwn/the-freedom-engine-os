@@ -697,14 +697,11 @@ export function ChatScreen(props: {
             Voice is the primary surface here. Ask for the next move, interrupt when needed, or keep one issue running while you raise the next.
           </Text>
           <View style={styles.stageActionRow}>
-            <Pressable
-              style={styles.primaryButton}
-              onPress={() => store.toggleListening().catch((error) => console.warn(error))}
-            >
-              <Text style={styles.primaryLabel}>{store.voiceSessionActive ? "Stop Voice" : "Start Voice"}</Text>
-            </Pressable>
             <Pressable style={styles.secondaryButton} onPress={() => store.setView("sessions")}>
               <Text style={styles.secondaryLabel}>Open Build</Text>
+            </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={() => store.setView("host")}>
+              <Text style={styles.secondaryLabel}>Open Homebase</Text>
             </Pressable>
           </View>
         </View>

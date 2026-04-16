@@ -64,6 +64,8 @@ export function getControlPlaneSnapshot() {
   };
 }
 
+export type ControlPlaneSnapshot = ReturnType<typeof getControlPlaneSnapshot>;
+
 export function getVentureBySlug(slug: string) {
   return ventures.find((venture) => venture.slug === slug) ?? null;
 }

@@ -6,10 +6,7 @@ export default function GovernancePage() {
   const snapshot = getControlPlaneSnapshot();
 
   return (
-    <AppShell
-      title="Governance Console"
-      summary="The policy and approval surface where agents are constrained, exceptions are visible, and humans remain accountable for irreversible choices."
-    >
+    <AppShell title="Governance Console">
       <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
         <Panel title="Policy checks" eyebrow="Core rules">
           <div className="space-y-4">

@@ -8,8 +8,8 @@
 - Freedom Connect surfaces: desktop shell + mobile companion session identity, connect
   events, governed builder routing, outbound approval policy
 - Voice Layer Phase 1: LiveKit WebRTC + OpenAI Realtime, mic-mute self-interruption fix,
-  model-level interrupt path, in-memory parked task threads, voice orb/panel/FAB, Python
-  agent scaffold
+  model-level interrupt path, in-memory parked task threads, operator voice console /
+  mobile voice dock, Python agent scaffold
 - Freedom Core Phase 2 type contracts: capability layer, agent-build contracts,
   model routing, `CommunicationChannel`
 - Learning Registry surface: capability internalization status, validation records,
@@ -27,6 +27,9 @@
   restart timing tightened, hot voice switching added, Freedom Voice mobile surface
   refreshed, interrupt classification added, and gateway/desktop-host now schedule
   bounded parallel task work instead of a single blocking run
+- Operator workspace refresh:
+  desktop control plane is now a denser workbench and the Android shell now matches the
+  command-and-capture voice posture more closely
 
 ## Now
 

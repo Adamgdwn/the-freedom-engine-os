@@ -67,9 +67,9 @@ This keeps the current trust boundary the same: the phone still does not hold mo
 
 The control-plane web voice lane now has a separate LiveKit data-channel control path for
 explicit `interrupt` and `task_update` messages. That does not replace the mobile stop
-path described above; it adds a browser-native control channel so the web orb/FAB can
-cancel the current model response at the agent session and surface parked task state in
-the sidebar.
+path described above; it adds a browser-native control channel so the desktop voice
+console and mobile control surfaces can cancel the current model response at the agent
+session and surface parked task state in the workbench shell.
 
 The web voice lane now also persists durable partner memory through a server-only
 Supabase route. Learning signals, parked tasks, and approval-gated self-programming

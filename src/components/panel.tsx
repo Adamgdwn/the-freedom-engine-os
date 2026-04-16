@@ -10,16 +10,16 @@ type PanelProps = PropsWithChildren<{
 export function Panel({ title, eyebrow, aside, className, children }: PanelProps) {
   return (
     <section
-      className={`panel rounded-[2rem] border border-white/60 p-6 lg:p-7 ${className ?? ''}`.trim()}
+      className={`panel rounded-xl border border-white/60 p-4 lg:p-5 ${className ?? ''}`.trim()}
     >
-      <div className="mb-5 flex flex-col gap-3 border-b border-[color:var(--line)] pb-4 md:flex-row md:items-end md:justify-between">
+      <div className="mb-4 flex flex-col gap-2 border-b border-[color:var(--line)] pb-3 md:flex-row md:items-end md:justify-between">
         <div>
           {eyebrow ? (
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[color:var(--primary)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[color:var(--primary)]">
               {eyebrow}
             </p>
           ) : null}
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--ink)]">
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-[color:var(--ink)]">
             {title}
           </h2>
         </div>

@@ -25,10 +25,7 @@ export default async function VentureDetailPage({
   const ventureEvidence = snapshot.evidenceItems.filter((item) => item.relatedEntity === venture.id);
 
   return (
-    <AppShell
-      title={venture.name}
-      summary="Venture detail combines thesis, economics, workflow ownership, proof horizon, and linked evidence so resource decisions stay legible."
-    >
+    <AppShell title={venture.name}>
       <div className="grid gap-6 xl:grid-cols-[1fr_0.92fr]">
         <Panel title="Venture registry record" eyebrow={venture.currentStatus}>
           <div className="grid gap-4 md:grid-cols-2 text-sm">

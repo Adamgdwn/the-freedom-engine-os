@@ -40,7 +40,8 @@ For a fast operator-facing view of what is actually live right now, use
   and resolved decision audit trail at `/model-router`.
 - Web voice layer:
   Shared React voice session context, LiveKit room session, interrupt/task data channel,
-  and Python Realtime worker coordination surfaced in the Next.js sidebar and mobile FAB.
+  and Python Realtime worker coordination surfaced in the Next.js operator workbench
+  voice console and mobile voice action surfaces.
 - Persistence boundary:
   Supabase migrations under `supabase/migrations/` mirror both the original control-plane
   entities and the Freedom Connect runtime entities.

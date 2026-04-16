@@ -3,10 +3,7 @@ import { EmailControlPanel } from '@/components/freedom-email/email-control-pane
 
 export default function CommunicationsPage() {
   return (
-    <AppShell
-      title="Communications"
-      summary="Trusted outbound email for Freedom. Manage approved recipients, review draft confirmations, and audit recent sends without leaving the current control plane."
-    >
+    <AppShell title="Communications">
       <EmailControlPanel />
     </AppShell>
   );

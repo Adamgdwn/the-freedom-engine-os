@@ -19,7 +19,9 @@ or the boundary between modeled and fully operational capability.
 - Next.js 16 governed control plane with:
   Portfolio Home, Workflow Lab, Agent Control, Governance Console, Evidence Room,
   Weekly Review, Learning Registry, Model Router, and Communications.
-- Shared app shell with a sidebar voice panel and mobile voice FAB.
+- Shared operator workbench shell with:
+  a compact top bar, desktop activity rail, launcher-style Portfolio Home tabs,
+  an inspectable desktop voice console, and a stronger mobile bottom voice action.
 - Seeded but navigable venture, workflow, governance, approval, execution, and
   recommendation views.
 
@@ -31,7 +33,7 @@ or the boundary between modeled and fully operational capability.
 - UI-visible voice states: `idle`, `connecting`, `listening`, `processing`,
   `speaking`, `error`.
 - Mic mute on assistant playback to prevent assistant self-hearing.
-- Park-and-resume task threads surfaced in the sidebar panel.
+- Park-and-resume task threads surfaced in the desktop voice console and mobile session controls.
 - Transcript and state updates streamed back into the browser UI.
 
 ### Persistent Memory
@@ -65,6 +67,9 @@ or the boundary between modeled and fully operational capability.
 - Desktop shell, desktop host, gateway, wake relay, and mobile companion all live in this monorepo.
 - Phone and desktop pair into one Freedom-owned session identity through the Connect runtime.
 - Governed session routing, pairing, and activity surfaces are visible in the control plane.
+- Android companion shell now emphasizes:
+  command-and-capture from the phone, desktop oversight, hidden-nav menu sheet,
+  and a persistent bottom Freedom Voice dock.
 
 ## Modeled But Not Fully Operational
 

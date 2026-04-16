@@ -18,12 +18,12 @@ Connect already handles:
 ## Existing Companion
 
 - Repo:
-  `/home/adamgoodwin/code/agents/codex_adam_connect`
+  `/home/adamgoodwin/code/agents/the-freedom-engine-os`
 - Current supported desktop GUI:
   Freedom Desktop shell launched from Connect, with a browser fallback at
   `http://127.0.0.1:43111/`
 - Current phone companion:
-  Freedom Android app built from the Connect repo
+  Freedom Android app built from this monorepo at `apps/mobile`
 
 ## Current Operator Loop
 
@@ -41,6 +41,9 @@ surface than a one-shot relay:
   subtask instead of defaulting to a single blocking "busy" response
 - Freedom-owned chat/build surfaces so the phone stays pointed at Freedom even
   though Connect still carries the runtime and transport
+- compact top bar plus menu sheet so navigation and session controls stay available
+  without taking over the whole screen
+- persistent bottom Freedom Voice dock so the primary talk control is always reachable
 
 ## What To Configure
 
@@ -51,7 +54,7 @@ absolute roots. Include Freedom Engine's repo root:
 
 Example:
 
-`DESKTOP_APPROVED_ROOTS=/home/adamgoodwin/code/agents/codex_adam_connect,/home/adamgoodwin/code/agents/the-freedom-engine-os`
+`DESKTOP_APPROVED_ROOTS=/home/adamgoodwin/code/agents/the-freedom-engine-os`
 
 Current local check:
 
@@ -62,12 +65,12 @@ That means the next clean step is real-device acceptance, not migration.
 
 ## Launch Path
 
-1. In the Connect repo, run `npm run launch`.
+1. In this repo, run `npm run launch`.
 2. Confirm Codex is logged in on the desktop machine.
 3. Confirm Tailscale or another private network path is available from the phone.
 4. Pair the phone from the dashboard.
 5. Open the Freedom desktop shell and create or restore the primary Freedom session.
-6. Install the latest Freedom Android APK from the Connect repo or dashboard.
+6. Install the latest Freedom Android APK from this repo or the dashboard.
 7. Chat with the local Freedom Engine workspace from the Freedom phone companion.
 
 ## APK Download

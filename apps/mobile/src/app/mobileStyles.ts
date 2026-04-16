@@ -1,33 +1,33 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#dfe7f3" },
+  root: { flex: 1, backgroundColor: "#f3efe7" },
   mobileShell: { flex: 1, paddingHorizontal: 12, paddingTop: 10, gap: 10 },
   mobileTopBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-    backgroundColor: "rgba(246, 250, 255, 0.82)",
-    borderRadius: 20,
+    backgroundColor: "rgba(255, 250, 243, 0.9)",
+    borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: "rgba(20, 52, 92, 0.08)"
+    borderColor: "rgba(23, 34, 37, 0.1)"
   },
   mobileIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12 },
   mobileIdentityMark: {
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: "#12325b",
+    backgroundColor: "#172225",
     alignItems: "center",
     justifyContent: "center"
   },
   mobileIdentityMarkLabel: { color: "#f8fbff", fontWeight: "800", fontSize: 22 },
   mobileIdentityCopy: { flex: 1, minWidth: 0, gap: 2 },
-  mobileIdentityTitle: { color: "#10233e", fontSize: 20, lineHeight: 22, fontWeight: "800" },
-  mobileIdentitySubtitle: { color: "#60728b", fontSize: 12, lineHeight: 16 },
+  mobileIdentityTitle: { color: "#172225", fontSize: 20, lineHeight: 22, fontWeight: "800" },
+  mobileIdentitySubtitle: { color: "#556367", fontSize: 12, lineHeight: 16 },
   mobileQuickActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   mobileQuickAction: {
     minWidth: 52,
@@ -38,12 +38,102 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(18, 50, 91, 0.08)"
+    borderColor: "rgba(23, 34, 37, 0.08)"
   },
-  mobileQuickActionLabel: { color: "#10233e", fontSize: 20, fontWeight: "800" },
-  mobileQuickActionText: { color: "#10233e", fontSize: 13, fontWeight: "800" },
+  mobileQuickActionLabel: { color: "#172225", fontSize: 20, fontWeight: "800" },
+  mobileQuickActionText: { color: "#172225", fontSize: 13, fontWeight: "800" },
   mobileStatusStrip: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   mobileViewport: { flex: 1, minHeight: 0 },
+  mobileVoiceDock: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 0
+  },
+  mobileVoiceButton: {
+    backgroundColor: "#0f766e",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    borderWidth: 1,
+    borderColor: "#115e59",
+    shadowColor: "#172225",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 8
+  },
+  mobileVoiceButtonCopy: { flex: 1, gap: 2 },
+  mobileVoiceButtonEyebrow: {
+    color: "rgba(232, 244, 243, 0.76)",
+    textTransform: "uppercase",
+    letterSpacing: 0.9,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  mobileVoiceButtonTitle: { color: "#ffffff", fontSize: 18, lineHeight: 22, fontWeight: "800" },
+  mobileVoiceButtonHint: { color: "rgba(232, 244, 243, 0.82)", fontSize: 12, lineHeight: 17 },
+  mobileVoiceButtonGlyph: { color: "#ffffff", fontSize: 20, fontWeight: "800" },
+  mobileSheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(23, 34, 37, 0.28)",
+    justifyContent: "flex-end"
+  },
+  mobileSheet: {
+    backgroundColor: "#fff8ef",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 24,
+    maxHeight: "82%"
+  },
+  mobileSheetHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(23, 34, 37, 0.18)",
+    marginBottom: 12
+  },
+  mobileSheetHeader: { gap: 4, marginBottom: 14 },
+  mobileSheetEyebrow: {
+    color: "#0f766e",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  mobileSheetTitle: { color: "#172225", fontSize: 24, lineHeight: 28, fontWeight: "800" },
+  mobileSheetSubtitle: { color: "#556367", fontSize: 13, lineHeight: 18 },
+  mobileSheetScroll: { gap: 16, paddingBottom: 12 },
+  mobileSheetSection: { gap: 10 },
+  mobileSheetSectionTitle: { color: "#172225", fontSize: 15, fontWeight: "800" },
+  mobileSheetNavButton: {
+    backgroundColor: "rgba(255,255,255,0.78)",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "rgba(23, 34, 37, 0.08)"
+  },
+  mobileSheetNavButtonActive: {
+    backgroundColor: "#172225",
+    borderColor: "#172225"
+  },
+  mobileSheetNavLabel: { color: "#172225", fontSize: 15, fontWeight: "800" },
+  mobileSheetNavLabelActive: { color: "#fff8ef" },
+  mobileSheetNavMeta: { color: "#556367", fontSize: 12, lineHeight: 17 },
+  mobileSheetNavMetaActive: { color: "rgba(255, 248, 239, 0.76)" },
+  mobileSheetActionRow: { gap: 10 },
+  mobileSheetActionButton: { width: "100%" },
+  mobileSheetHelper: { color: "#556367", fontSize: 12, lineHeight: 18 },
+  mobileSheetDangerButton: { marginTop: 4, backgroundColor: "#fee2e2" },
   mobileDock: {
     flexDirection: "row",
     gap: 10,
@@ -64,37 +154,37 @@ export const styles = StyleSheet.create({
   mobileDockLabel: { color: "#c6d8ea", fontWeight: "800", fontSize: 15 },
   mobileDockLabelActive: { color: "#0c213a" },
   heroCard: {
-    backgroundColor: "#0b1526",
+    backgroundColor: "#172225",
     borderRadius: 12,
     padding: 24,
     gap: 12,
     borderWidth: 1,
-    borderColor: "rgba(94, 162, 220, 0.2)",
-    shadowColor: "#0b1526",
+    borderColor: "rgba(255, 248, 239, 0.12)",
+    shadowColor: "#172225",
     shadowOpacity: 0.24,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 8
   },
   assistantStageCard: {
-    backgroundColor: "#102746",
-    borderRadius: 12,
-    padding: 18,
+    backgroundColor: "#fff8ef",
+    borderRadius: 14,
+    padding: 16,
     gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(109, 177, 230, 0.18)"
+    borderColor: "rgba(23, 34, 37, 0.08)"
   },
   stageHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   stageEyebrow: {
-    color: "#a9d8ff",
+    color: "#0f766e",
     textTransform: "uppercase",
     letterSpacing: 1.1,
     fontWeight: "800",
     fontSize: 12
   },
   stageBadge: {
-    color: "#d9efff",
-    backgroundColor: "rgba(255,255,255,0.12)",
+    color: "#b45309",
+    backgroundColor: "rgba(180, 83, 9, 0.12)",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -102,8 +192,8 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: 12
   },
-  stageTitle: { color: "#f4f9ff", fontSize: 24, lineHeight: 28, fontWeight: "800" },
-  stageBody: { color: "#c8dbef", lineHeight: 21, fontSize: 14 },
+  stageTitle: { color: "#172225", fontSize: 24, lineHeight: 28, fontWeight: "800" },
+  stageBody: { color: "#556367", lineHeight: 21, fontSize: 14 },
   stageActionRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 },
   owlBadgeShell: {
     alignSelf: "center",
@@ -317,12 +407,12 @@ export const styles = StyleSheet.create({
   chatScrollArea: { flex: 1, minHeight: 0 },
   chatScrollContent: { gap: 10, paddingBottom: 8, flexGrow: 1 },
   card: {
-    backgroundColor: "rgba(250,252,255,0.94)",
-    borderRadius: 10,
+    backgroundColor: "rgba(255,250,243,0.94)",
+    borderRadius: 12,
     padding: 18,
     gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(18, 50, 91, 0.08)"
+    borderColor: "rgba(23, 34, 37, 0.08)"
   },
   sessionCard: { backgroundColor: "rgba(255,255,255,0.98)" },
   sectionTitle: { fontSize: 20, fontWeight: "800", color: "#10233e" },
@@ -339,8 +429,8 @@ export const styles = StyleSheet.create({
   statusChipLabelTeal: { color: "#166b88" },
   statusChipLabelOrange: { color: "#b8641f" },
   primaryButton: {
-    backgroundColor: "#14345d",
-    borderRadius: 8,
+    backgroundColor: "#172225",
+    borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 16,
     alignItems: "center",
@@ -349,8 +439,8 @@ export const styles = StyleSheet.create({
   },
   primaryLabel: { color: "#ffffff", fontWeight: "800" },
   secondaryButton: {
-    backgroundColor: "#e2ebf8",
-    borderRadius: 8,
+    backgroundColor: "#f2e7d7",
+    borderRadius: 10,
     paddingVertical: 14,
     paddingHorizontal: 16,
     alignItems: "center",
@@ -359,7 +449,7 @@ export const styles = StyleSheet.create({
   },
   topActionButton: { width: "100%" },
   topActionButtonStacked: { width: "100%" },
-  secondaryLabel: { color: "#1b4f82", fontWeight: "800" },
+  secondaryLabel: { color: "#172225", fontWeight: "800" },
   warningButton: { backgroundColor: "#fff2d8" },
   warningButtonLabel: { color: "#9a5b1a" },
   dangerButton: { backgroundColor: "#fee2e2" },
@@ -368,7 +458,7 @@ export const styles = StyleSheet.create({
   disconnectButton: {
     alignSelf: "flex-start",
     backgroundColor: "#fff1df",
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10
   },
@@ -378,12 +468,12 @@ export const styles = StyleSheet.create({
   inputLabel: { color: "#334155", fontWeight: "700" },
   input: {
     borderWidth: 1,
-    borderColor: "rgba(18, 50, 91, 0.1)",
-    borderRadius: 8,
+    borderColor: "rgba(23, 34, 37, 0.1)",
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 13,
     color: "#10233e",
-    backgroundColor: "#f8fbff"
+    backgroundColor: "#fffdf8"
   },
   inputMultiline: {
     minHeight: 96,
@@ -399,7 +489,7 @@ export const styles = StyleSheet.create({
   chatChromeCard: { paddingVertical: 12, gap: 8 },
   chatResumeButton: { alignSelf: "flex-start", minHeight: 40, paddingVertical: 10, paddingHorizontal: 14 },
   messages: { gap: 8 },
-  voiceSessionCard: { gap: 12, paddingVertical: 14, backgroundColor: "#0f2038", borderColor: "rgba(126, 178, 224, 0.18)" },
+  voiceSessionCard: { gap: 12, paddingVertical: 14, backgroundColor: "#172225", borderColor: "rgba(232, 228, 222, 0.12)" },
   voiceSessionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   voiceSessionCopy: { flex: 1, gap: 4 },
   voicePanelTitle: { color: "#f1f7ff", fontSize: 20, lineHeight: 24, fontWeight: "800" },
@@ -413,7 +503,7 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.06)",
     borderWidth: 1,
-    borderColor: "rgba(196, 224, 255, 0.18)"
+    borderColor: "rgba(232, 228, 222, 0.12)"
   },
   voiceOrbCore: {
     width: 48,
@@ -453,37 +543,37 @@ export const styles = StyleSheet.create({
   voicePreviewLabel: { color: "#1b4f82", fontWeight: "800", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.7 },
   voiceNotice: { color: "#f7e5b3", fontSize: 12, lineHeight: 18, fontWeight: "700" },
   voiceMetrics: { color: "#9ab6d3", fontSize: 12, lineHeight: 18 },
-  chatComposerCard: { marginTop: 2, padding: 10, gap: 8 },
-  voiceFirstFooterCard: { marginTop: 2, paddingVertical: 12, gap: 8 },
+  chatComposerCard: { marginTop: 2, padding: 10, gap: 8, borderRadius: 14 },
+  voiceFirstFooterCard: { marginTop: 2, paddingVertical: 12, gap: 8, borderRadius: 14 },
   insetCard: {
-    backgroundColor: "#f6faff",
-    borderRadius: 8,
+    backgroundColor: "#fffdf8",
+    borderRadius: 10,
     padding: 14,
     gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(18, 50, 91, 0.06)"
+    borderColor: "rgba(23, 34, 37, 0.06)"
   },
   optionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   optionChip: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: "#e3ebf6"
+    backgroundColor: "#f2e7d7"
   },
-  optionChipActive: { backgroundColor: "#14345d" },
+  optionChipActive: { backgroundColor: "#172225" },
   optionChipLabel: { color: "#334b66", fontWeight: "700", fontSize: 12 },
   optionChipLabelActive: { color: "#ffffff" },
   optionChipMeta: { color: "#60758f", fontSize: 11, marginTop: 4, fontWeight: "600" },
   optionChipMetaActive: { color: "rgba(255,255,255,0.82)" },
   helperText: { color: "#687c97", fontSize: 12, lineHeight: 18 },
   messageBubble: {
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     gap: 6,
     borderWidth: 1,
-    borderColor: "rgba(18, 50, 91, 0.06)"
+    borderColor: "rgba(23, 34, 37, 0.06)"
   },
-  userBubble: { backgroundColor: "#dcebf8" },
+  userBubble: { backgroundColor: "#f2e7d7" },
   assistantBubble: { backgroundColor: "rgba(255,255,255,0.96)" },
   messageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   messageRole: { fontWeight: "700", color: "#10233e" },
@@ -522,12 +612,12 @@ export const styles = StyleSheet.create({
     minHeight: 72,
     textAlignVertical: "top",
     borderWidth: 1,
-    borderColor: "rgba(18, 50, 91, 0.1)",
-    borderRadius: 8,
+    borderColor: "rgba(23, 34, 37, 0.1)",
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: "#10233e",
-    backgroundColor: "#f8fbff"
+    backgroundColor: "#fffdf8"
   },
   composerCompact: { minHeight: 60, maxHeight: 104 },
   actions: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
@@ -536,7 +626,7 @@ export const styles = StyleSheet.create({
   chatComposerActions: { flexDirection: "row" },
   chatComposerActionButton: { flex: 1 },
   banner: {
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 12,

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-04-15 (operator workspace + mobile shell refresh)
+
+- refit the Next.js control plane into a denser operator workbench:
+  desktop now uses an activity rail, compact top bar, launcher-style Portfolio Home tabs,
+  list/detail workbench layouts on the heavier routes, and a stronger mobile voice action
+- refreshed the Freedom Android companion shell to better match the voice-first operator
+  posture:
+  navigation now lives behind a menu sheet, voice actions are anchored in a persistent
+  bottom dock, and the chat stage no longer duplicates the primary talk control
+- kept existing voice/session behavior intact while changing presentation only:
+  the LiveKit web lane, mobile voice loop, task threading, Supabase memory, and API/runtime
+  contracts were preserved
+- bumped the Android app release metadata to `versionCode 22` / `versionName 0.2.15`
+  and rebuilt the release APK from the updated monorepo state
+
 ## 2026-04-15 (control-plane email bridge pass)
 
 - added a first-class Freedom email bridge in the current Next.js control plane:

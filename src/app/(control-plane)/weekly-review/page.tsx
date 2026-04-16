@@ -6,10 +6,7 @@ export default function WeeklyReviewPage() {
   const snapshot = getControlPlaneSnapshot();
 
   return (
-    <AppShell
-      title="Weekly Review"
-      summary="A disciplined review loop that surfaces what created value, what reduced freedom, and where human judgment should direct the next sprint."
-    >
+    <AppShell title="Weekly Review">
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel title="Created value" eyebrow="What mattered">
           <ul className="space-y-3 text-sm leading-6 text-[color:var(--ink-soft)]">

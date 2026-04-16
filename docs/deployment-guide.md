@@ -31,6 +31,9 @@ When publishing a new Freedom Android APK:
 1. Bump `versionCode` in [apps/mobile/android/app/build.gradle](/home/adamgoodwin/code/agents/the-freedom-engine-os/apps/mobile/android/app/build.gradle:112). Every shared APK must have a unique build number.
 2. Bump `versionName` when you want the release to be visibly distinguishable in Android settings or install flows.
 3. Build the release artifact.
+   `npm run build:android-release`
+   expected output:
+   `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
 4. Verify the gateway-served `latest.apk` matches the local release artifact before sending the link out.
 
 ## Rollback
@@ -57,3 +60,4 @@ When publishing a new Freedom Android APK:
 - Confirm the linked Supabase project exists and the migration history is current
 - Confirm Freedom memory backup completes locally before release when memory behavior changed
 - Confirm build and lint remain clean
+- Confirm the freshly built APK reports the intended `versionCode` / `versionName`

@@ -21,10 +21,7 @@ export default function LearningRegistryPage() {
   const snapshot = getControlPlaneSnapshot();
 
   return (
-    <AppShell
-      title="Learning Registry"
-      summary="Every capability Freedom has observed, built, validated, or internalized. Core admission requires explicit review — repeated use alone is not enough."
-    >
+    <AppShell title="Learning Registry">
       <div className="space-y-6">
         <Panel title="Capability registry" eyebrow="Internalization status">
           <div className="space-y-5">

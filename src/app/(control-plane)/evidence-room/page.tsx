@@ -6,10 +6,7 @@ export default function EvidenceRoomPage() {
   const snapshot = getControlPlaneSnapshot();
 
   return (
-    <AppShell
-      title="Evidence Room"
-      summary="Recommendations live or die by evidence. This room traces decisions back to metrics, workflow logs, customer signal, financial observations, and governance events."
-    >
+    <AppShell title="Evidence Room">
       <Panel title="Evidence registry" eyebrow="Traceable inputs">
         <div className="grid gap-4 xl:grid-cols-2">
           {snapshot.evidenceItems.map((item) => (

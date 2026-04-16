@@ -46,6 +46,12 @@ that ties business outcomes back to freedom outcomes.
 - Trusted recipients are stored in Supabase and are the safety boundary for outbound mail.
 - Freedom can prepare email drafts from voice, but the operator still confirms the send
   in the UI before anything leaves the system.
+- The web control plane now uses a denser operator workbench shell:
+  Portfolio Home acts as a launcher, deeper routes use list/detail layouts, and the
+  desktop voice surface lives in the shell instead of a decorative marketing panel.
+- The Android companion now treats the phone as command-and-capture:
+  navigation is tucked behind a menu sheet and Freedom Voice is always reachable from
+  the persistent bottom dock.
 - Local memory backup:
   run `npm run backup:freedom-memory`
 - Local memory restore:
