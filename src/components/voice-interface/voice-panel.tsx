@@ -1,4 +1,6 @@
 'use client';
+import Link from 'next/link';
+
 import { VoiceOrb }          from './voice-orb';
 import { useVoiceSession }   from './voice-context';
 
@@ -16,6 +18,10 @@ export function VoicePanel() {
     tasks,
     learningSignals,
     programmingRequests,
+    emailStatus,
+    pendingEmailDraft,
+    sendPendingEmailDraft,
+    dismissPendingEmailDraft,
   } = useVoiceSession();
 
   function handleOrbClick() {
@@ -82,6 +88,48 @@ export function VoicePanel() {
           </ul>
         </div>
       ) : null}
+      <div className="mt-4 border-t border-[color:var(--line)] pt-3">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+            Email
+          </p>
+          <Link
+            href="/communications"
+            className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--primary)]"
+          >
+            Manage
+          </Link>
+        </div>
+        <p className="mt-2 text-xs text-[color:var(--ink-soft)]">
+          {emailStatus.enabled
+            ? `${emailStatus.recipientCount} trusted recipients ready`
+            : 'Email delivery not configured yet'}
+        </p>
+        {pendingEmailDraft ? (
+          <div className="mt-3 rounded-2xl border border-[color:var(--primary)]/25 bg-[color:var(--primary)]/8 p-3">
+            <p className="text-xs font-medium text-[color:var(--ink)]">
+              {pendingEmailDraft.subject}
+            </p>
+            <p className="mt-1 text-xs text-[color:var(--ink-soft)]">
+              To {pendingEmailDraft.recipientLabel ?? pendingEmailDraft.recipientDestination}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => void sendPendingEmailDraft()}
+                className="rounded-full bg-[color:var(--primary)] px-3 py-1 text-xs text-white transition hover:bg-[color:var(--primary-strong)]"
+              >
+                Send
+              </button>
+              <button
+                onClick={dismissPendingEmailDraft}
+                className="rounded-full border border-[color:var(--line)] px-3 py-1 text-xs text-[color:var(--ink-soft)] transition hover:text-[color:var(--danger)]"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
       {state !== 'idle' ? (
         <button
           onClick={disconnect}

@@ -10,6 +10,14 @@ import {
   type RemoteTrackPublication,
 } from 'livekit-client';
 import {
+  applyFreedomEmailDraftUpdate,
+  type FreedomEmailDelivery,
+  type FreedomEmailDraft,
+  type FreedomEmailRecipient,
+  type FreedomEmailSnapshot,
+  type FreedomEmailStatus,
+} from '@/lib/freedom-email';
+import {
   MIC_CONSTRAINTS,
   VOICE_DATA_MESSAGE_TYPES,
   type VoiceDataMessage,
@@ -44,6 +52,15 @@ interface VoiceSessionValue {
   applyTaskUpdate(update: VoiceTaskUpdate): void;
   learningSignals: VoiceLearningSignal[];
   programmingRequests: SelfProgrammingRequest[];
+  emailStatus: FreedomEmailStatus;
+  emailRecipients: FreedomEmailRecipient[];
+  recentEmailDeliveries: FreedomEmailDelivery[];
+  pendingEmailDraft: FreedomEmailDraft | null;
+  refreshEmailState(): Promise<void>;
+  addEmailRecipient(input: { label: string; destination: string }): Promise<void>;
+  deleteEmailRecipient(recipientId: string): Promise<void>;
+  sendPendingEmailDraft(): Promise<void>;
+  dismissPendingEmailDraft(): void;
 }
 
 const VoiceSessionContext = createContext<VoiceSessionValue | null>(null);
@@ -68,17 +85,39 @@ async function persistMemoryUpdate(request: FreedomMemoryUpdateRequest) {
   });
 }
 
+async function fetchEmailSnapshot(): Promise<FreedomEmailSnapshot> {
+  const response = await fetch('/api/freedom-email', { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error('Freedom email bootstrap failed');
+  }
+
+  return response.json() as Promise<FreedomEmailSnapshot>;
+}
+
+const EMPTY_EMAIL_STATUS: FreedomEmailStatus = {
+  enabled:        false,
+  provider:       'none',
+  fromAddress:    null,
+  replyToAddress: null,
+  recipientCount: 0,
+};
+
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [state,      setState]      = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
   const [tasks,      setTasks]      = useState<VoiceTask[]>([]);
   const [learningSignals,    setLearningSignals]    = useState<VoiceLearningSignal[]>([]);
   const [programmingRequests, setProgrammingRequests] = useState<SelfProgrammingRequest[]>([]);
+  const [emailStatus, setEmailStatus] = useState<FreedomEmailStatus>(EMPTY_EMAIL_STATUS);
+  const [emailRecipients, setEmailRecipients] = useState<FreedomEmailRecipient[]>([]);
+  const [recentEmailDeliveries, setRecentEmailDeliveries] = useState<FreedomEmailDelivery[]>([]);
+  const [pendingEmailDraft, setPendingEmailDraft] = useState<FreedomEmailDraft | null>(null);
 
   const roomRef      = useRef<Room | null>(null);
   const localTrack   = useRef<LocalAudioTrack | null>(null);
   const agentAudio   = useRef<HTMLAudioElement | null>(null);
   const loadedMemory = useRef(false);
+  const loadedEmail  = useRef(false);
 
   const applyTaskUpdate = useCallback((update: VoiceTaskUpdate) => {
     setTasks((currentTasks) => reduceVoiceTaskUpdate(currentTasks, update));
@@ -92,6 +131,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     setProgrammingRequests((currentRequests) => (
       applySelfProgrammingRequestUpdate(currentRequests, update)
     ));
+  }, []);
+
+  const refreshEmailState = useCallback(async () => {
+    const snapshot = await fetchEmailSnapshot();
+    setEmailStatus(snapshot.status ?? EMPTY_EMAIL_STATUS);
+    setEmailRecipients(snapshot.recipients ?? []);
+    setRecentEmailDeliveries(snapshot.recentDeliveries ?? []);
   }, []);
 
   useEffect(() => {
@@ -117,6 +163,18 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    if (loadedEmail.current) {
+      return;
+    }
+
+    loadedEmail.current = true;
+
+    void refreshEmailState().catch(() => {
+      // Leave email UI available even if bootstrap is offline.
+    });
+  }, [refreshEmailState]);
 
   const disconnect = useCallback(() => {
     clearAgentAudio(agentAudio);
@@ -144,6 +202,67 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     localTrack.current?.unmute();
     setState('listening');
   }, []);
+
+  const addEmailRecipient = useCallback(async (input: { label: string; destination: string }) => {
+    const response = await fetch('/api/freedom-email', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        action:      'recipient.create',
+        label:       input.label,
+        destination: input.destination,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Could not add Freedom email recipient.');
+    }
+
+    await refreshEmailState();
+  }, [refreshEmailState]);
+
+  const deleteEmailRecipient = useCallback(async (recipientId: string) => {
+    const response = await fetch(`/api/freedom-email/recipients/${recipientId}`, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok) {
+      throw new Error('Could not delete Freedom email recipient.');
+    }
+
+    await refreshEmailState();
+  }, [refreshEmailState]);
+
+  const dismissPendingEmailDraft = useCallback(() => {
+    setPendingEmailDraft(null);
+  }, []);
+
+  const sendPendingEmailDraft = useCallback(async () => {
+    if (!pendingEmailDraft) {
+      return;
+    }
+
+    const response = await fetch('/api/freedom-email', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        action:               'draft.send',
+        draftId:              pendingEmailDraft.id,
+        recipientDestination: pendingEmailDraft.recipientDestination,
+        recipientLabel:       pendingEmailDraft.recipientLabel,
+        subject:              pendingEmailDraft.subject,
+        intro:                pendingEmailDraft.intro,
+        body:                 pendingEmailDraft.body,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Could not send Freedom email draft.');
+    }
+
+    setPendingEmailDraft(null);
+    await refreshEmailState();
+  }, [pendingEmailDraft, refreshEmailState]);
 
   const connect = useCallback(async () => {
     try {
@@ -236,6 +355,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        if (msg.type === VOICE_DATA_MESSAGE_TYPES.emailDraftUpdate && msg.payload) {
+          setPendingEmailDraft((currentDraft) => (
+            applyFreedomEmailDraftUpdate(currentDraft, msg.payload)
+          ));
+          return;
+        }
+
         if (msg.type === VOICE_DATA_MESSAGE_TYPES.state && isRuntimeState(msg.state)) {
           if (msg.state === 'speaking') {
             localTrack.current?.mute();
@@ -277,6 +403,15 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         applyTaskUpdate,
         learningSignals,
         programmingRequests,
+        emailStatus,
+        emailRecipients,
+        recentEmailDeliveries,
+        pendingEmailDraft,
+        refreshEmailState,
+        addEmailRecipient,
+        deleteEmailRecipient,
+        sendPendingEmailDraft,
+        dismissPendingEmailDraft,
       }}
     >
       {children}

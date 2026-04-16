@@ -173,3 +173,36 @@ async def request_self_programming(request_id: str, capability: str, reason: str
         },
     })
     return "Self-programming request recorded for approval."
+
+
+@function_tool
+async def prepare_email_draft(
+    draft_id: str,
+    recipient_destination: str,
+    subject: str,
+    body: str,
+    recipient_label: str = "",
+    intro: str = "",
+) -> str:
+    """
+    Prepare an outbound email draft for explicit user confirmation.
+
+    This does not send email. It only publishes a draft to the web UI so the
+    operator can review and confirm the delivery.
+    """
+    await _publish_event({
+        "type": "email_draft_update",
+        "payload": {
+            "type": "created",
+            "draft": {
+                "id": draft_id,
+                "recipientLabel": recipient_label or None,
+                "recipientDestination": recipient_destination,
+                "subject": subject,
+                "intro": intro,
+                "body": body,
+                "createdAt": int(time.time() * 1000),
+            },
+        },
+    })
+    return "Email draft prepared for confirmation."

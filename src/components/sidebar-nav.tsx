@@ -7,6 +7,7 @@ const navigation = [
   { href: '/', label: 'Portfolio Home' },
   { href: '/workflow-lab', label: 'Workflow Lab' },
   { href: '/agent-control', label: 'Agent Control' },
+  { href: '/communications', label: 'Communications' },
   { href: '/governance', label: 'Governance Console' },
   { href: '/evidence-room', label: 'Evidence Room' },
   { href: '/weekly-review', label: 'Weekly Review' },

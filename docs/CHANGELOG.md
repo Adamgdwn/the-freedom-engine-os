@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-04-15 (control-plane email bridge pass)
+
+- added a first-class Freedom email bridge in the current Next.js control plane:
+  trusted recipients now live in Supabase, recent deliveries are audited, and the
+  new `/communications` page manages recipient policy and delivery visibility
+- added a server-side Freedom email API backed by the existing Resend env vars so
+  the newer web/voice stack can send external mail without depending on the older
+  gateway-local recipient store
+- extended the voice/runtime contract with confirmation-gated email drafts so the
+  Python Freedom worker can prepare an email in response to a voice request, while
+  keeping the final send action in the UI behind explicit user confirmation
+- added the `freedom_email_recipients` and `freedom_email_deliveries` Supabase
+  tables and pushed the new migration to the linked remote database
+- added `docs/current-capabilities.md` as the running reference for what Freedom
+  can do live today versus what remains modeled or planned
+
 ## 2026-04-15 (persistent memory + local backup pass)
 
 - added server-only Supabase-backed persistence for Freedom voice tasks, learning signals,

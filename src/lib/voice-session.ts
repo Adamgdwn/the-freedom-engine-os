@@ -1,4 +1,5 @@
 import type { AudioCaptureOptions } from 'livekit-client';
+import type { FreedomEmailDraftUpdate } from '@/lib/freedom-email';
 import type {
   SelfProgrammingRequestUpdate,
   VoiceLearningUpdate,
@@ -43,6 +44,7 @@ export const VOICE_DATA_MESSAGE_TYPES = {
   transcript:         'transcript',
   learningUpdate:     'learning_update',
   selfProgrammingUpdate: 'self_programming_update',
+  emailDraftUpdate:   'email_draft_update',
 } as const;
 
 export type VoiceDataMessage =
@@ -51,6 +53,7 @@ export type VoiceDataMessage =
   | { type: typeof VOICE_DATA_MESSAGE_TYPES.taskUpdate; payload: VoiceTaskUpdate }
   | { type: typeof VOICE_DATA_MESSAGE_TYPES.learningUpdate; payload: VoiceLearningUpdate }
   | { type: typeof VOICE_DATA_MESSAGE_TYPES.selfProgrammingUpdate; payload: SelfProgrammingRequestUpdate }
+  | { type: typeof VOICE_DATA_MESSAGE_TYPES.emailDraftUpdate; payload: FreedomEmailDraftUpdate }
   | { type: typeof VOICE_DATA_MESSAGE_TYPES.transcript; text: string };
 
 export const FREEDOM_SYSTEM_PROMPT = `
@@ -67,6 +70,9 @@ it briefly, park the prior task with a short label and summary, then
 continue with the new topic.
 If background work reaches a useful checkpoint, mark it ready and offer
 to circle back in one short sentence.
+If the user explicitly asks you to email a summary or update, prepare an
+email draft for a trusted recipient and make clear that user confirmation
+is required before anything is sent.
 If you identify an improvement that would require changing code, tools,
 or runtime behavior, request self-programming and state that approval is
 required before anything is changed.

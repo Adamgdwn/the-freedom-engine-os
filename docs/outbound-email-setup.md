@@ -32,7 +32,16 @@ Do not put a Google mailbox password in the repo or in Adam Connect config.
 4. Create a Resend API key.
 5. Put that API key into the desktop `.env`.
 
-## Mobile Flow
+## Freedom Control-Plane Flow
+
+1. Open `/communications` in the Next.js control plane.
+2. Confirm email delivery shows as ready from `freedom@agoperations.ca`.
+3. Add one or more trusted recipient email addresses.
+4. Ask Freedom by voice to email a summary or update.
+5. Review the pending draft in the sidebar voice panel or the Communications page.
+6. Confirm the send explicitly in the UI.
+
+## Mobile Flow (legacy Connect path)
 
 1. Refresh the phone against the desktop.
 2. Open `Host -> External Reports`.
@@ -43,13 +52,17 @@ Do not put a Google mailbox password in the repo or in Adam Connect config.
 
 ## Validation
 
-1. Confirm `Host -> External Reports` says email delivery is ready from `freedom@agoperations.ca`.
+1. Confirm `/communications` says email delivery is ready from `freedom@agoperations.ca`.
 2. Add a trusted recipient.
-3. Send a completed assistant reply externally.
-4. Confirm the email arrives and `Activity` shows an external delivery audit entry.
+3. Ask Freedom to prepare an email draft for that recipient.
+4. Confirm the email arrives and the Communications page shows a delivery log entry.
+5. If you are validating the older mobile flow, also confirm `Host -> External Reports`
+   still reports email delivery as ready.
 
 ## Notes
 
 - The default send path reuses existing assistant output and does not call the model again.
-- Trusted recipients are managed inside the gateway state and only visible to paired devices for that host.
+- The legacy mobile path still uses gateway-local trusted recipient state.
+- The current control-plane email bridge stores trusted recipients in Supabase so the
+  newer web voice/runtime path does not depend on gateway-local state.
 - If delivery fails, check `RESEND_API_KEY`, domain verification, and the sender address first.

@@ -69,6 +69,7 @@ exact approved-root setup and launch path.
 
 ## Documentation
 
+- `docs/current-capabilities.md`
 - `docs/architecture.md`
 - `docs/manual.md`
 - `docs/roadmap.md`

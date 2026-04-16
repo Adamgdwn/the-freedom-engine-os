@@ -28,6 +28,13 @@ that ties business outcomes back to freedom outcomes.
 - evidence-backed changes to venture, workflow, or governance behavior
 - validation results or a clearly stated blocker
 
+## Current Capability Reference
+
+- Start with `docs/current-capabilities.md` when deciding whether to build a new
+  Freedom feature or extend an existing one.
+- Keep that document current whenever live behavior, operator workflows, or the
+  modeled-vs-live boundary changes.
+
 ## Operator Notes
 
 - V1 is seeded and does not yet require Supabase credentials.
@@ -35,6 +42,10 @@ that ties business outcomes back to freedom outcomes.
   migration has been pushed.
 - The `supabase/migrations/` directory is now the canonical schema source for remote updates.
 - Persistent Freedom memory now requires `SUPABASE_SERVICE_ROLE_KEY` on the server side.
+- Freedom email now lives in the web control plane at `/communications`.
+- Trusted recipients are stored in Supabase and are the safety boundary for outbound mail.
+- Freedom can prepare email drafts from voice, but the operator still confirms the send
+  in the UI before anything leaves the system.
 - Local memory backup:
   run `npm run backup:freedom-memory`
 - Local memory restore:

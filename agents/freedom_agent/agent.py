@@ -30,6 +30,7 @@ from livekit.plugins import openai as lk_openai
 from tools import (
     park_task,
     pending_approvals,
+    prepare_email_draft,
     record_learning_signal,
     request_self_programming,
     set_event_room,
@@ -52,6 +53,10 @@ it briefly, park the prior task with a short label and summary, then
 continue with the new topic.
 If background work reaches a useful checkpoint, mark it ready and offer
 to circle back in one short sentence.
+If the user explicitly asks you to email a summary or update, prepare an
+email draft for a trusted recipient and say that confirmation is still
+required before anything is sent. Never claim an email was sent unless the
+UI confirms it after the operator approves.
 If you identify an improvement that would require changing code, tools,
 or runtime behavior, request self-programming and state that approval is
 required before anything is changed.
@@ -132,11 +137,33 @@ def build_memory_context() -> str:
     return "\n\n".join(sections).strip()
 
 
+def build_email_context() -> str:
+    recipient_rows = _fetch_memory_rows(
+        "freedom_email_recipients",
+        "label,destination",
+        10,
+    )
+
+    if not recipient_rows:
+        return ""
+
+    recipient_lines = [
+        f"- {row.get('label', 'Unknown')}: {row.get('destination', '')}"
+        for row in recipient_rows
+    ]
+    return (
+        "Trusted email recipients currently available for confirmation-gated outbound mail:\n"
+        + "\n".join(recipient_lines)
+    )
+
+
 async def entrypoint(ctx: agents.JobContext) -> None:
     await ctx.connect()
     set_event_room(ctx.room)
     memory_context = build_memory_context()
-    instructions = SYSTEM_PROMPT if not memory_context else f"{SYSTEM_PROMPT}\n\n{memory_context}"
+    email_context = build_email_context()
+    supplemental_context = "\n\n".join(filter(None, [memory_context, email_context])).strip()
+    instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\n{supplemental_context}"
 
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
@@ -219,6 +246,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                     update_task_status,
                     record_learning_signal,
                     request_self_programming,
+                    prepare_email_draft,
                 ],
             ),
             room_input_options=RoomInputOptions(noise_cancellation=True),

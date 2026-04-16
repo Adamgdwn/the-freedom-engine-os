@@ -8,6 +8,9 @@ companion, Node.js gateway, Electron desktop shell, Codex bridge host, and wake 
 all under one npm workspace. It is structured so Supabase-backed persistence can replace
 the seeded data layer without rewriting the UI or service boundaries.
 
+For a fast operator-facing view of what is actually live right now, use
+`docs/current-capabilities.md`.
+
 ## Components
 
 - App shell:
@@ -26,6 +29,9 @@ the seeded data layer without rewriting the UI or service boundaries.
 - Freedom Connect:
   Desktop shell and phone companion session identity, connect events, outbound policy,
   and governed builder routing surfaced as Freedom-owned runtime state.
+- Freedom email layer:
+  Trusted outbound recipient registry, confirmation-gated draft flow, and delivery audit
+  now surfaced directly in the Next.js control plane at `/communications`.
 - Learning Registry:
   Capability internalization tracking — state, validation records, builder dependencies,
   safety notes, and learning history at `/learning-registry`.
@@ -41,6 +47,9 @@ the seeded data layer without rewriting the UI or service boundaries.
 - Durable memory layer:
   Server-only Supabase admin client, memory API routes, and local backup/restore scripts
   preserve learning signals, parked voice tasks, and approval-gated self-programming requests.
+- Outbound communication layer:
+  Server-side Resend delivery, Supabase-backed trusted recipients, and recent delivery
+  audit records bridge the current web/voice Freedom surface to explicit external email.
 - Native runtime surfaces (npm workspace packages):
   `apps/mobile` — React Native Android companion (`@freedom/mobile`);
   `apps/gateway` — Node.js pairing and wake gateway (`@freedom/gateway`);
@@ -63,9 +72,12 @@ the seeded data layer without rewriting the UI or service boundaries.
    task-state updates between the browser and the Python Realtime worker.
 7. Voice memory updates are persisted through a server-only Next.js API into Supabase,
    and the Python worker hydrates recent durable memory into the live session prompt.
-8. Local backup and restore scripts export the durable memory tables into repo-local
+8. When Freedom prepares an external email, the Python worker publishes a draft event,
+   the control plane presents it for explicit confirmation, and the server sends it
+   only to a trusted recipient recorded in Supabase.
+9. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
-9. Future persistence will swap the seed layer for Supabase queries while preserving the
+10. Future persistence will swap the seed layer for Supabase queries while preserving the
    same entity boundaries.
 
 ## Dependencies
@@ -86,6 +98,8 @@ the seeded data layer without rewriting the UI or service boundaries.
 - The UI is a control plane, not a chat shell or siloed SaaS dashboard.
 - Human approval is preserved for reprioritization, policy edits, spending, and
   irreversible external commitments.
+- External email is draft-first and confirmation-gated. Freedom can prepare the send,
+  but the operator still authorizes the actual outbound delivery in the UI.
 - Durable Freedom memory is server-written and locally exportable; self-programming
   requests are persisted but still stop at explicit approval.
 - Score weights are editable in the UI and versioned in-memory now, with schema support
