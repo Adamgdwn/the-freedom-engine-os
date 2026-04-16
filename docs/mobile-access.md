@@ -87,6 +87,8 @@ The companion install page remains:
 
 - Every distributed Android build must use a unique `versionCode`.
 - Bump `versionName` whenever you want the human-visible release label to change.
+- The gateway install page should expose a build-specific APK identifier and filename so you
+  can tell at a glance which build a phone is about to install.
 - Before sharing a new install link, verify the served APK matches the local release
   artifact by size or checksum.
 - If a phone appears to "start where it left off" after reinstalling, check for

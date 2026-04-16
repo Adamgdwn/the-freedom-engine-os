@@ -24,6 +24,7 @@ import {
 import { WebSocketServer } from "ws";
 import {
   buildDesktopOverviewResponse,
+  buildAndroidArtifactDownloadPath,
   buildInstallPageModel,
   findAndroidArtifact,
   renderDesktopPage,
@@ -169,23 +170,29 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (method === "GET" && url.pathname === "/downloads/android/latest.apk") {
+    if (method === "GET" && (url.pathname === "/downloads/android/latest.apk" || /^\/downloads\/android\/[^/]+\.apk$/.test(url.pathname))) {
       const artifact = await findAndroidArtifact();
       if (!artifact) {
         sendJson(res, 404, { error: "Android APK not found on this desktop yet." });
+        return;
+      }
+      if (url.pathname !== "/downloads/android/latest.apk" && url.pathname !== buildAndroidArtifactDownloadPath(artifact)) {
+        sendJson(res, 404, { error: "Requested Android APK build is not available on this desktop." });
         return;
       }
 
       res.statusCode = 200;
       res.setHeader("content-type", "application/vnd.android.package-archive");
       res.setHeader("content-length", String(artifact.sizeBytes));
-      res.setHeader("content-disposition", 'attachment; filename="freedom.apk"');
+      res.setHeader("content-disposition", `attachment; filename="${artifact.downloadFileName}"`);
       res.setHeader("x-content-type-options", "nosniff");
       res.setHeader("x-download-options", "noopen");
       res.setHeader("cache-control", "no-store, no-cache, must-revalidate, proxy-revalidate");
       res.setHeader("pragma", "no-cache");
       res.setHeader("expires", "0");
       res.setHeader("surrogate-control", "no-store");
+      res.setHeader("etag", `"${artifact.buildId}"`);
+      res.setHeader("last-modified", new Date(artifact.builtAt).toUTCString());
       createReadStream(artifact.filePath).pipe(res);
       return;
     }

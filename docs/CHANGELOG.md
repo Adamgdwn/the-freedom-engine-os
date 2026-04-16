@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-04-15 (APK build identity + gateway download naming)
+
+- updated the gateway install surface so Android downloads expose a visible build identifier
+  based on `versionName`, `versionCode`, and build timestamp
+- switched the install page and desktop dashboard to link to a unique APK filename per build
+  instead of only a generic `latest.apk` / `freedom.apk` pairing, which reduces stale-download
+  confusion on phones and browsers
+- kept `/downloads/android/latest.apk` as a compatibility alias while making the primary
+  download path build-specific and easier to verify by eye
+
 ## 2026-04-15 (operator workspace + mobile shell refresh)
 
 - refit the Next.js control plane into a denser operator workbench:

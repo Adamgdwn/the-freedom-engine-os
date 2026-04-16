@@ -35,6 +35,8 @@ When publishing a new Freedom Android APK:
    expected output:
    `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
 4. Verify the gateway-served `latest.apk` matches the local release artifact before sending the link out.
+5. Confirm the install page shows the intended Android build identifier:
+   `versionName`, `versionCode`, and the unique build-specific APK filename.
 
 ## Rollback
 
@@ -61,3 +63,5 @@ When publishing a new Freedom Android APK:
 - Confirm Freedom memory backup completes locally before release when memory behavior changed
 - Confirm build and lint remain clean
 - Confirm the freshly built APK reports the intended `versionCode` / `versionName`
+- Confirm the gateway install page is serving the expected unique APK filename for that build,
+  not just the generic `latest.apk` alias

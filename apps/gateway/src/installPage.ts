@@ -1,4 +1,4 @@
-import { access, stat } from "node:fs/promises";
+import { access, readFile, stat } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,8 +6,7 @@ import QRCode from "qrcode";
 import type { ChatMessage, ChatSession, DesktopOverviewResponse, GatewayOverview, RecentSessionActivity } from "@freedom/shared";
 import {
   FREEDOM_PRIMARY_SESSION_TITLE,
-  FREEDOM_PRODUCT_NAME,
-  FREEDOM_RUNTIME_NAME
+  FREEDOM_PRODUCT_NAME
 } from "@freedom/shared";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -16,11 +15,17 @@ const defaultArtifactCandidates = [
   "apps/mobile/android/app/build/outputs/apk/release/app-release.apk",
   "apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
 ];
+const androidBuildGradlePath = path.resolve(repoRoot, "apps/mobile/android/app/build.gradle");
 
 interface AndroidArtifact {
   filePath: string;
   fileName: string;
   sizeBytes: number;
+  versionCode: number | null;
+  versionName: string | null;
+  builtAt: string;
+  buildId: string;
+  downloadFileName: string;
 }
 
 interface InstallPageModel {
@@ -82,10 +87,10 @@ export async function buildDesktopOverviewResponse(
     dashboardUrl: `${localBaseUrl}/`,
     installUrl: model.installUrl,
     qrUrl: `${localBaseUrl}/install/qr.svg`,
-    apkDownloadUrl: model.androidArtifact ? `${model.publicBaseUrl}/downloads/android/latest.apk` : null,
+    apkDownloadUrl: model.androidArtifact ? buildAndroidArtifactDownloadUrl(model.publicBaseUrl, model.androidArtifact) : null,
     androidArtifact: model.androidArtifact
       ? {
-          fileName: model.androidArtifact.fileName,
+          fileName: model.androidArtifact.downloadFileName,
           sizeBytes: model.androidArtifact.sizeBytes
         }
       : null
@@ -96,11 +101,10 @@ export function renderDesktopPage(model: InstallPageModel): string {
   const { overview, dashboardUrl, installUrl, publicBaseUrl, qrSvg, androidArtifact, desktopConsoleEnabled } = model;
   const hostStatus = overview.hostStatus;
   const suggestedUrl = hostStatus?.tailscale.suggestedUrl ?? publicBaseUrl;
-  const apkDownloadUrl = androidArtifact ? `${publicBaseUrl}/downloads/android/latest.apk` : null;
+  const apkDownloadUrl = androidArtifact ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact) : null;
   const pairingCode = hostStatus?.host.pairingCode ?? "Waiting";
   const codexState = humanizeAuth(hostStatus?.auth.status ?? "logged_out");
   const codexDetail = hostStatus?.auth.detail ?? "Desktop host has not published Freedom runtime status yet.";
-  const tailscaleState = hostStatus?.tailscale.connected ? "Tailscale ready" : "Tailscale needs attention";
   const tailscaleDetail = hostStatus?.tailscale.detail ?? "Waiting for Tailscale status.";
   const roots = hostStatus?.host.approvedRoots ?? [];
   const recentSessionActivity = overview.recentSessionActivity;
@@ -326,7 +330,7 @@ export function renderDesktopPage(model: InstallPageModel): string {
                     <div class="token-row emphasized"><strong class="pair-code">${escapeHtml(pairingCode)}</strong><button class="icon-button" type="button" data-copy="${escapeAttribute(pairingCode)}">Copy Code</button></div>
                     ${
                       apkDownloadUrl
-                        ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="freedom.apk">Download APK</a>`
+                        ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="${escapeAttribute(androidArtifact?.downloadFileName ?? "freedom.apk")}">Download APK</a>${renderAndroidArtifactBadge(androidArtifact)}`
                         : `<span class="button button-muted">Android APK not built yet</span>`
                     }
                   </div>
@@ -365,7 +369,7 @@ export function renderDesktopPage(model: InstallPageModel): string {
                       <div class="accordion-body stack gap-sm">
                         ${
                           apkDownloadUrl
-                            ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="freedom.apk">Download Android APK</a>`
+                            ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="${escapeAttribute(androidArtifact?.downloadFileName ?? "freedom.apk")}">Download Android APK</a>${renderAndroidArtifactBadge(androidArtifact)}`
                             : `<span class="button button-muted">Android APK not built yet</span>`
                         }
                         <a class="button button-secondary" href="${escapeHtml(installUrl)}" target="_blank" rel="noreferrer">Open Recovery Page</a>
@@ -601,7 +605,7 @@ export function renderInstallPage(model: InstallPageModel): string {
   const { overview, publicBaseUrl, installUrl, androidArtifact } = model;
   const hostStatus = overview.hostStatus;
   const suggestedUrl = hostStatus?.tailscale.suggestedUrl ?? publicBaseUrl;
-  const apkDownloadUrl = androidArtifact ? `${publicBaseUrl}/downloads/android/latest.apk` : null;
+  const apkDownloadUrl = androidArtifact ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact) : null;
   const pairingCode = hostStatus?.host.pairingCode ?? "Waiting";
   const authLabel = humanizeAuth(hostStatus?.auth.status ?? "logged_out");
 
@@ -621,11 +625,12 @@ export function renderInstallPage(model: InstallPageModel): string {
             <div class="button-row">
               ${
                 apkDownloadUrl
-                  ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="freedom.apk">Download Android APK</a>`
+                  ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="${escapeAttribute(androidArtifact?.downloadFileName ?? "freedom.apk")}">Download Android APK</a>`
                   : `<span class="button button-muted">Android APK not available yet</span>`
               }
               <a class="button button-secondary" href="${escapeHtml(publicBaseUrl)}">Back to Desktop Dashboard</a>
             </div>
+            ${renderAndroidArtifactBadge(androidArtifact)}
           </div>
         </section>
 
@@ -699,6 +704,7 @@ export function renderInstallPage(model: InstallPageModel): string {
 export async function findAndroidArtifact(): Promise<AndroidArtifact | null> {
   const configuredPath = process.env.GATEWAY_ANDROID_APK_PATH?.trim();
   const candidates = configuredPath ? [configuredPath, ...defaultArtifactCandidates] : defaultArtifactCandidates;
+  const versionMetadata = await readAndroidVersionMetadata();
 
   for (const candidate of candidates) {
     const filePath = path.resolve(repoRoot, candidate);
@@ -706,10 +712,22 @@ export async function findAndroidArtifact(): Promise<AndroidArtifact | null> {
       await access(filePath);
       const fileStat = await stat(filePath);
       if (fileStat.isFile()) {
+        const builtAt = fileStat.mtime.toISOString();
+        const buildStamp = formatBuildStamp(fileStat.mtime);
+        const buildId = [
+          versionMetadata.versionName ? `v${slugifyArtifactSegment(versionMetadata.versionName)}` : "vunknown",
+          versionMetadata.versionCode ? `b${versionMetadata.versionCode}` : "bunknown",
+          buildStamp
+        ].join("-");
         return {
           filePath,
           fileName: path.basename(filePath),
-          sizeBytes: fileStat.size
+          sizeBytes: fileStat.size,
+          versionCode: versionMetadata.versionCode,
+          versionName: versionMetadata.versionName,
+          builtAt,
+          buildId,
+          downloadFileName: `freedom-${buildId}.apk`
         };
       }
     } catch {
@@ -718,6 +736,78 @@ export async function findAndroidArtifact(): Promise<AndroidArtifact | null> {
   }
 
   return null;
+}
+
+export function buildAndroidArtifactDownloadPath(artifact: AndroidArtifact): string {
+  return `/downloads/android/${artifact.downloadFileName}`;
+}
+
+function buildAndroidArtifactDownloadUrl(publicBaseUrl: string, artifact: AndroidArtifact): string {
+  return `${stripTrailingSlash(publicBaseUrl)}${buildAndroidArtifactDownloadPath(artifact)}`;
+}
+
+async function readAndroidVersionMetadata(): Promise<{ versionCode: number | null; versionName: string | null }> {
+  try {
+    const source = await readFile(androidBuildGradlePath, "utf8");
+    const versionCodeMatch = source.match(/versionCode\s+(\d+)/);
+    const versionNameMatch = source.match(/versionName\s+"([^"]+)"/);
+    return {
+      versionCode: versionCodeMatch ? Number(versionCodeMatch[1]) : null,
+      versionName: versionNameMatch?.[1] ?? null
+    };
+  } catch {
+    return {
+      versionCode: null,
+      versionName: null
+    };
+  }
+}
+
+function renderAndroidArtifactBadge(artifact: AndroidArtifact | null): string {
+  if (!artifact) {
+    return "";
+  }
+
+  const versionLabel =
+    artifact.versionName && artifact.versionCode
+      ? `Android ${artifact.versionName} (${artifact.versionCode})`
+      : artifact.versionName
+        ? `Android ${artifact.versionName}`
+        : artifact.versionCode
+          ? `Android build ${artifact.versionCode}`
+          : "Android build";
+
+  return `
+    <div class="status-card">
+      <strong>${escapeHtml(versionLabel)}</strong>
+      <p>Build ID ${escapeHtml(artifact.buildId)}</p>
+      <p>${escapeHtml(formatBytes(artifact.sizeBytes))} · built ${escapeHtml(formatTimestamp(artifact.builtAt))}</p>
+      <p><code>${escapeHtml(artifact.downloadFileName)}</code></p>
+    </div>
+  `;
+}
+
+function formatBuildStamp(value: Date): string {
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(value.getUTCDate()).padStart(2, "0");
+  const hours = String(value.getUTCHours()).padStart(2, "0");
+  const minutes = String(value.getUTCMinutes()).padStart(2, "0");
+  const seconds = String(value.getUTCSeconds()).padStart(2, "0");
+  return `${year}${month}${day}-${hours}${minutes}${seconds}Z`;
+}
+
+function formatTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toISOString().replace(".000", "");
+}
+
+function slugifyArtifactSegment(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
 }
 
 function renderPage(input: { title: string; description: string; body: string }): string {
