@@ -202,9 +202,9 @@ const wakeRelay = new WakeRelayClient();
 let socket: WebSocket | null = null;
 let unsubscribePushTokenRefresh: (() => void) | null = null;
 let voiceInterruptRequested = false;
-// Keep recognition live during spoken replies so voice barge-in works on phone.
-// Assistant-echo filtering prevents Freedom's own TTS from self-interrupting.
-const SHOULD_PAUSE_RECOGNITION_DURING_TTS = false;
+// Pause recognition during assistant playback so Freedom does not hear its own TTS.
+// Barge-in still works by stopping playback and resuming recognition for the user.
+const SHOULD_PAUSE_RECOGNITION_DURING_TTS = true;
 const VOICE_CONTINUATION_GRACE_MS = 1400;
 let pendingVoiceTranscript: string | null = null;
 let pendingVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -823,31 +823,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const resolvedSessionId = requireValue(sessionId, "Open or start a chat before sending a message.");
       const targetSession = findSendTargetSession(resolvedSessionId, get().sessions);
-      if (isSessionBusy(targetSession)) {
-        const isVoiceTurn = get().composerInputMode === "voice" || get().composerInputMode === "voice_polished";
-        if (get().voiceSessionActive && isVoiceTurn && !voiceInterruptRequested) {
-          voiceInterruptRequested = true;
-          assistantSpeech.stop();
-          set((state) => ({
-            notice: `${FREEDOM_PRODUCT_NAME} is still busy, so ${FREEDOM_RUNTIME_NAME} is stopping the current run and will send your new voice turn next.`,
-            error: null,
-            view: "chat",
-            voiceSessionPhase: state.voiceSessionActive ? "interrupted" : state.voiceSessionPhase
-          }));
-          requestVoiceInterrupt(get, set).catch(() => undefined);
-          return;
-        }
-
-        set({
-          notice:
-            get().composerInputMode === "voice" && get().autoSendVoice
-              ? `Voice captured. ${FREEDOM_PRODUCT_NAME} is still busy, so your transcript will send automatically when this run finishes or you tap Stop.`
-              : `${FREEDOM_PRODUCT_NAME} is still busy with the current run. Your draft is staying in the composer until this run finishes or you tap Stop.`,
-          error: null,
-          view: "chat"
-        });
-        return;
-      }
+      const wasBusy = isSessionBusy(targetSession);
 
       set({ sendingMessage: true, error: null });
       const isVoiceTurn = get().composerInputMode === "voice";
@@ -858,11 +834,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         responseStyle: get().responseStyle,
         transcriptPolished: get().composerInputMode === "voice_polished"
       });
+      voiceInterruptRequested = false;
       set((state) => ({
         composer: "",
         composerInputMode: "text",
         sendingMessage: false,
-        notice: null,
+        notice:
+          wasBusy && isVoiceTurn
+            ? `${FREEDOM_RUNTIME_NAME} captured your interrupt and routed it without blocking the session.`
+            : wasBusy
+              ? `${FREEDOM_RUNTIME_NAME} routed your new request alongside the current work when it was safe to do so.`
+              : null,
         liveTranscript: "",
         voiceAudioLevel: -2,
         pendingExternalRequest: parsedExternalRequest
@@ -1501,13 +1483,12 @@ function buildVoiceSessionCallbacks(
         assistantSpeech.stop();
         set((state) => ({
           voiceSessionPhase: "interrupted",
-          notice: "Barge-in detected. Stopping the current reply so your next turn can go through.",
+          notice: "Interrupt heard. Freedom stopped speaking and is capturing your next turn now.",
           voiceTelemetry: {
             ...state.voiceTelemetry,
             interruptions: state.voiceTelemetry.interruptions + 1
           }
         }));
-        requestVoiceInterrupt(get, set).catch(() => undefined);
       }
     },
     onFinalTranscript: (text) => {
@@ -2155,30 +2136,6 @@ async function maybeAutoSendVoiceResult(
     return;
   }
 
-  const targetSession = findSendTargetSession(get().selectedSessionId, get().sessions);
-  if (isSessionBusy(targetSession)) {
-    if (get().voiceSessionActive && !voiceInterruptRequested) {
-      voiceInterruptRequested = true;
-      assistantSpeech.stop();
-      set((state) => ({
-        notice: `${FREEDOM_PRODUCT_NAME} is still busy, so ${FREEDOM_RUNTIME_NAME} is stopping the current run before it sends your new voice turn.`,
-        error: null,
-        view: "chat",
-        voiceSessionPhase: state.voiceSessionActive ? "interrupted" : state.voiceSessionPhase
-      }));
-      requestVoiceInterrupt(get, set).catch(() => undefined);
-      return;
-    }
-
-    set((state) => ({
-      notice: `Voice captured. ${FREEDOM_PRODUCT_NAME} is still busy, so your transcript is waiting in the composer until this run finishes or you tap Stop.`,
-      error: null,
-      view: "chat",
-      voiceSessionPhase: state.voiceSessionActive ? "processing" : state.voiceSessionPhase
-    }));
-    return;
-  }
-
   try {
     await get().sendMessage();
   } catch (error) {
@@ -2192,37 +2149,6 @@ function isVoiceAssistantActive(get: () => AppState): boolean {
   const state = get();
   const targetSession = findManualStopTargetSession(state.selectedSessionId, state.sessions);
   return Boolean(state.voiceAssistantDraft || state.voiceSessionPhase === "assistant-speaking" || isSessionBusy(targetSession));
-}
-
-async function requestVoiceInterrupt(
-  get: () => AppState,
-  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
-): Promise<void> {
-  const token = get().token;
-  const baseUrl = get().baseUrl;
-  const targetSession = findManualStopTargetSession(get().selectedSessionId, get().sessions);
-
-  if (!token || !baseUrl || !targetSession) {
-    return;
-  }
-
-  try {
-    const stoppedSession = await api.stopSession(token, baseUrl, targetSession.id);
-    set((state) => ({
-      sessions: sortSessionsForDisplay([stoppedSession, ...state.sessions.filter((item) => item.id !== stoppedSession.id)]),
-      notice: isSessionBusy(targetSession)
-        ? "Stopping the current reply so your new turn can continue."
-        : "Checking this chat for a stuck run before your new turn continues.",
-      error: null
-    }));
-  } catch (error) {
-    set({
-      error: error instanceof Error ? error.message : "Could not interrupt the current reply.",
-      voiceSessionPhase: "error",
-      voiceSessionActive: false,
-      listening: false
-    });
-  }
 }
 
 async function handleStoreError(

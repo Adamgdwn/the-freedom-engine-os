@@ -154,6 +154,17 @@ export class TtsService {
   private lastSuccessfulBackend: SpeechBackend | null = null;
   private lastAttemptedBackend: SpeechBackend | null = null;
 
+  private hasWarmBackend(): boolean {
+    return Boolean(this.initPromise || this.selectedVoiceId || this.lastSuccessfulBackend || this.lastAttemptedBackend);
+  }
+
+  private resetBackendState(): void {
+    this.stop();
+    this.initPromise = null;
+    this.lastSuccessfulBackend = null;
+    this.lastAttemptedBackend = null;
+  }
+
   isAvailable(): boolean {
     return this.resolvePreferredBackend() !== null;
   }
@@ -164,11 +175,14 @@ export class TtsService {
     }
 
     if (preferredVoiceId !== undefined && this.preferredVoiceId !== preferredVoiceId) {
-      this.stop();
-      this.initPromise = null;
-      this.lastSuccessfulBackend = null;
-      this.lastAttemptedBackend = null;
       this.preferredVoiceId = preferredVoiceId;
+      if (this.hasWarmBackend()) {
+        try {
+          await this.applyPreferredVoice();
+        } catch {
+          this.resetBackendState();
+        }
+      }
     } else if (preferredVoiceId !== undefined) {
       this.preferredVoiceId = preferredVoiceId;
     }
@@ -202,11 +216,12 @@ export class TtsService {
   async setPreferredVoice(voiceId: string | null): Promise<TtsVoiceOption | null> {
     const voiceChanged = this.preferredVoiceId !== voiceId;
     this.preferredVoiceId = voiceId;
-    if (voiceChanged) {
-      this.stop();
-      this.initPromise = null;
-      this.lastSuccessfulBackend = null;
-      this.lastAttemptedBackend = null;
+    if (voiceChanged && this.hasWarmBackend()) {
+      try {
+        return await this.applyPreferredVoice();
+      } catch {
+        this.resetBackendState();
+      }
     }
 
     const ready = await this.prepare();
@@ -401,7 +416,7 @@ export class TtsService {
         await this.reactNativeTts.setDefaultEngine?.(defaultEngine.name).catch(() => true);
       }
 
-      await this.reactNativeTts.setDefaultRate?.(0.5, true).catch(() => "success");
+      await this.reactNativeTts.setDefaultRate?.(0.62, true).catch(() => "success");
       await this.reactNativeTts.setDucking?.(true).catch(() => true);
       await this.applyReactNativeVoicePreference();
       return true;

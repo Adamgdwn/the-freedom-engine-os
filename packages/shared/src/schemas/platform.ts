@@ -6,6 +6,10 @@ export const chatSessionStatusSchema = z.enum(["idle", "queued", "running", "sto
 export const chatMessageRoleSchema = z.enum(["user", "assistant", "system"]);
 export const chatMessageStatusSchema = z.enum(["pending", "streaming", "completed", "failed", "interrupted"]);
 export const streamEventTypeSchema = z.enum(["host_status", "session_upsert", "message_upsert"]);
+export const taskStatusSchema = z.enum(["queued", "running", "paused", "waiting_input", "completed", "failed", "cancelled"]);
+export const taskPrioritySchema = z.enum(["low", "normal", "high"]);
+export const taskOriginSchema = z.enum(["user_message", "interrupt", "system"]);
+export const interruptTypeSchema = z.enum(["quick_question", "clarification", "parallel_subtask", "replace_task", "stop_task"]);
 export const hostAvailabilitySchema = z.enum([
   "ready",
   "offline",
@@ -136,6 +140,31 @@ export const chatMessageSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+export const taskItemSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  userMessageId: z.string().min(1),
+  assistantMessageId: z.string().min(1).nullable(),
+  title: z.string().min(1),
+  status: taskStatusSchema,
+  priority: taskPrioritySchema,
+  origin: taskOriginSchema,
+  parentTaskId: z.string().min(1).nullable(),
+  canRunInParallel: z.boolean(),
+  interruptType: interruptTypeSchema.nullable(),
+  threadId: z.string().min(1).nullable(),
+  turnId: z.string().min(1).nullable(),
+  resumeContext: z.string().nullable(),
+  toolState: z.record(z.string(), z.unknown()).nullable(),
+  resourceKey: z.string().min(1),
+  readOnly: z.boolean(),
+  stopRequested: z.boolean(),
+  interruptClaimedAt: z.string().datetime().nullable(),
+  lastError: z.string().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
 export const recentSessionActivitySchema = z.object({
   session: chatSessionSchema,
   latestUserMessage: chatMessageSchema.nullable(),
@@ -242,12 +271,14 @@ export const hostHeartbeatRequestSchema = z.object({
 export const hostWorkMessageSchema = z.object({
   type: z.literal("message"),
   session: chatSessionSchema,
-  message: chatMessageSchema
+  message: chatMessageSchema,
+  task: taskItemSchema
 });
 
 export const hostWorkInterruptSchema = z.object({
   type: z.literal("interrupt"),
   session: chatSessionSchema,
+  task: taskItemSchema,
   turnId: z.string().min(1)
 });
 
@@ -255,6 +286,7 @@ export const hostWorkItemSchema = z.union([hostWorkMessageSchema, hostWorkInterr
 
 export const hostStartTurnRequestSchema = z.object({
   sessionId: z.string().min(1),
+  taskId: z.string().min(1).optional(),
   userMessageId: z.string().min(1),
   threadId: z.string().min(1),
   turnId: z.string().min(1),
@@ -263,12 +295,14 @@ export const hostStartTurnRequestSchema = z.object({
 
 export const hostAssistantDeltaRequestSchema = z.object({
   sessionId: z.string().min(1),
+  taskId: z.string().min(1).optional(),
   assistantMessageId: z.string().min(1),
   delta: z.string()
 });
 
 export const hostCompleteTurnRequestSchema = z.object({
   sessionId: z.string().min(1),
+  taskId: z.string().min(1).optional(),
   userMessageId: z.string().min(1),
   assistantMessageId: z.string().min(1),
   threadId: z.string().min(1),
@@ -277,6 +311,7 @@ export const hostCompleteTurnRequestSchema = z.object({
 
 export const hostFailTurnRequestSchema = z.object({
   sessionId: z.string().min(1),
+  taskId: z.string().min(1).optional(),
   userMessageId: z.string().min(1),
   assistantMessageId: z.string().min(1).nullable().optional(),
   threadId: z.string().min(1).nullable().optional(),
@@ -286,6 +321,7 @@ export const hostFailTurnRequestSchema = z.object({
 
 export const hostInterruptTurnRequestSchema = z.object({
   sessionId: z.string().min(1),
+  taskId: z.string().min(1).optional(),
   assistantMessageId: z.string().min(1).nullable().optional(),
   turnId: z.string().min(1)
 });
@@ -388,6 +424,10 @@ export type ChatSessionStatus = z.infer<typeof chatSessionStatusSchema>;
 export type ChatMessageRole = z.infer<typeof chatMessageRoleSchema>;
 export type ChatMessageStatus = z.infer<typeof chatMessageStatusSchema>;
 export type StreamEventType = z.infer<typeof streamEventTypeSchema>;
+export type TaskStatus = z.infer<typeof taskStatusSchema>;
+export type TaskPriority = z.infer<typeof taskPrioritySchema>;
+export type TaskOrigin = z.infer<typeof taskOriginSchema>;
+export type InterruptType = z.infer<typeof interruptTypeSchema>;
 export type HostAvailability = z.infer<typeof hostAvailabilitySchema>;
 export type RepairState = z.infer<typeof repairStateSchema>;
 export type RunState = z.infer<typeof runStateSchema>;
@@ -408,6 +448,7 @@ export type RegisteredHost = z.infer<typeof registeredHostSchema>;
 export type PairedDevice = z.infer<typeof pairedDeviceSchema>;
 export type ChatSession = z.infer<typeof chatSessionSchema>;
 export type ChatMessage = z.infer<typeof chatMessageSchema>;
+export type TaskItem = z.infer<typeof taskItemSchema>;
 export type RecentSessionActivity = z.infer<typeof recentSessionActivitySchema>;
 export type HostStatus = z.infer<typeof hostStatusSchema>;
 export type AuditEvent = z.infer<typeof auditEventSchema>;

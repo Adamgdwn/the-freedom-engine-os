@@ -32,25 +32,27 @@ This keeps the current trust boundary the same: the phone still does not hold mo
 - `VoiceService` now supports a streaming session instead of resolving one final transcript and tearing down.
 - The mobile store keeps recognition active across turns and records live transcript plus audio level.
 - Recognition restarts automatically on recoverable session drops.
+- Recognition now pauses while Freedom is actively speaking and resumes immediately after playback, which is the current baseline protection against self-hearing on phone hardware.
 
 ### Turn handling
 
 - `voiceSessionMachine.ts` introduces explicit voice phases:
   `idle`, `connecting`, `listening`, `user-speaking`, `processing`, `assistant-speaking`, `interrupted`, `reconnecting`, `review`, `error`
 - Short acknowledgements such as `yeah`, `okay`, and `uh huh` are treated as backchannel instead of automatic interruption.
-- Substantive speech while the assistant is talking triggers a stop request through the existing session stop path.
-- The recognizer now stays alive during spoken replies so explicit barge-in can work again while Freedom is speaking.
-- Interruption filtering is now stricter about likely assistant-echo pickup, so Freedom is less likely to hear its own spoken reply and stop itself.
+- Substantive speech while the assistant is talking now stops local playback immediately, marks the interrupt visibly in the mobile UI, and preserves the new utterance so it can route as a fresh turn instead of disappearing behind a generic busy response.
+- The system no longer assumes one blocking foreground run per session. Sessions now own multiple internal task items, and interruptions are classified into `quick_question`, `clarification`, `parallel_subtask`, `replace_task`, and `stop_task`.
+- Gateway and desktop-host scheduling now allow bounded safe parallelism when tasks do not conflict on the same resource boundary.
 
 ### Assistant speech
 
 - `AssistantSpeechRuntime` converts streaming assistant deltas into sentence-sized TTS chunks.
 - The phone begins speaking once enough text is available instead of waiting for the full response.
 - TTS is cancelled immediately on confirmed barge-in.
+- Android spoken reply pacing is faster, and switching the selected voice now re-applies the preference without forcing a cold restart of the entire speech backend.
 
 ### UI and observability
 
-- The chat screen now exposes a dedicated `Voice Loop` panel with phase, live transcript, assistant preview, audio meter, turn counts, interruption counts, reconnect counts, and latest round-trip timing.
+- The chat screen now exposes a dedicated `Freedom Voice` surface with persistent phase visibility, interrupt acknowledgment, live transcript/assistant preview, audio meter, selected voice context, turn counts, interruption counts, reconnect counts, and latest round-trip timing.
 - The header voice control now starts and ends a continuous session instead of acting like a one-shot mic capture.
 - The spoken-reply voice picker now surfaces accent, engine, quality, and any safe style or gender hints the device actually exposes, so voice choice no longer requires pure trial and error.
 
@@ -59,6 +61,7 @@ This keeps the current trust boundary the same: the phone still does not hold mo
 - Risky or long transcripts still pause for review instead of silent auto-send.
 - Realtime voice remains gated by mobile runtime config so the behavior can be tuned or disabled per build.
 - The upgrade does not add new remote execution capability; it changes how quickly voice turns enter the existing approved-root Codex flow.
+- Parallel task handling is intentionally conservative: tasks only run side-by-side when the scheduler believes they can do so safely, and replacement/stop interrupts still serialize aggressively.
 
 ## Reference Concepts
 

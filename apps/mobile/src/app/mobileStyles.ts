@@ -399,22 +399,60 @@ export const styles = StyleSheet.create({
   chatChromeCard: { paddingVertical: 12, gap: 8 },
   chatResumeButton: { alignSelf: "flex-start", minHeight: 40, paddingVertical: 10, paddingHorizontal: 14 },
   messages: { gap: 8 },
-  voiceSessionCard: { gap: 10, paddingVertical: 14 },
+  voiceSessionCard: { gap: 12, paddingVertical: 14, backgroundColor: "#0f2038", borderColor: "rgba(126, 178, 224, 0.18)" },
   voiceSessionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   voiceSessionCopy: { flex: 1, gap: 4 },
+  voicePanelTitle: { color: "#f1f7ff", fontSize: 20, lineHeight: 24, fontWeight: "800" },
+  voicePanelSubtitle: { color: "#9ab6d3", fontSize: 12, lineHeight: 18 },
+  voiceHeroRow: { flexDirection: "row", gap: 14, alignItems: "center" },
+  voiceOrbShell: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(196, 224, 255, 0.18)"
+  },
+  voiceOrbCore: {
+    width: 48,
+    height: 48,
+    borderRadius: 24
+  },
+  voiceOrbListening: { backgroundColor: "#2fb3d2" },
+  voiceOrbSpeaking: { backgroundColor: "#56d3ff" },
+  voiceOrbProcessing: { backgroundColor: "#f5b14b" },
+  voiceOrbMuted: { backgroundColor: "#7a8da6" },
+  voiceOrbError: { backgroundColor: "#f28383" },
+  voiceHeroCopy: { flex: 1, gap: 6 },
+  voiceStateEyebrow: { color: "#9ec9f5", fontWeight: "800", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 },
+  voiceHeroText: { color: "#eef6ff", fontSize: 15, lineHeight: 21, fontWeight: "600" },
+  voiceTagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  voiceTag: {
+    color: "#d7eaff",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    overflow: "hidden",
+    fontSize: 11,
+    fontWeight: "700"
+  },
   voiceMeterTrack: {
     height: 10,
     borderRadius: 6,
-    backgroundColor: "#d8e7f8",
+    backgroundColor: "rgba(255,255,255,0.12)",
     overflow: "hidden"
   },
   voiceMeterFill: {
     height: "100%",
     borderRadius: 6,
-    backgroundColor: "#1d7aa6"
+    backgroundColor: "#56d3ff"
   },
   voicePreviewLabel: { color: "#1b4f82", fontWeight: "800", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.7 },
-  voiceMetrics: { color: "#5a6d87", fontSize: 12, lineHeight: 18 },
+  voiceNotice: { color: "#f7e5b3", fontSize: 12, lineHeight: 18, fontWeight: "700" },
+  voiceMetrics: { color: "#9ab6d3", fontSize: 12, lineHeight: 18 },
   chatComposerCard: { marginTop: 2, padding: 10, gap: 8 },
   voiceFirstFooterCard: { marginTop: 2, paddingVertical: 12, gap: 8 },
   insetCard: {

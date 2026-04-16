@@ -66,7 +66,7 @@ describe("VoiceService", () => {
 
     expect(onReconnect).toHaveBeenCalledTimes(1);
 
-    jest.advanceTimersByTime(200);
+    jest.advanceTimersByTime(120);
 
     expect(onFinalTranscript).not.toHaveBeenCalled();
     expect(ExpoSpeechRecognitionModule.stop).not.toHaveBeenCalled();

@@ -31,11 +31,14 @@ The current mobile companion behavior is now closer to a real Freedom operator
 surface than a one-shot relay:
 
 - continuous voice loop instead of one-tap transcript capture
-- explicit barge-in interruption while Freedom is speaking
+- explicit barge-in interruption with immediate TTS stop and visible acknowledgment
+- recognition paused during assistant playback, then resumed automatically after spoken replies
 - auto-send voice turns with review only for genuinely risky or unusually long
   transcripts
 - spoken-reply voice picker that now labels accent, engine, quality, and any
   safe style or gender hints Android actually exposes
+- task-aware routing so Freedom can answer side questions or start a safe parallel
+  subtask instead of defaulting to a single blocking "busy" response
 - Freedom-owned chat/build surfaces so the phone stays pointed at Freedom even
   though Connect still carries the runtime and transport
 
@@ -67,6 +70,16 @@ That means the next clean step is real-device acceptance, not migration.
 6. Install the latest Freedom Android APK from the Connect repo or dashboard.
 7. Chat with the local Freedom Engine workspace from the Freedom phone companion.
 
+## APK Download
+
+When the desktop host is running, the gateway serves the current release artifact at:
+
+`http://pop-os.taildcb5c5.ts.net:43111/downloads/android/latest.apk`
+
+The companion install page remains:
+
+`http://pop-os.taildcb5c5.ts.net:43111/install`
+
 ## What This Means
 
 This gives you phone access to the repo through a Freedom-branded shell and phone
@@ -81,5 +94,5 @@ desktop or workstation running Connect must stay online and reachable.
   live runtime so Freedom can branch governed work in practice
 - add clearer builder-first actions from the desktop shell into Freedom-governed
   build requests
-- continue tightening voice duplex behavior so barge-in stays natural without
-  Freedom hearing its own reply audio as a user interruption
+- finish real-device Android validation for the current interrupt and multi-task
+  orchestration pass

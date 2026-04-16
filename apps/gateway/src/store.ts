@@ -19,6 +19,7 @@ import type {
   HostStartTurnRequest,
   HostStatus,
   HostWorkItem,
+  InterruptType,
   NotificationEvent,
   NotificationPrefs,
   OutboundRecipient,
@@ -37,6 +38,7 @@ import type {
   SendExternalMessageRequest,
   SendExternalMessageResponse,
   StreamEvent,
+  TaskItem,
   TailscaleStatus,
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest,
@@ -65,12 +67,17 @@ interface SessionRecord extends ChatSession {
   stopClaimedAt: string | null;
 }
 
-interface OutboundRecipientRecord extends OutboundRecipient {}
+interface TaskRecord extends TaskItem {
+  claimedAt: string | null;
+}
+
+type OutboundRecipientRecord = OutboundRecipient;
 
 interface GatewayState {
   hosts: HostRecord[];
   devices: DeviceRecord[];
   sessions: SessionRecord[];
+  tasks: TaskRecord[];
   messages: ChatMessage[];
   outboundRecipients: OutboundRecipientRecord[];
   auditEvents: AuditEvent[];
@@ -123,11 +130,13 @@ const defaultNotificationPrefs: NotificationPrefs = {
 const INTERRUPT_RECLAIM_MS = 5_000;
 const STALE_STOP_RECOVERY_MS = 20_000;
 const STALE_QUEUE_CLAIM_MS = 15_000;
+const MAX_PARALLEL_SESSION_TASKS = 2;
 
 const defaultState = (): GatewayState => ({
   hosts: [],
   devices: [],
   sessions: [],
+  tasks: [],
   messages: [],
   outboundRecipients: [],
   auditEvents: []
@@ -694,12 +703,12 @@ export class GatewayStore {
     const principal = await this.requireDevice(token);
     const session = await this.requireSessionForDevice(sessionId, principal.device.id);
 
-    if (session.activeTurnId || session.status === "queued" || session.status === "stopping") {
-      throw new Error("This chat is busy. Wait for the current run to finish or stop it first.");
-    }
-
     const state = await this.readState();
     const now = nowIso();
+    const targetSession = state.sessions.find((item) => item.id === session.id);
+    if (!targetSession) {
+      throw new Error("Session not found.");
+    }
     const message: ChatMessage = {
       id: createId("msg"),
       sessionId: session.id,
@@ -715,22 +724,89 @@ export class GatewayStore {
     };
 
     state.messages.push(message);
-    const targetSession = state.sessions.find((item) => item.id === session.id);
-    if (!targetSession) {
-      throw new Error("Session not found.");
-    }
-    targetSession.status = "queued";
-    targetSession.updatedAt = now;
     targetSession.lastError = null;
     targetSession.lastPreview = truncatePreview(input.text.trim());
     targetSession.lastActivityAt = now;
+
+    const activeTasks = listSessionTasks(state, session.id).filter(isTaskRunning);
+    const interruptType = classifyInterruptType(message.content, activeTasks);
+
+    if (interruptType === "stop_task") {
+      message.status = "completed";
+      message.updatedAt = now;
+      message.errorMessage = null;
+      requestStopForSessionTasks(state, session.id, "Stopped by a newer Freedom command.");
+
+      const assistantMessage: ChatMessage = {
+        id: createId("msg"),
+        sessionId: session.id,
+        role: "assistant",
+        content: "Stopping the current task now.",
+        status: "completed",
+        errorMessage: null,
+        inputMode: null,
+        responseStyle: null,
+        transcriptPolished: null,
+        createdAt: now,
+        updatedAt: now
+      };
+      state.messages.push(assistantMessage);
+      syncSessionFromTasks(state, targetSession);
+
+      this.addAuditEvent(state, {
+        hostId: principal.host.id,
+        deviceId: principal.device.id,
+        sessionId: targetSession.id,
+        type: "message_posted",
+        detail: `${input.inputMode ?? "text"}:${input.responseStyle ?? "natural"}:${interruptType}`
+      });
+      await this.writeState(state);
+      this.emitMessage(principal.host.id, message);
+      this.emitMessage(principal.host.id, assistantMessage);
+      this.emitSession(targetSession);
+      return message;
+    }
+
+    const readOnly = inferTaskReadOnly(message.content);
+    const task: TaskRecord = {
+      id: createId("task"),
+      sessionId: session.id,
+      userMessageId: message.id,
+      assistantMessageId: null,
+      title: truncatePreview(message.content),
+      status: "queued",
+      priority: deriveTaskPriority(interruptType),
+      origin: interruptType ? "interrupt" : "user_message",
+      parentTaskId: activeTasks[0]?.id ?? null,
+      canRunInParallel: interruptType === "parallel_subtask" || interruptType === "quick_question" || interruptType === "clarification",
+      interruptType,
+      threadId: activeTasks[0]?.threadId ?? targetSession.threadId,
+      turnId: null,
+      resumeContext: activeTasks[0]?.title ?? null,
+      toolState: null,
+      resourceKey: targetSession.rootPath,
+      readOnly,
+      stopRequested: false,
+      interruptClaimedAt: null,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+      claimedAt: null
+    };
+
+    if (interruptType === "replace_task") {
+      requestStopForSessionTasks(state, session.id, "Replaced by a newer Freedom task.");
+    }
+
+    state.tasks.push(task);
+    syncSessionFromTasks(state, targetSession);
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
       deviceId: principal.device.id,
       sessionId: targetSession.id,
       type: "message_posted",
-      detail: `${input.inputMode ?? "text"}:${input.responseStyle ?? "natural"}`
+      detail: `${input.inputMode ?? "text"}:${input.responseStyle ?? "natural"}:${interruptType ?? "fresh_task"}`
     });
     await this.writeState(state);
     this.emitMessage(principal.host.id, message);
@@ -747,27 +823,8 @@ export class GatewayStore {
       throw new Error("Session not found.");
     }
 
-    if (targetSession.activeTurnId) {
-      targetSession.stopRequested = true;
-      targetSession.status = "stopping";
-      targetSession.stopClaimedAt = null;
-      targetSession.updatedAt = nowIso();
-    } else {
-      const pending = [...state.messages]
-        .reverse()
-        .find((item: ChatMessage) => item.sessionId === session.id && item.role === "user" && item.status === "pending");
-      if (pending) {
-        pending.status = "interrupted";
-        pending.updatedAt = nowIso();
-        pending.errorMessage = "Cancelled before Freedom started running.";
-        this.emitMessage(principal.host.id, pending);
-      }
-      targetSession.status = "idle";
-      targetSession.stopRequested = false;
-      targetSession.stopClaimedAt = null;
-      targetSession.claimedMessageId = null;
-      targetSession.updatedAt = nowIso();
-    }
+    requestStopForSessionTasks(state, session.id, "Cancelled before Freedom started running.");
+    syncSessionFromTasks(state, targetSession);
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -784,48 +841,76 @@ export class GatewayStore {
   async getNextWork(token: string): Promise<HostWorkItem | null> {
     const principal = await this.requireHost(token);
     const state = await this.readState();
-
-    const interruptSession = state.sessions.find(
-      (item) =>
-        item.hostId === principal.host.id &&
-        item.activeTurnId &&
-        item.stopRequested &&
-        (!item.stopClaimedAt || isInterruptClaimStale(item.stopClaimedAt))
-    );
-    if (interruptSession) {
-      interruptSession.stopClaimedAt = nowIso();
+    const interruptTask = state.tasks.find((task) => {
+      if (!task.turnId || !task.stopRequested || !isTaskRunning(task)) {
+        return false;
+      }
+      const session = state.sessions.find((item) => item.id === task.sessionId);
+      return Boolean(
+        session &&
+          session.hostId === principal.host.id &&
+          (!task.interruptClaimedAt || isInterruptClaimStale(task.interruptClaimedAt))
+      );
+    });
+    if (interruptTask) {
+      interruptTask.interruptClaimedAt = nowIso();
+      const interruptSession = this.requireSessionForHostState(state, interruptTask.sessionId, principal.host.id);
+      syncSessionFromTasks(state, interruptSession);
       await this.writeState(state);
       return {
         type: "interrupt",
         session: toPublicSession(interruptSession),
-        turnId: interruptSession.activeTurnId ?? ""
+        task: toPublicTask(interruptTask),
+        turnId: interruptTask.turnId ?? ""
       };
     }
 
-    const pendingSession = state.sessions.find(
-      (item) => item.hostId === principal.host.id && item.status === "queued" && !item.activeTurnId && !item.claimedMessageId
-    );
-    if (!pendingSession) {
+    const runningTasks = state.tasks.filter((task) => {
+      if (!isTaskRunning(task)) {
+        return false;
+      }
+      const session = state.sessions.find((item) => item.id === task.sessionId);
+      return Boolean(session && session.hostId === principal.host.id);
+    });
+
+    const queuedTask = state.tasks.find((task) => {
+      if (task.status !== "queued" || task.claimedAt) {
+        return false;
+      }
+      const session = state.sessions.find((item) => item.id === task.sessionId);
+      if (!session || session.hostId !== principal.host.id) {
+        return false;
+      }
+      const relatedRunningTasks = runningTasks.filter((item) => item.resourceKey === task.resourceKey);
+      const sessionRunningTasks = runningTasks.filter((item) => item.sessionId === task.sessionId);
+      return (
+        sessionRunningTasks.length < MAX_PARALLEL_SESSION_TASKS &&
+        canRunTaskInParallel(task, relatedRunningTasks)
+      );
+    });
+    if (!queuedTask) {
       return null;
     }
 
-    const message = state.messages.find(
-      (item) => item.sessionId === pendingSession.id && item.role === "user" && item.status === "pending"
-    );
+    const message = state.messages.find((item) => item.id === queuedTask.userMessageId && item.sessionId === queuedTask.sessionId);
+    const queuedSession = this.requireSessionForHostState(state, queuedTask.sessionId, principal.host.id);
     if (!message) {
-      pendingSession.status = "idle";
-      pendingSession.updatedAt = nowIso();
+      markQueuedTaskCancelled(state, queuedTask, "Dropped because the linked user message no longer exists.");
+      syncSessionFromTasks(state, queuedSession);
       await this.writeState(state);
-      this.emitSession(pendingSession);
+      this.emitSession(queuedSession);
       return null;
     }
 
-    pendingSession.claimedMessageId = message.id;
+    queuedTask.claimedAt = nowIso();
+    queuedTask.updatedAt = queuedTask.claimedAt;
+    syncSessionFromTasks(state, queuedSession);
     await this.writeState(state);
     return {
       type: "message",
-      session: toPublicSession(pendingSession),
-      message
+      session: toPublicSession(queuedSession),
+      message,
+      task: toPublicTask(queuedTask)
     };
   }
 
@@ -834,6 +919,12 @@ export class GatewayStore {
     const state = await this.readState();
     const session = this.requireSessionForHostState(state, input.sessionId, principal.host.id);
     const userMessage = this.requireMessage(state, input.userMessageId, input.sessionId);
+    const task = input.taskId
+      ? findTaskForHostState(state, input.taskId, principal.host.id)
+      : state.tasks.find((item) => item.sessionId === input.sessionId && item.userMessageId === input.userMessageId && item.status === "queued");
+    if (!task) {
+      throw new Error("Task not found.");
+    }
 
     userMessage.status = "completed";
     userMessage.updatedAt = nowIso();
@@ -853,16 +944,19 @@ export class GatewayStore {
       updatedAt: nowIso()
     };
 
-    session.threadId = input.threadId;
-    session.activeTurnId = input.turnId;
-    session.status = "running";
-    session.stopRequested = false;
-    session.stopClaimedAt = null;
-    session.claimedMessageId = null;
+    task.assistantMessageId = input.assistantMessageId;
+    task.threadId = input.threadId;
+    task.turnId = input.turnId;
+    task.status = "running";
+    task.claimedAt = null;
+    task.stopRequested = false;
+    task.interruptClaimedAt = null;
+    task.lastError = null;
+    task.updatedAt = nowIso();
     session.lastError = null;
-    session.updatedAt = nowIso();
-    session.lastActivityAt = session.updatedAt;
+    session.lastPreview = truncatePreview(userMessage.content);
     state.messages.push(assistantMessage);
+    syncSessionFromTasks(state, session);
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -883,11 +977,18 @@ export class GatewayStore {
     const state = await this.readState();
     const session = this.requireSessionForHostState(state, input.sessionId, principal.host.id);
     const assistantMessage = this.requireMessage(state, input.assistantMessageId, session.id);
+    const task =
+      (input.taskId ? findTaskForHostState(state, input.taskId, principal.host.id) : null) ??
+      state.tasks.find((item) => item.sessionId === session.id && item.assistantMessageId === input.assistantMessageId) ??
+      null;
 
     assistantMessage.content += input.delta;
     assistantMessage.updatedAt = nowIso();
     session.lastPreview = truncatePreview(assistantMessage.content);
     session.lastActivityAt = assistantMessage.updatedAt;
+    if (task) {
+      task.updatedAt = assistantMessage.updatedAt;
+    }
 
     await this.writeState(state);
     this.emitMessage(principal.host.id, assistantMessage);
@@ -899,19 +1000,28 @@ export class GatewayStore {
     const state = await this.readState();
     const session = this.requireSessionForHostState(state, input.sessionId, principal.host.id);
     const assistantMessage = this.requireMessage(state, input.assistantMessageId, session.id);
+    const task =
+      (input.taskId ? findTaskForHostState(state, input.taskId, principal.host.id) : null) ??
+      state.tasks.find((item) => item.sessionId === session.id && item.assistantMessageId === input.assistantMessageId) ??
+      null;
+    if (!task) {
+      throw new Error("Task not found.");
+    }
 
     assistantMessage.status = "completed";
     assistantMessage.updatedAt = nowIso();
     assistantMessage.errorMessage = null;
 
-    session.threadId = input.threadId;
-    session.activeTurnId = null;
-    session.status = "idle";
-    session.stopRequested = false;
-    session.stopClaimedAt = null;
-    session.updatedAt = nowIso();
+    task.threadId = input.threadId;
+    task.turnId = input.turnId;
+    task.status = "completed";
+    task.stopRequested = false;
+    task.claimedAt = null;
+    task.interruptClaimedAt = null;
+    task.lastError = null;
+    task.updatedAt = nowIso();
     session.lastPreview = truncatePreview(assistantMessage.content);
-    session.lastActivityAt = session.updatedAt;
+    syncSessionFromTasks(state, session);
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -932,6 +1042,10 @@ export class GatewayStore {
     const state = await this.readState();
     const session = this.requireSessionForHostState(state, input.sessionId, principal.host.id);
     const userMessage = this.requireMessage(state, input.userMessageId, session.id);
+    const task =
+      (input.taskId ? findTaskForHostState(state, input.taskId, principal.host.id) : null) ??
+      state.tasks.find((item) => item.sessionId === session.id && item.userMessageId === input.userMessageId) ??
+      null;
     let assistantMessage: ChatMessage | null = null;
 
     if (userMessage.status === "pending") {
@@ -962,16 +1076,20 @@ export class GatewayStore {
       state.messages.push(assistantMessage);
     }
 
+    if (task) {
+      task.threadId = input.threadId ?? task.threadId;
+      task.turnId = input.turnId ?? task.turnId;
+      task.assistantMessageId = assistantMessage.id;
+      task.status = "failed";
+      task.stopRequested = false;
+      task.claimedAt = null;
+      task.interruptClaimedAt = null;
+      task.lastError = input.errorMessage;
+      task.updatedAt = nowIso();
+    }
     session.threadId = input.threadId ?? session.threadId;
-    session.activeTurnId = null;
-    session.status = "error";
-    session.stopRequested = false;
-    session.claimedMessageId = null;
-    session.stopClaimedAt = null;
-    session.lastError = input.errorMessage;
-    session.updatedAt = nowIso();
     session.lastPreview = truncatePreview(input.errorMessage);
-    session.lastActivityAt = session.updatedAt;
+    syncSessionFromTasks(state, session);
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -992,6 +1110,12 @@ export class GatewayStore {
     const principal = await this.requireHost(token);
     const state = await this.readState();
     const session = this.requireSessionForHostState(state, input.sessionId, principal.host.id);
+    const task =
+      (input.taskId ? findTaskForHostState(state, input.taskId, principal.host.id) : null) ??
+      findTaskByTurn(state, session.id, input.turnId);
+    if (!task) {
+      throw new Error("Task not found.");
+    }
 
     const assistantMessageId =
       input.assistantMessageId ??
@@ -1010,12 +1134,14 @@ export class GatewayStore {
       this.emitMessage(principal.host.id, assistantMessage);
     }
 
-    session.activeTurnId = null;
-    session.status = "idle";
-    session.stopRequested = false;
-    session.stopClaimedAt = null;
-    session.updatedAt = nowIso();
-    session.lastActivityAt = session.updatedAt;
+    task.assistantMessageId = assistantMessageId ?? task.assistantMessageId;
+    task.status = "cancelled";
+    task.stopRequested = false;
+    task.claimedAt = null;
+    task.interruptClaimedAt = null;
+    task.lastError = "Run stopped from Freedom.";
+    task.updatedAt = nowIso();
+    syncSessionFromTasks(state, session);
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -1188,9 +1314,6 @@ export class GatewayStore {
     if (session.identity.originSurface !== "desktop_shell") {
       throw new Error("Desktop shell can only post into local desktop partner sessions.");
     }
-    if (session.activeTurnId || session.status === "queued" || session.status === "stopping") {
-      throw new Error("Freedom is already working on the current turn.");
-    }
 
     const now = nowIso();
     const message: ChatMessage = {
@@ -1208,11 +1331,82 @@ export class GatewayStore {
     };
 
     state.messages.push(message);
-    session.status = "queued";
-    session.updatedAt = now;
     session.lastError = null;
     session.lastPreview = truncatePreview(input.text.trim());
     session.lastActivityAt = now;
+
+    const activeTasks = listSessionTasks(state, session.id).filter(isTaskRunning);
+    const interruptType = classifyInterruptType(message.content, activeTasks);
+
+    if (interruptType === "stop_task") {
+      message.status = "completed";
+      message.updatedAt = now;
+      requestStopForSessionTasks(state, session.id, "Stopped by a newer Freedom command.");
+
+      const assistantMessage: ChatMessage = {
+        id: createId("msg"),
+        sessionId: session.id,
+        role: "assistant",
+        content: "Stopping the current task now.",
+        status: "completed",
+        errorMessage: null,
+        inputMode: null,
+        responseStyle: null,
+        transcriptPolished: null,
+        createdAt: now,
+        updatedAt: now
+      };
+      state.messages.push(assistantMessage);
+      syncSessionFromTasks(state, session);
+
+      this.addAuditEvent(state, {
+        hostId: host.id,
+        deviceId: null,
+        sessionId: session.id,
+        type: "message_posted",
+        originSurface: session.identity.originSurface,
+        auditCorrelationId: session.identity.auditCorrelationId,
+        detail: `desktop_shell:${input.inputMode ?? "text"}:${input.responseStyle ?? "executive"}:${interruptType}`
+      });
+      await this.writeState(state);
+      this.emitMessage(host.id, message);
+      this.emitMessage(host.id, assistantMessage);
+      this.emitSession(session);
+      return message;
+    }
+
+    const task: TaskRecord = {
+      id: createId("task"),
+      sessionId: session.id,
+      userMessageId: message.id,
+      assistantMessageId: null,
+      title: truncatePreview(message.content),
+      status: "queued",
+      priority: deriveTaskPriority(interruptType),
+      origin: interruptType ? "interrupt" : "user_message",
+      parentTaskId: activeTasks[0]?.id ?? null,
+      canRunInParallel: interruptType === "parallel_subtask" || interruptType === "quick_question" || interruptType === "clarification",
+      interruptType,
+      threadId: activeTasks[0]?.threadId ?? session.threadId,
+      turnId: null,
+      resumeContext: activeTasks[0]?.title ?? null,
+      toolState: null,
+      resourceKey: session.rootPath,
+      readOnly: inferTaskReadOnly(message.content),
+      stopRequested: false,
+      interruptClaimedAt: null,
+      lastError: null,
+      createdAt: now,
+      updatedAt: now,
+      claimedAt: null
+    };
+
+    if (interruptType === "replace_task") {
+      requestStopForSessionTasks(state, session.id, "Replaced by a newer Freedom task.");
+    }
+
+    state.tasks.push(task);
+    syncSessionFromTasks(state, session);
 
     this.addAuditEvent(state, {
       hostId: host.id,
@@ -1241,24 +1435,8 @@ export class GatewayStore {
       throw new Error("Desktop shell can only stop local desktop partner sessions.");
     }
 
-    if (session.activeTurnId) {
-      session.stopRequested = true;
-      session.status = "stopping";
-      session.stopClaimedAt = null;
-      session.updatedAt = nowIso();
-    } else {
-      const pending = [...state.messages]
-        .reverse()
-        .find((item: ChatMessage) => item.sessionId === session.id && item.role === "user" && item.status === "pending");
-      if (pending) {
-        pending.status = "interrupted";
-        pending.updatedAt = nowIso();
-        pending.errorMessage = "Cancelled before Freedom started running.";
-        this.emitMessage(host.id, pending);
-      }
-      session.status = "idle";
-      session.updatedAt = nowIso();
-    }
+    requestStopForSessionTasks(state, session.id, "Cancelled before Freedom started running.");
+    syncSessionFromTasks(state, session);
 
     this.addAuditEvent(state, {
       hostId: host.id,
@@ -1575,48 +1753,48 @@ function recoverStaleSessionStops(state: GatewayState): void {
   const recoveredAt = nowIso();
   let changed = false;
 
-  for (const session of state.sessions) {
-    if (session.status === "queued" && session.claimedMessageId && !session.activeTurnId) {
-      const claimedMessage = state.messages.find((message) => message.id === session.claimedMessageId && message.sessionId === session.id);
-      const claimedAtMs = Date.parse(claimedMessage?.updatedAt ?? claimedMessage?.createdAt ?? session.updatedAt);
-      if (!claimedMessage || claimedMessage.status !== "pending" || !Number.isFinite(claimedAtMs) || Date.now() - claimedAtMs >= STALE_QUEUE_CLAIM_MS) {
-        session.claimedMessageId = null;
-        session.updatedAt = recoveredAt;
-        session.lastActivityAt = recoveredAt;
+  for (const task of state.tasks) {
+    if (task.status === "queued" && task.claimedAt) {
+      const claimedAtMs = Date.parse(task.claimedAt);
+      if (!Number.isFinite(claimedAtMs) || Date.now() - claimedAtMs >= STALE_QUEUE_CLAIM_MS) {
+        task.claimedAt = null;
+        task.updatedAt = recoveredAt;
         changed = true;
       }
     }
 
-    if (session.status !== "stopping" || !session.stopRequested || !session.stopClaimedAt) {
+    if (!task.stopRequested || !task.interruptClaimedAt || !isTaskRunning(task)) {
       continue;
     }
 
-    const claimedAtMs = Date.parse(session.stopClaimedAt);
+    const claimedAtMs = Date.parse(task.interruptClaimedAt);
     if (!Number.isFinite(claimedAtMs) || Date.now() - claimedAtMs < STALE_STOP_RECOVERY_MS) {
       continue;
     }
 
-    session.activeTurnId = null;
-    session.status = "idle";
-    session.stopRequested = false;
-    session.stopClaimedAt = null;
-    session.claimedMessageId = null;
-    session.updatedAt = recoveredAt;
-    session.lastActivityAt = recoveredAt;
+    task.status = "cancelled";
+    task.stopRequested = false;
+    task.claimedAt = null;
+    task.interruptClaimedAt = null;
+    task.lastError = "Recovered from a stale stop request.";
+    task.updatedAt = recoveredAt;
     changed = true;
 
-    const assistantMessage = [...state.messages]
-      .reverse()
-      .find((message) => message.sessionId === session.id && message.role === "assistant" && message.status === "streaming");
+    const assistantMessage = task.assistantMessageId
+      ? state.messages.find((message) => message.id === task.assistantMessageId && message.sessionId === task.sessionId)
+      : [...state.messages]
+          .reverse()
+          .find((message) => message.sessionId === task.sessionId && message.role === "assistant" && message.status === "streaming");
 
     if (assistantMessage) {
       assistantMessage.status = "interrupted";
       assistantMessage.errorMessage = "Recovered from a stale stop request.";
       assistantMessage.updatedAt = recoveredAt;
-      if (!assistantMessage.content.trim()) {
-        session.threadId = null;
-      }
     }
+  }
+
+  for (const session of state.sessions) {
+    syncSessionFromTasks(state, session);
   }
 
   if (changed) {
@@ -1792,7 +1970,6 @@ function isInterruptClaimStale(value: string): boolean {
 }
 
 function migrateState(input: Partial<GatewayState>): GatewayState {
-  const state = defaultState();
   const now = nowIso();
   return {
     hosts: (input.hosts ?? []).map((host) => {
@@ -1842,6 +2019,34 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
         claimedMessageId: record.claimedMessageId ?? null,
         stopClaimedAt: record.stopClaimedAt ?? null
       } as SessionRecord;
+    }),
+    tasks: ((input as Partial<GatewayState>).tasks ?? []).map((task) => {
+      const record = task as Partial<TaskRecord>;
+      return {
+        id: record.id ?? createId("task"),
+        sessionId: record.sessionId ?? "",
+        userMessageId: record.userMessageId ?? "",
+        assistantMessageId: record.assistantMessageId ?? null,
+        title: record.title ?? "Freedom task",
+        status: record.status ?? "queued",
+        priority: record.priority ?? "normal",
+        origin: record.origin ?? "user_message",
+        parentTaskId: record.parentTaskId ?? null,
+        canRunInParallel: record.canRunInParallel ?? false,
+        interruptType: record.interruptType ?? null,
+        threadId: record.threadId ?? null,
+        turnId: record.turnId ?? null,
+        resumeContext: record.resumeContext ?? null,
+        toolState: record.toolState ?? null,
+        resourceKey: record.resourceKey ?? "",
+        readOnly: record.readOnly ?? false,
+        stopRequested: record.stopRequested ?? false,
+        interruptClaimedAt: record.interruptClaimedAt ?? null,
+        lastError: record.lastError ?? null,
+        createdAt: record.createdAt ?? now,
+        updatedAt: record.updatedAt ?? record.createdAt ?? now,
+        claimedAt: record.claimedAt ?? null
+      } as TaskRecord;
     }),
     messages: (input.messages ?? []).map((message) => {
       const record = message as Partial<ChatMessage>;
@@ -1899,4 +2104,161 @@ function buildSessionIdentity(input: {
 
 function buildDesktopShellDeviceId(hostId: string): string {
   return `desktop-shell:${hostId}`;
+}
+
+function toPublicTask(task: TaskRecord): TaskItem {
+  const { claimedAt, ...publicTask } = task;
+  void claimedAt;
+  return publicTask;
+}
+
+function listSessionTasks(state: GatewayState, sessionId: string): TaskRecord[] {
+  return state.tasks
+    .filter((task) => task.sessionId === sessionId)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+function findTaskForHostState(state: GatewayState, taskId: string, hostId: string): TaskRecord {
+  const task = state.tasks.find((item) => item.id === taskId);
+  if (!task) {
+    throw new Error("Task not found.");
+  }
+  const session = state.sessions.find((item) => item.id === task.sessionId && item.hostId === hostId);
+  if (!session) {
+    throw new Error("Task not found.");
+  }
+  return task;
+}
+
+function findTaskByTurn(state: GatewayState, sessionId: string, turnId: string): TaskRecord | null {
+  return state.tasks.find((task) => task.sessionId === sessionId && task.turnId === turnId) ?? null;
+}
+
+function isTaskRunning(task: TaskRecord): boolean {
+  return task.status === "running" || task.status === "paused" || task.status === "waiting_input";
+}
+
+function inferTaskReadOnly(text: string): boolean {
+  return !/\b(write|edit|change|update|create|delete|remove|fix|implement|refactor|rename|commit|push|deploy|send)\b/i.test(text);
+}
+
+function classifyInterruptType(text: string, activeTasks: TaskRecord[]): InterruptType | null {
+  if (!activeTasks.length) {
+    return null;
+  }
+
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) {
+    return "clarification";
+  }
+
+  if (/\b(stop|cancel|never mind|forget it)\b/.test(normalized) && !/\b(switch|instead|also|while|but)\b/.test(normalized)) {
+    return "stop_task";
+  }
+
+  if (/\b(stop that|cancel that|switch to|instead|replace|drop that|move to|focus on)\b/.test(normalized)) {
+    return "replace_task";
+  }
+
+  if (/^(actually|clarify|to clarify|i mean|what i meant)/.test(normalized)) {
+    return "clarification";
+  }
+
+  const wordCount = normalized.split(/\s+/).filter(Boolean).length;
+  if (/\?$/.test(normalized) || /^(what|which|when|where|who|why|how|is|are|do|does|did|can|could|would)\b/.test(normalized) || wordCount <= 8) {
+    return "quick_question";
+  }
+
+  return "parallel_subtask";
+}
+
+function deriveTaskPriority(interruptType: InterruptType | null): TaskRecord["priority"] {
+  if (interruptType === "replace_task" || interruptType === "stop_task") {
+    return "high";
+  }
+  if (interruptType === "quick_question" || interruptType === "clarification") {
+    return "normal";
+  }
+  return "normal";
+}
+
+function canRunTaskInParallel(candidate: TaskRecord, runningTasks: TaskRecord[]): boolean {
+  if (!runningTasks.length) {
+    return true;
+  }
+
+  if (candidate.interruptType === "replace_task" || candidate.interruptType === "stop_task") {
+    return false;
+  }
+
+  if (candidate.interruptType === "quick_question" || candidate.interruptType === "clarification") {
+    return candidate.readOnly;
+  }
+
+  if (!candidate.canRunInParallel) {
+    return false;
+  }
+
+  return runningTasks.every((task) => task.resourceKey !== candidate.resourceKey || (task.readOnly && candidate.readOnly));
+}
+
+function syncSessionFromTasks(state: GatewayState, session: SessionRecord): void {
+  const sessionTasks = listSessionTasks(state, session.id);
+  const runningTasks = sessionTasks.filter(isTaskRunning);
+  const queuedTasks = sessionTasks.filter((task) => task.status === "queued");
+  const failedTask = [...sessionTasks].reverse().find((task) => task.status === "failed") ?? null;
+  const latestTaskWithThread = [...sessionTasks].reverse().find((task) => task.threadId) ?? null;
+  const latestTask = [...sessionTasks].reverse()[0] ?? null;
+
+  session.activeTurnId = runningTasks[0]?.turnId ?? null;
+  session.threadId = latestTaskWithThread?.threadId ?? session.threadId;
+  session.stopRequested = sessionTasks.some((task) => task.stopRequested);
+  session.stopClaimedAt = runningTasks.find((task) => task.stopRequested)?.interruptClaimedAt ?? null;
+
+  if (runningTasks.some((task) => task.stopRequested)) {
+    session.status = "stopping";
+  } else if (runningTasks.length) {
+    session.status = "running";
+  } else if (queuedTasks.length) {
+    session.status = "queued";
+  } else if (failedTask) {
+    session.status = "error";
+  } else {
+    session.status = "idle";
+  }
+
+  session.lastError = failedTask?.lastError ?? null;
+  session.lastActivityAt = latestTask?.updatedAt ?? session.lastActivityAt ?? session.updatedAt;
+  session.updatedAt = latestTask?.updatedAt ?? session.updatedAt;
+  session.claimedMessageId = queuedTasks.find((task) => task.claimedAt)?.userMessageId ?? null;
+}
+
+function markQueuedTaskCancelled(state: GatewayState, task: TaskRecord, reason: string): void {
+  task.status = "cancelled";
+  task.claimedAt = null;
+  task.stopRequested = false;
+  task.interruptClaimedAt = null;
+  task.lastError = reason;
+  task.updatedAt = nowIso();
+
+  const userMessage = state.messages.find((message) => message.id === task.userMessageId && message.sessionId === task.sessionId);
+  if (userMessage && userMessage.status === "pending") {
+    userMessage.status = "interrupted";
+    userMessage.errorMessage = reason;
+    userMessage.updatedAt = task.updatedAt;
+  }
+}
+
+function requestStopForSessionTasks(state: GatewayState, sessionId: string, reason: string): void {
+  for (const task of listSessionTasks(state, sessionId)) {
+    if (task.status === "queued") {
+      markQueuedTaskCancelled(state, task, reason);
+      continue;
+    }
+    if (isTaskRunning(task)) {
+      task.stopRequested = true;
+      task.interruptClaimedAt = null;
+      task.updatedAt = nowIso();
+    }
+  }
 }

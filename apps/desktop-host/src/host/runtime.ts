@@ -14,6 +14,7 @@ for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(process
 }
 
 interface ActiveRun {
+  taskId: string;
   sessionId: string;
   userMessageId: string;
   assistantMessageId: string;
@@ -29,6 +30,7 @@ const PROCESS_START_TIMEOUT_MS = 5_000;
 const PROCESS_AUTH_TIMEOUT_MS = 4_000;
 const PROCESS_TAILSCALE_TIMEOUT_MS = 4_000;
 const PROCESS_HEARTBEAT_TIMEOUT_MS = 4_000;
+const MAX_ACTIVE_RUNS = 2;
 
 export class DesktopHostRuntime {
   private readonly gatewayUrl = process.env.DESKTOP_GATEWAY_URL ?? "http://127.0.0.1:43111";
@@ -39,7 +41,7 @@ export class DesktopHostRuntime {
   private heartbeatHandle: NodeJS.Timeout | null = null;
   private hostToken: string | null = null;
   private hostId: string | null = null;
-  private activeRun: ActiveRun | null = null;
+  private readonly activeRuns = new Map<string, ActiveRun>();
   private ticking = false;
 
   async start(): Promise<void> {
@@ -140,51 +142,54 @@ export class DesktopHostRuntime {
     this.ticking = true;
 
     try {
-      if (this.activeRun) {
+      const workLimit = Math.max(1, MAX_ACTIVE_RUNS - this.activeRuns.size + 1);
+      for (let index = 0; index < workLimit; index += 1) {
         const work = await this.gateway.getNextWork(this.hostToken);
-        if (
-          work?.type === "interrupt" &&
-          work.session.id === this.activeRun.sessionId &&
-          work.turnId === this.activeRun.turnId &&
-          !this.activeRun.interrupting
-        ) {
-          this.activeRun.interrupting = true;
-          try {
-            await withTimeout(
-              this.codexBridge.interrupt(this.activeRun.threadId, this.activeRun.turnId),
-              INTERRUPT_REQUEST_TIMEOUT_MS,
-              "live interrupt"
-            );
-          } catch {
-            // Let the gateway reclaim and retry the stop request instead of wedging this run forever.
-            this.activeRun.interrupting = false;
-          }
+        if (!work) {
+          break;
         }
-        return;
-      }
 
-      const work = await this.gateway.getNextWork(this.hostToken);
-      if (work?.type === "interrupt") {
-        try {
-          await withTimeout(this.codexBridge.start(), INTERRUPT_START_TIMEOUT_MS, "codex app-server start");
-        } catch {
-          // If the bridge is unhealthy, still clear the stale session state in the gateway.
-        }
-        if (work.session.threadId) {
-          try {
-            await withTimeout(this.codexBridge.interrupt(work.session.threadId, work.turnId), INTERRUPT_REQUEST_TIMEOUT_MS, "stale interrupt");
-          } catch {
-            // If the desktop lost the live turn handle, still clear the stale session state in the gateway.
+        if (work.type === "interrupt") {
+          const activeRun = this.activeRuns.get(work.task.id);
+          if (activeRun && !activeRun.interrupting) {
+            activeRun.interrupting = true;
+            try {
+              await withTimeout(
+                this.codexBridge.interrupt(activeRun.threadId, activeRun.turnId),
+                INTERRUPT_REQUEST_TIMEOUT_MS,
+                "live interrupt"
+              );
+            } catch {
+              activeRun.interrupting = false;
+            }
+            continue;
           }
+
+          try {
+            await withTimeout(this.codexBridge.start(), INTERRUPT_START_TIMEOUT_MS, "codex app-server start");
+          } catch {
+            // If the bridge is unhealthy, still clear the stale session state in the gateway.
+          }
+          if (work.task.threadId) {
+            try {
+              await withTimeout(this.codexBridge.interrupt(work.task.threadId, work.turnId), INTERRUPT_REQUEST_TIMEOUT_MS, "stale interrupt");
+            } catch {
+              // If the desktop lost the live turn handle, still clear the stale session state in the gateway.
+            }
+          }
+          await withTimeout(this.gateway.interruptTurn(this.hostToken, {
+            sessionId: work.session.id,
+            taskId: work.task.id,
+            assistantMessageId: null,
+            turnId: work.turnId
+          }), GATEWAY_INTERRUPT_TIMEOUT_MS, "gateway interrupt cleanup");
+          continue;
         }
-        await withTimeout(this.gateway.interruptTurn(this.hostToken, {
-          sessionId: work.session.id,
-          assistantMessageId: null,
-          turnId: work.turnId
-        }), GATEWAY_INTERRUPT_TIMEOUT_MS, "gateway interrupt cleanup");
-        return;
-      }
-      if (work?.type === "message") {
+
+        if (this.activeRuns.size >= MAX_ACTIVE_RUNS) {
+          break;
+        }
+
         void this.processMessage(work);
       }
     } finally {
@@ -237,17 +242,19 @@ export class DesktopHostRuntime {
             transcriptPolished: work.message.transcriptPolished
           }),
           onTurnStarted: async ({ threadId: nextThreadId, turnId }) => {
-            this.activeRun = {
+            this.activeRuns.set(work.task.id, {
+              taskId: work.task.id,
               sessionId: work.session.id,
               userMessageId: work.message.id,
               assistantMessageId,
               threadId: nextThreadId,
               turnId,
               interrupting: false
-            };
+            });
             started = true;
             await this.gateway.startTurn(this.hostToken as string, {
               sessionId: work.session.id,
+              taskId: work.task.id,
               userMessageId: work.message.id,
               threadId: nextThreadId,
               turnId,
@@ -257,6 +264,7 @@ export class DesktopHostRuntime {
           onDelta: async (delta) => {
             await this.gateway.appendAssistantDelta(this.hostToken as string, {
               sessionId: work.session.id,
+              taskId: work.task.id,
               assistantMessageId,
               delta
             });
@@ -275,15 +283,18 @@ export class DesktopHostRuntime {
         }
       }
 
-      if (this.activeRun?.interrupting) {
+      const activeRun = this.activeRuns.get(work.task.id);
+      if (activeRun?.interrupting) {
         await this.gateway.interruptTurn(this.hostToken, {
           sessionId: work.session.id,
+          taskId: work.task.id,
           assistantMessageId,
           turnId: result.turnId
         });
       } else {
         await this.gateway.completeTurn(this.hostToken, {
           sessionId: work.session.id,
+          taskId: work.task.id,
           userMessageId: work.message.id,
           assistantMessageId,
           threadId: result.threadId,
@@ -292,24 +303,27 @@ export class DesktopHostRuntime {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Codex run failed.";
-      if (started && this.activeRun?.interrupting) {
+      const activeRun = this.activeRuns.get(work.task.id);
+      if (started && activeRun?.interrupting) {
         await this.gateway.interruptTurn(this.hostToken, {
           sessionId: work.session.id,
+          taskId: work.task.id,
           assistantMessageId,
-          turnId: this.activeRun.turnId
+          turnId: activeRun.turnId
         });
       } else {
         await this.gateway.failTurn(this.hostToken, {
           sessionId: work.session.id,
+          taskId: work.task.id,
           userMessageId: work.message.id,
           assistantMessageId: started ? assistantMessageId : null,
-          threadId: this.activeRun?.threadId ?? work.session.threadId,
-          turnId: this.activeRun?.turnId ?? null,
+          threadId: activeRun?.threadId ?? work.task.threadId ?? work.session.threadId,
+          turnId: activeRun?.turnId ?? work.task.turnId ?? null,
           errorMessage: message
         });
       }
     } finally {
-      this.activeRun = null;
+      this.activeRuns.delete(work.task.id);
     }
   }
 }

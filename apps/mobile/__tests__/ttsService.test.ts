@@ -30,7 +30,7 @@ describe("TtsService", () => {
     expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-GB");
   });
 
-  test("reinitializes the backend when switching to a different voice", async () => {
+  test("switches voices without cold-restarting the backend", async () => {
     const service = new TtsService();
 
     await service.setPreferredVoice("en-us-standard");
@@ -38,12 +38,12 @@ describe("TtsService", () => {
 
     await service.setPreferredVoice("en-gb-enhanced");
 
-    expect(ReactNativeTts.stop).toHaveBeenCalledTimes(1);
-    expect(ReactNativeTts.getInitStatus).toHaveBeenCalledTimes(1);
+    expect(ReactNativeTts.stop).not.toHaveBeenCalled();
+    expect(ReactNativeTts.getInitStatus).not.toHaveBeenCalled();
     expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
   });
 
-  test("reinitializes the backend when prepare receives a different preferred voice", async () => {
+  test("applies a new preferred voice during prepare without resetting the engine", async () => {
     const service = new TtsService();
 
     await service.prepare("en-us-standard");
@@ -51,8 +51,8 @@ describe("TtsService", () => {
 
     await service.prepare("en-gb-enhanced");
 
-    expect(ReactNativeTts.stop).toHaveBeenCalledTimes(1);
-    expect(ReactNativeTts.getInitStatus).toHaveBeenCalledTimes(1);
+    expect(ReactNativeTts.stop).not.toHaveBeenCalled();
+    expect(ReactNativeTts.getInitStatus).not.toHaveBeenCalled();
     expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
     expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-GB");
   });

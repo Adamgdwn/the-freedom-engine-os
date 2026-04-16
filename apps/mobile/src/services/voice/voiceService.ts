@@ -2,6 +2,8 @@ import type { ExpoSpeechRecognitionErrorEvent, ExpoSpeechRecognitionResultEvent 
 import { Platform } from "react-native";
 
 const NO_SPEECH_MESSAGE = "No speech was captured. Try again and speak after tapping the mic.";
+const RECOVERABLE_RESTART_DELAY_MS = 180;
+const SESSION_END_RESTART_DELAY_MS = 120;
 const PREFERRED_ANDROID_SERVICE_PACKAGES = [
   "com.google.android.tts",
   "com.google.android.as",
@@ -227,7 +229,7 @@ export class VoiceService {
 
         if (this.sessionActive && !this.manualStopRequested && isRecoverableSessionError(errorEvent)) {
           this.callbacks?.onReconnect?.();
-          this.restartRecognition(300);
+          this.restartRecognition(RECOVERABLE_RESTART_DELAY_MS);
           return;
         }
 
@@ -236,7 +238,7 @@ export class VoiceService {
       speechRecognitionModule.addListener("end", () => {
         if (this.sessionActive && !this.manualStopRequested) {
           this.callbacks?.onReconnect?.();
-          this.restartRecognition(200);
+          this.restartRecognition(SESSION_END_RESTART_DELAY_MS);
         }
       })
     ];

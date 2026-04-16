@@ -10,7 +10,7 @@ import {
 import type { AppState } from "../store/appStore";
 import type { TtsVoiceOption } from "../services/voice/ttsService";
 import { isValidExternalEmail } from "../utils/externalSend";
-import { findManualStopTargetSession, findSendTargetSession, findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
+import { findManualStopTargetSession, findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
 import { Banner, LabeledInput, MessageBubble, RoboticOwlBadge, StatusChip, VoiceSessionPanel, WorkingBubble } from "./components";
 import { styles } from "./mobileStyles";
 
@@ -610,7 +610,6 @@ export function ChatScreen(props: {
 }): React.JSX.Element {
   const { store, onRefresh, keyboardInset, composerBottomPadding, manualToolsVisible } = props;
   const selectedSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? null;
-  const sendTargetSession = findSendTargetSession(store.selectedSessionId, store.sessions);
   const stopTargetSession = findStopTargetSession(store.selectedSessionId, store.sessions);
   const manualStopTargetSession = findManualStopTargetSession(store.selectedSessionId, store.sessions);
   const hasSelectedSession = Boolean(store.selectedSessionId);
@@ -619,7 +618,6 @@ export function ChatScreen(props: {
   const canSend = Boolean(
     (hasSelectedSession || hasFallbackSession || canCreateFromApprovedRoot) &&
       store.composer.trim().length > 0 &&
-      !isSessionBusy(sendTargetSession) &&
       !store.sendingMessage
   );
   const messages = store.selectedSessionId ? store.messagesBySession[store.selectedSessionId] ?? [] : [];
@@ -690,14 +688,13 @@ export function ChatScreen(props: {
         scrollEventThrottle={16}
       >
         <View style={styles.assistantStageCard}>
-          <RoboticOwlBadge compact />
           <View style={styles.stageHeaderRow}>
-            <Text style={styles.stageEyebrow}>OWL-01</Text>
-            <Text style={styles.stageBadge}>Talk Surface</Text>
+            <Text style={styles.stageEyebrow}>Freedom</Text>
+            <Text style={styles.stageBadge}>Voice-first runtime</Text>
           </View>
-          <Text style={styles.stageTitle}>Talk to Freedom like an active partner.</Text>
+          <Text style={styles.stageTitle}>Talk to Freedom like your operating partner.</Text>
           <Text style={styles.stageBody}>
-            Voice and text stay available here all the time. Ask for the next move, interrupt when needed, or jump straight into a build thread.
+            Voice is the primary surface here. Ask for the next move, interrupt when needed, or keep one issue running while you raise the next.
           </Text>
           <View style={styles.stageActionRow}>
             <Pressable
@@ -742,16 +739,20 @@ export function ChatScreen(props: {
           </View>
         ) : null}
 
-        {store.voiceSessionActive || store.liveTranscript || store.voiceAssistantDraft ? (
-          <VoiceSessionPanel
-            active={store.voiceSessionActive}
-            phase={store.voiceSessionPhase}
-            liveTranscript={store.liveTranscript}
-            assistantDraft={store.voiceAssistantDraft}
-            audioLevel={store.voiceAudioLevel}
-            telemetry={store.voiceTelemetry}
-          />
-        ) : null}
+        <VoiceSessionPanel
+          active={store.voiceSessionActive}
+          phase={store.voiceSessionPhase}
+          liveTranscript={store.liveTranscript}
+          assistantDraft={store.voiceAssistantDraft}
+          audioLevel={store.voiceAudioLevel}
+          notice={store.notice}
+          selectedVoiceLabel={
+            store.selectedAssistantVoiceId
+              ? store.assistantVoices.find((voice) => voice.id === store.selectedAssistantVoiceId)?.label ?? null
+              : null
+          }
+          telemetry={store.voiceTelemetry}
+        />
 
         <View style={styles.messages}>
           {messages.length > 0 ? (
@@ -775,7 +776,7 @@ export function ChatScreen(props: {
               label={
                 store.sendingMessage
                   ? `${FREEDOM_RUNTIME_NAME} is sending your turn to the desktop.`
-                  : `${FREEDOM_RUNTIME_NAME} is still working on this turn. You can wait, interrupt, or say a new turn.`
+                  : `${FREEDOM_RUNTIME_NAME} is still working, but you can interrupt, ask a side question, or queue the next task.`
               }
             />
           ) : null}

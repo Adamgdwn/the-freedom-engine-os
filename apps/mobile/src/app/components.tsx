@@ -86,6 +86,8 @@ export function VoiceSessionPanel(props: {
   liveTranscript: string;
   assistantDraft: string | null;
   audioLevel: number;
+  notice: string | null;
+  selectedVoiceLabel: string | null;
   telemetry: {
     turnsStarted: number;
     turnsCompleted: number;
@@ -105,21 +107,44 @@ export function VoiceSessionPanel(props: {
         ? "Waiting for speech..."
         : "Start voice to keep the conversation loop open.");
   const label = props.liveTranscript ? "Live transcript" : props.assistantDraft ? "Assistant preview" : "Voice loop";
+  const orbToneStyle =
+    props.phase === "assistant-speaking"
+      ? styles.voiceOrbSpeaking
+      : props.phase === "processing" || props.phase === "reconnecting"
+        ? styles.voiceOrbProcessing
+        : props.phase === "error"
+          ? styles.voiceOrbError
+          : props.phase === "muted" || props.phase === "review"
+            ? styles.voiceOrbMuted
+            : styles.voiceOrbListening;
 
   return (
     <View style={[styles.card, styles.voiceSessionCard]}>
       <View style={styles.voiceSessionHeader}>
         <View style={styles.voiceSessionCopy}>
-          <Text style={styles.sectionTitle}>Voice Loop</Text>
-          <Text style={styles.helperText}>Natural turn-taking with live transcript and spoken reply.</Text>
+          <Text style={styles.voicePanelTitle}>Freedom Voice</Text>
+          <Text style={styles.voicePanelSubtitle}>One continuous voice surface for interrupts, replies, and active work.</Text>
         </View>
         <StatusChip label={humanizeVoiceSessionPhase(props.phase)} tone={tone} />
+      </View>
+      <View style={styles.voiceHeroRow}>
+        <View style={styles.voiceOrbShell}>
+          <View style={[styles.voiceOrbCore, orbToneStyle]} />
+        </View>
+        <View style={styles.voiceHeroCopy}>
+          <Text style={styles.voiceStateEyebrow}>{label}</Text>
+          <Text style={styles.voiceHeroText}>{preview}</Text>
+          <View style={styles.voiceTagRow}>
+            <Text style={styles.voiceTag}>{props.active ? "Session live" : "Tap to start"}</Text>
+            {props.selectedVoiceLabel ? <Text style={styles.voiceTag}>Voice {props.selectedVoiceLabel}</Text> : null}
+            {props.phase === "interrupted" ? <Text style={styles.voiceTag}>Interrupt acknowledged</Text> : null}
+          </View>
+        </View>
       </View>
       <View style={styles.voiceMeterTrack}>
         <View style={[styles.voiceMeterFill, { width: meterWidth }]} />
       </View>
-      <Text style={styles.voicePreviewLabel}>{label}</Text>
-      <Text style={styles.supportingText}>{preview}</Text>
+      {props.notice ? <Text style={styles.voiceNotice}>{props.notice}</Text> : null}
       <Text style={styles.voiceMetrics}>
         Turns {props.telemetry.turnsStarted}/{props.telemetry.turnsCompleted} · Interruptions {props.telemetry.interruptions} · Reconnects {props.telemetry.reconnects}
         {props.telemetry.lastRoundTripMs !== null ? ` · Last RTT ${(props.telemetry.lastRoundTripMs / 1000).toFixed(1)}s` : ""}

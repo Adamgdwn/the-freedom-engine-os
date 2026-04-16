@@ -172,7 +172,7 @@ const baseStore = {
 } as unknown as AppState;
 
 describe("ChatScreen busy send state", () => {
-  test("disables Send while the target session is busy", async () => {
+  test("keeps Send available while the target session is busy", async () => {
     let tree!: ReactTestRenderer.ReactTestRenderer;
 
     await ReactTestRenderer.act(async () => {
@@ -183,7 +183,7 @@ describe("ChatScreen busy send state", () => {
 
     const sendButton = tree.root.findByProps({ testID: "chat-send-button" });
 
-    expect(sendButton.props.disabled).toBe(true);
+    expect(sendButton.props.disabled).toBe(false);
   });
 
   test("keeps Stop enabled when another busy chat is the actual target", async () => {
