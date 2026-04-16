@@ -13,6 +13,8 @@
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "tsx --test src/lib/scoring.test.ts",
+    "backup:freedom-memory": "node scripts/backup-freedom-memory.mjs",
+    "restore:freedom-memory": "node scripts/restore-freedom-memory.mjs",
     "format": "prettier --write .",
     "build:packages": "node node_modules/typescript/bin/tsc -b tsconfig.workspace.json",
     "typecheck:workspace": "node node_modules/typescript/bin/tsc -b tsconfig.workspace.json --noEmit",
@@ -31,6 +33,7 @@
   "dependencies": {
     "@livekit/components-core": "^0.12.13",
     "@livekit/components-react": "^2.9.20",
+    "@supabase/supabase-js": "^2.103.2",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "livekit-client": "^2.18.2",

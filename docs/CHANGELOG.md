@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-04-15 (persistent memory + local backup pass)
+
+- added server-only Supabase-backed persistence for Freedom voice tasks, learning signals,
+  and approval-gated self-programming requests, with the browser bootstrapping prior
+  memory from `/api/freedom-memory`
+- added a Python worker memory-hydration step so recent durable memory is folded back
+  into the live voice session prompt at startup
+- added local backup and restore scripts for Freedom memory:
+  `npm run backup:freedom-memory` and
+  `npm run restore:freedom-memory -- --input=...`
+- added the `freedom_voice_tasks`, `freedom_learning_signals`, and
+  `freedom_programming_requests` Supabase tables plus governed documentation for backup,
+  restore, and service-role requirements
+
+## 2026-04-15 (voice interrupt + task-thread pass)
+
+- upgraded the web voice session provider to publish explicit LiveKit `interrupt` data
+  messages, accept worker-driven `state_update` and `task_update` events, and keep
+  in-memory parked task threads visible in the sidebar voice panel
+- aligned the Freedom voice prompt across TypeScript and Python so interruption,
+  topic-shift parking, concise decision support, and incomplete-data behavior are
+  consistent between UI and worker
+- extended the Python LiveKit worker to react to interrupt data messages, emit transcript
+  and state updates back to the browser, and expose `park_task` / `update_task_status`
+  coordination tools for UI-visible parallel thread handling
+- updated architecture, roadmap, prompt register, model registry, and voice architecture
+  notes to reflect the active LiveKit/OpenAI Realtime voice path and its new task-aware
+  interrupt behavior
+
+## 2026-04-15 (conversation learning + approved self-programming pass)
+
+- extended the Freedom voice runtime to capture in-session learning signals and approval-
+  gated self-programming requests, while keeping all actual runtime/code changes behind
+  explicit approval
+- updated the Freedom partner prompt to prioritize on-task guidance, durable pattern
+  capture, and clear approval boundaries around self-programming
+- added modeled control-plane entries for conversation learning and approval-gated
+  self-programming so Learning Registry and Agent Control reflect the new posture
+
 ## 2026-04-15 (runtime cutover)
 
 - merged `monorepo-merge` → `main`; Freedom Engine OS is now the single canonical repo

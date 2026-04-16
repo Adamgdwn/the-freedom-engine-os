@@ -63,6 +63,20 @@ This keeps the current trust boundary the same: the phone still does not hold mo
 - The upgrade does not add new remote execution capability; it changes how quickly voice turns enter the existing approved-root Codex flow.
 - Parallel task handling is intentionally conservative: tasks only run side-by-side when the scheduler believes they can do so safely, and replacement/stop interrupts still serialize aggressively.
 
+## Web Voice Note
+
+The control-plane web voice lane now has a separate LiveKit data-channel control path for
+explicit `interrupt` and `task_update` messages. That does not replace the mobile stop
+path described above; it adds a browser-native control channel so the web orb/FAB can
+cancel the current model response at the agent session and surface parked task state in
+the sidebar.
+
+The web voice lane now also persists durable partner memory through a server-only
+Supabase route. Learning signals, parked tasks, and approval-gated self-programming
+requests survive reloads, are re-hydrated into the next live voice session, and can be
+exported locally with `npm run backup:freedom-memory` so a larger Supabase issue does not
+erase Freedom's working memory.
+
 ## Reference Concepts
 
 This implementation intentionally mirrors the architectural direction recommended in the brief:

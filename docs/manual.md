@@ -34,6 +34,11 @@ that ties business outcomes back to freedom outcomes.
 - The repo is now linked to Supabase project `basbwglynuyfxcqxfyur`, and the initial
   migration has been pushed.
 - The `supabase/migrations/` directory is now the canonical schema source for remote updates.
+- Persistent Freedom memory now requires `SUPABASE_SERVICE_ROLE_KEY` on the server side.
+- Local memory backup:
+  run `npm run backup:freedom-memory`
+- Local memory restore:
+  run `npm run restore:freedom-memory -- --input=.local-data/backups/freedom-memory/latest.json`
 - The scoring workbench is intended for scenario testing, not for silently changing live priorities.
 - Weekly Review is the preferred place to convert observations into approved next actions.
 - Phone access should reuse Adam Connect. Add this repo root to Adam Connect's

@@ -18,12 +18,16 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Phone access fails through Adam Connect:
   verify Codex login, Tailscale reachability, and that Freedom Engine's repo root is
   present in `DESKTOP_APPROVED_ROOTS`.
+- Freedom memory looks missing or stale:
+  verify `SUPABASE_SERVICE_ROLE_KEY`, confirm the latest memory migration is applied, and
+  restore from the latest local backup if needed.
 
 ## Dependencies
 
 - Node.js and npm for local runtime
 - Next.js toolchain for build and routing
 - Supabase migration files for future database setup
+- Supabase service-role access for durable Freedom memory persistence and restore
 - GitHub workflow access for future code-control integration
 - Adam Connect for paired mobile access to the local workstation
 
@@ -33,9 +37,12 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 2. Re-run validation commands.
 3. If the issue is limited to seeded data, restore the last known-good data snapshot from
    version control.
-4. If the issue is architectural, document the change in `docs/architecture.md` and add
+4. If Freedom memory is at risk, run `npm run backup:freedom-memory` immediately if the
+   project is still reachable. If Supabase memory is lost, restore with
+   `npm run restore:freedom-memory -- --input=.local-data/backups/freedom-memory/latest.json`.
+5. If the issue is architectural, document the change in `docs/architecture.md` and add
    or update an ADR before re-releasing.
-5. If phone access breaks, fall back to direct desktop use of the web app and recover the
+6. If phone access breaks, fall back to direct desktop use of the web app and recover the
    Adam Connect host separately.
 
 ## Escalation

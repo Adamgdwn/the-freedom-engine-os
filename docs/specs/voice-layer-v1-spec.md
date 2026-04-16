@@ -4,20 +4,38 @@
 **Goal:** add a seamless, self-interruption-free voice interface to the Freedom Engine OS  
 **Scope:** Phase 1 only — voice plumbing + UI shell. No autonomous agents, no memory loops.
 
+> Status note:
+> This document is the original Phase 1 build spec.
+> The repo has since moved beyond this baseline.
+> Voice UI, model-level interrupts, parked task threads, in-session learning capture,
+> approval-gated self-programming requests, Supabase-backed durable memory, and local
+> backup/restore support now exist in the codebase.
+> Use this file as the historical implementation baseline, not as the current-state source
+> of truth.
+
 ---
 
-## Current state (understand before touching anything)
+## Current repo state (2026-04-15)
 
 | What | Where | Status |
 |------|-------|--------|
 | Next.js 16 control-plane web UI | `src/` | working |
-| App shell + sidebar | `src/components/app-shell.tsx` | server component, no voice |
-| "North star" static block in sidebar | `app-shell.tsx` lines 27–35 | gets replaced by VoicePanel |
+| Shared voice UI + provider | `src/components/voice-interface/` | implemented |
+| Voice orb in sidebar + mobile FAB | `src/components/app-shell.tsx` | implemented |
+| Voice token route | `src/app/api/voice-token/route.ts` | implemented |
+| Freedom memory route | `src/app/api/freedom-memory/route.ts` | implemented |
+| Durable voice memory store | `src/lib/freedom-memory-store.ts` | implemented |
+| Local backup / restore scripts | `scripts/backup-freedom-memory.mjs`, `scripts/restore-freedom-memory.mjs` | implemented |
+| Python voice worker | `agents/freedom_agent/agent.py` | implemented |
+| Supabase memory tables | `supabase/migrations/202604150002_freedom_memory_runtime.sql` | implemented |
 | Palette / CSS vars | `src/app/globals.css` | keep exactly as-is |
-| Voice code | **does not exist in this repo** | build from scratch |
-| Python agent worker | **does not exist** | scaffold only |
+| Live voice dependencies | `package.json` | installed |
 
-The repo has **zero audio dependencies**. Do not assume anything voice-related exists.
+For current behavior and operating guidance, prefer:
+- `docs/architecture.md`
+- `docs/voice-realtime-architecture.md`
+- `docs/roadmap.md`
+- `docs/manual.md`
 
 ---
 

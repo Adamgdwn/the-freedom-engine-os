@@ -19,8 +19,10 @@
    `npm run build`
 3. Confirm `.env.local` points at the linked Supabase project
    `basbwglynuyfxcqxfyur`.
-4. For local development, start with `npm run dev`.
-5. Apply new Supabase migrations before promoting any environment changes.
+4. Confirm `SUPABASE_SERVICE_ROLE_KEY` is available for server-side Freedom memory persistence.
+5. Run `npm run backup:freedom-memory` before promoting schema or memory-behavior changes.
+6. For local development, start with `npm run dev`.
+7. Apply new Supabase migrations before promoting any environment changes.
 
 ## Android Companion Release
 
@@ -41,6 +43,10 @@ When publishing a new Freedom Android APK:
 - Operational rollback:
   if a new control-plane release is unstable, fall back to the previous deployed version
   and use Weekly Review plus approvals as the manual decision surface until restored.
+- Memory rollback:
+  restore the latest local memory snapshot with
+  `npm run restore:freedom-memory -- --input=.local-data/backups/freedom-memory/latest.json`
+  after the target environment has the current schema.
 
 ## Validation
 
@@ -49,4 +55,5 @@ When publishing a new Freedom Android APK:
   `/weekly-review`, and `/ventures/ai-consulting-build`
 - Confirm the score workbench renders and creates simulated versions
 - Confirm the linked Supabase project exists and the migration history is current
+- Confirm Freedom memory backup completes locally before release when memory behavior changed
 - Confirm build and lint remain clean

@@ -7,7 +7,16 @@ import { useVoiceSession }   from './voice-context';
  * Consumes shared VoiceSessionContext — state is in sync with VoiceFab.
  */
 export function VoicePanel() {
-  const { state, transcript, connect, disconnect, interrupt } = useVoiceSession();
+  const {
+    state,
+    transcript,
+    connect,
+    disconnect,
+    interrupt,
+    tasks,
+    learningSignals,
+    programmingRequests,
+  } = useVoiceSession();
 
   function handleOrbClick() {
     if (state === 'idle' || state === 'error') {
@@ -27,6 +36,52 @@ export function VoicePanel() {
       <div className="mt-4 flex justify-center">
         <VoiceOrb state={state} transcript={transcript} onClick={handleOrbClick} />
       </div>
+      {tasks.length > 0 ? (
+        <div className="mt-4 border-t border-[color:var(--line)] pt-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+            Active threads
+          </p>
+          <ul className="mt-2 space-y-1">
+            {tasks.slice(0, 3).map((task) => (
+              <li key={task.id} className="text-xs text-[color:var(--ink-soft)]">
+                - {task.topic}
+                {task.status === 'ready' ? ' (ready to review)' : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {learningSignals.length > 0 ? (
+        <div className="mt-4 border-t border-[color:var(--line)] pt-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+            Learning now
+          </p>
+          <ul className="mt-2 space-y-1">
+            {learningSignals.slice(0, 2).map((signal) => (
+              <li key={signal.id} className="text-xs text-[color:var(--ink-soft)]">
+                - {signal.topic} ({signal.status})
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {programmingRequests.some((request) => request.status === 'pending') ? (
+        <div className="mt-4 rounded-2xl border border-[color:var(--accent)]/25 bg-[color:var(--accent)]/6 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
+            Needs approval
+          </p>
+          <ul className="mt-2 space-y-1">
+            {programmingRequests
+              .filter((request) => request.status === 'pending')
+              .slice(0, 2)
+              .map((request) => (
+                <li key={request.id} className="text-xs text-[color:var(--ink-soft)]">
+                  - {request.capability}
+                </li>
+              ))}
+          </ul>
+        </div>
+      ) : null}
       {state !== 'idle' ? (
         <button
           onClick={disconnect}

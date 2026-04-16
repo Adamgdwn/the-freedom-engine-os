@@ -1,5 +1,5 @@
 'use client';
-import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Room,
   RoomEvent,
@@ -9,7 +9,30 @@ import {
   type RemoteTrack,
   type RemoteTrackPublication,
 } from 'livekit-client';
-import { MIC_CONSTRAINTS, type VoiceState } from '@/lib/voice-session';
+import {
+  MIC_CONSTRAINTS,
+  VOICE_DATA_MESSAGE_TYPES,
+  type VoiceDataMessage,
+  type VoiceRuntimeState,
+  type VoiceState,
+} from '@/lib/voice-session';
+import {
+  applySelfProgrammingRequestUpdate,
+  applyVoiceLearningUpdate,
+  type SelfProgrammingRequest,
+  type SelfProgrammingRequestUpdate,
+  type VoiceLearningSignal,
+  type VoiceLearningUpdate,
+} from '@/lib/voice-learning';
+import {
+  type FreedomMemorySnapshot,
+  type FreedomMemoryUpdateRequest,
+} from '@/lib/freedom-memory';
+import {
+  applyVoiceTaskUpdate as reduceVoiceTaskUpdate,
+  type VoiceTask,
+  type VoiceTaskUpdate,
+} from '@/lib/voice-tasks';
 
 interface VoiceSessionValue {
   state:        VoiceState;
@@ -17,21 +40,86 @@ interface VoiceSessionValue {
   connect():    Promise<void>;
   disconnect(): void;
   interrupt():  void;
+  tasks:        VoiceTask[];
+  applyTaskUpdate(update: VoiceTaskUpdate): void;
+  learningSignals: VoiceLearningSignal[];
+  programmingRequests: SelfProgrammingRequest[];
 }
 
 const VoiceSessionContext = createContext<VoiceSessionValue | null>(null);
 
+function clearAgentAudio(audioRef: React.MutableRefObject<HTMLAudioElement | null>) {
+  audioRef.current?.pause();
+  if (audioRef.current) {
+    audioRef.current.srcObject = null;
+  }
+  audioRef.current = null;
+}
+
+function isRuntimeState(value: unknown): value is VoiceRuntimeState {
+  return value === 'listening' || value === 'processing' || value === 'speaking';
+}
+
+async function persistMemoryUpdate(request: FreedomMemoryUpdateRequest) {
+  await fetch('/api/freedom-memory', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(request),
+  });
+}
+
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [state,      setState]      = useState<VoiceState>('idle');
   const [transcript, setTranscript] = useState('');
+  const [tasks,      setTasks]      = useState<VoiceTask[]>([]);
+  const [learningSignals,    setLearningSignals]    = useState<VoiceLearningSignal[]>([]);
+  const [programmingRequests, setProgrammingRequests] = useState<SelfProgrammingRequest[]>([]);
 
   const roomRef      = useRef<Room | null>(null);
   const localTrack   = useRef<LocalAudioTrack | null>(null);
   const agentAudio   = useRef<HTMLAudioElement | null>(null);
+  const loadedMemory = useRef(false);
+
+  const applyTaskUpdate = useCallback((update: VoiceTaskUpdate) => {
+    setTasks((currentTasks) => reduceVoiceTaskUpdate(currentTasks, update));
+  }, []);
+
+  const applyLearningUpdate = useCallback((update: VoiceLearningUpdate) => {
+    setLearningSignals((currentSignals) => applyVoiceLearningUpdate(currentSignals, update));
+  }, []);
+
+  const applyProgrammingRequestUpdate = useCallback((update: SelfProgrammingRequestUpdate) => {
+    setProgrammingRequests((currentRequests) => (
+      applySelfProgrammingRequestUpdate(currentRequests, update)
+    ));
+  }, []);
+
+  useEffect(() => {
+    if (loadedMemory.current) {
+      return;
+    }
+
+    loadedMemory.current = true;
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/freedom-memory', { cache: 'no-store' });
+        if (!response.ok) {
+          return;
+        }
+
+        const snapshot = await response.json() as FreedomMemorySnapshot;
+        setTasks(snapshot.tasks ?? []);
+        setLearningSignals(snapshot.learningSignals ?? []);
+        setProgrammingRequests(snapshot.programmingRequests ?? []);
+      } catch {
+        // Keep the UI usable even if memory bootstrap is offline.
+      }
+    })();
+  }, []);
 
   const disconnect = useCallback(() => {
-    agentAudio.current?.pause();
-    agentAudio.current = null;
+    clearAgentAudio(agentAudio);
     localTrack.current?.stop();
     localTrack.current = null;
     roomRef.current?.disconnect();
@@ -41,10 +129,18 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const interrupt = useCallback(() => {
-    if (agentAudio.current) {
-      agentAudio.current.pause();
-      agentAudio.current = null;
+    if (roomRef.current) {
+      const payload = new TextEncoder().encode(
+        JSON.stringify({ type: VOICE_DATA_MESSAGE_TYPES.interrupt }),
+      );
+      void roomRef.current.localParticipant.publishData(payload, {
+        reliable: true,
+      }).catch((error) => {
+        console.error('[voice] interrupt publish failed', error);
+      });
     }
+
+    clearAgentAudio(agentAudio);
     localTrack.current?.unmute();
     setState('listening');
   }, []);
@@ -77,6 +173,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           const mediaStreamTrack = remoteTrack.mediaStreamTrack;
           if (!mediaStreamTrack) return;
 
+          clearAgentAudio(agentAudio);
           const audio = new Audio();
           audio.srcObject = new MediaStream([mediaStreamTrack]);
           agentAudio.current = audio;
@@ -89,11 +186,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           };
           audio.onended = () => {
             localTrack.current?.unmute();
-            agentAudio.current = null;
+            clearAgentAudio(agentAudio);
             setState('listening');
           };
           audio.onerror = () => {
             localTrack.current?.unmute();
+            clearAgentAudio(agentAudio);
             setState('error');
           };
           void audio.play().catch(() => setState('error'));
@@ -101,20 +199,58 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       );
 
       room.on(RoomEvent.DataReceived, (payload: Uint8Array) => {
+        let msg: VoiceDataMessage | null = null;
+
         try {
-          const msg = JSON.parse(new TextDecoder().decode(payload)) as {
-            type?: string;
-            text?: string;
-          };
-          if (msg.type === 'transcript' && msg.text) {
-            setTranscript(msg.text);
-          }
+          msg = JSON.parse(new TextDecoder().decode(payload)) as VoiceDataMessage;
         } catch {
-          // ignore malformed data frames
+          return;
+        }
+
+        if (msg.type === VOICE_DATA_MESSAGE_TYPES.transcript && typeof msg.text === 'string') {
+          setTranscript(msg.text);
+          return;
+        }
+
+        if (msg.type === VOICE_DATA_MESSAGE_TYPES.taskUpdate && msg.payload) {
+          applyTaskUpdate(msg.payload);
+          void persistMemoryUpdate({ channel: 'task', update: msg.payload }).catch(() => {
+            console.error('[voice] task persistence failed');
+          });
+          return;
+        }
+
+        if (msg.type === VOICE_DATA_MESSAGE_TYPES.learningUpdate && msg.payload) {
+          applyLearningUpdate(msg.payload);
+          void persistMemoryUpdate({ channel: 'learning', update: msg.payload }).catch(() => {
+            console.error('[voice] learning persistence failed');
+          });
+          return;
+        }
+
+        if (msg.type === VOICE_DATA_MESSAGE_TYPES.selfProgrammingUpdate && msg.payload) {
+          applyProgrammingRequestUpdate(msg.payload);
+          void persistMemoryUpdate({ channel: 'programming', update: msg.payload }).catch(() => {
+            console.error('[voice] programming request persistence failed');
+          });
+          return;
+        }
+
+        if (msg.type === VOICE_DATA_MESSAGE_TYPES.state && isRuntimeState(msg.state)) {
+          if (msg.state === 'speaking') {
+            localTrack.current?.mute();
+          } else {
+            localTrack.current?.unmute();
+          }
+          setState(msg.state);
         }
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        clearAgentAudio(agentAudio);
+        localTrack.current?.stop();
+        localTrack.current = null;
+        roomRef.current = null;
         setState('idle');
         setTranscript('');
       });
@@ -127,10 +263,22 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       disconnect();
       setState('error');
     }
-  }, [disconnect]);
+  }, [applyLearningUpdate, applyProgrammingRequestUpdate, applyTaskUpdate, disconnect]);
 
   return (
-    <VoiceSessionContext value={{ state, transcript, connect, disconnect, interrupt }}>
+    <VoiceSessionContext
+      value={{
+        state,
+        transcript,
+        connect,
+        disconnect,
+        interrupt,
+        tasks,
+        applyTaskUpdate,
+        learningSignals,
+        programmingRequests,
+      }}
+    >
       {children}
     </VoiceSessionContext>
   );

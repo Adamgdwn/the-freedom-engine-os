@@ -841,6 +841,19 @@ export const selfEvolvingFunctions: SelfEvolvingFunction[] = [
     nextPromotionGate: 'Validated policy proving safe branch fan-out without bypassing builder or approval gates.',
     auditCorrelationId: 'audit-connect-05',
   },
+  {
+    id: 'self-evolving-function-03',
+    name: 'Conversation Learning Loop',
+    objective:
+      'Continuously extract durable operating preferences, focus patterns, and repeated capability needs from active conversations without bypassing approval gates.',
+    status: 'planning',
+    trigger: 'Repeated voice and operator-chat sessions surface recurring preferences, focus drift, or requests for better internal tooling.',
+    parallelMode: 'parallel-capable',
+    activeBranches: ['learning signal capture', 'focus guardrail prompts', 'approval-gated self-programming queue'],
+    branchCoordinatorSkillId: 'skill-governance-check',
+    nextPromotionGate: 'Validated proof that learned patterns improve guidance quality without causing silent behavior drift or unauthorized code changes.',
+    auditCorrelationId: 'audit-connect-06',
+  },
 ];
 
 export const agentBuildRequests: AgentBuildRequest[] = [
@@ -871,6 +884,20 @@ export const agentBuildRequests: AgentBuildRequest[] = [
     routeReason: 'Mobile UI work is allowed, but release and pairing behavior still require approval.',
     auditCorrelationId: 'audit-connect-04',
     requestedAt: '2026-04-13T08:32:00.000Z',
+  },
+  {
+    id: 'build-request-03',
+    capability: 'Conversation learning + focus guardrail runtime',
+    requestedFrom: 'desktop_shell',
+    requestedBy: 'Freedom',
+    status: 'pending-approval',
+    builder: 'New Build Agent',
+    executionMode: 'serial',
+    parallelLaneCount: 1,
+    coordinatorSkillId: 'skill-governance-check',
+    routeReason: 'Freedom may propose self-programming improvements, but runtime behavior or code changes still require explicit approval before execution.',
+    auditCorrelationId: 'audit-connect-06',
+    requestedAt: '2026-04-15T17:15:00.000Z',
   },
 ];
 
@@ -964,6 +991,41 @@ export const capabilityDefinitions: CapabilityDefinition[] = [
     learningRecords: [],
     usageCount: 0,
     lastUsedAt: '',
+    coreAdmission: true,
+  },
+  {
+    id: 'cap-conversation-learning',
+    name: 'Conversation Learning + Focus Guardrail',
+    description: 'Always-on capture of durable partner signals from conversation, plus approval-gated self-programming requests for runtime improvements.',
+    source: 'internal',
+    state: 'building',
+    internalizationStatus: 'in-progress',
+    runtimeCost: 'low',
+    modelPreference: 'local-default',
+    safetyNotes: 'Learning may shape future guidance, but runtime or code changes must remain approval-gated and auditable.',
+    builderDependency: {
+      id: 'dep-conversation-learning',
+      capabilityId: 'cap-conversation-learning',
+      builderName: 'New Build Agent',
+      required: true,
+      replacedBy: null,
+    },
+    validationRecord: null,
+    learningRecords: [
+      {
+        id: 'lr-conversation-learning-01',
+        capabilityId: 'cap-conversation-learning',
+        event: 'Partner posture expanded toward always-on learning capture and approval-gated self-programming requests.',
+        provenance: 'voice runtime + control-plane pass 2026-04-15',
+        modelPreference: 'local-default',
+        safetyNotes: 'Do not auto-apply learned changes; require explicit approval for self-programming.',
+        internalizationStatus: 'in-progress',
+        externalBuilderStillRequired: true,
+        recordedAt: '2026-04-15T17:15:00.000Z',
+      },
+    ],
+    usageCount: 1,
+    lastUsedAt: '2026-04-15T17:15:00.000Z',
     coreAdmission: true,
   },
   {

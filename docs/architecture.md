@@ -32,9 +32,15 @@ the seeded data layer without rewriting the UI or service boundaries.
 - Model Router:
   Local-first model tier policy, escalation request queue, provider preference order,
   and resolved decision audit trail at `/model-router`.
+- Web voice layer:
+  Shared React voice session context, LiveKit room session, interrupt/task data channel,
+  and Python Realtime worker coordination surfaced in the Next.js sidebar and mobile FAB.
 - Persistence boundary:
   Supabase migrations under `supabase/migrations/` mirror both the original control-plane
   entities and the Freedom Connect runtime entities.
+- Durable memory layer:
+  Server-only Supabase admin client, memory API routes, and local backup/restore scripts
+  preserve learning signals, parked voice tasks, and approval-gated self-programming requests.
 - Native runtime surfaces (npm workspace packages):
   `apps/mobile` — React Native Android companion (`@freedom/mobile`);
   `apps/gateway` — Node.js pairing and wake gateway (`@freedom/gateway`);
@@ -53,7 +59,13 @@ the seeded data layer without rewriting the UI or service boundaries.
    same control-plane snapshot so phone and desktop activity stay visible in governance.
 5. Pages render portfolio, workflow, governance, and review views from the assembled
    control-plane snapshot.
-6. Future persistence will swap the seed layer for Supabase queries while preserving the
+6. The web voice lane exchanges short-lived LiveKit tokens, audio, interrupt events, and
+   task-state updates between the browser and the Python Realtime worker.
+7. Voice memory updates are persisted through a server-only Next.js API into Supabase,
+   and the Python worker hydrates recent durable memory into the live session prompt.
+8. Local backup and restore scripts export the durable memory tables into repo-local
+   storage so partner memory can survive a wider service issue.
+9. Future persistence will swap the seed layer for Supabase queries while preserving the
    same entity boundaries.
 
 ## Dependencies
@@ -74,6 +86,8 @@ the seeded data layer without rewriting the UI or service boundaries.
 - The UI is a control plane, not a chat shell or siloed SaaS dashboard.
 - Human approval is preserved for reprioritization, policy edits, spending, and
   irreversible external commitments.
+- Durable Freedom memory is server-written and locally exportable; self-programming
+  requests are persisted but still stop at explicit approval.
 - Score weights are editable in the UI and versioned in-memory now, with schema support
   for durable history later.
 - Freedom is the product identity on desktop and phone; the runtime surfaces

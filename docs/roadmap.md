@@ -8,7 +8,8 @@
 - Freedom Connect surfaces: desktop shell + mobile companion session identity, connect
   events, governed builder routing, outbound approval policy
 - Voice Layer Phase 1: LiveKit WebRTC + OpenAI Realtime, mic-mute self-interruption fix,
-  voice orb, panel, FAB, Python agent scaffold
+  model-level interrupt path, in-memory parked task threads, voice orb/panel/FAB, Python
+  agent scaffold
 - Freedom Core Phase 2 type contracts: capability layer, agent-build contracts,
   model routing, `CommunicationChannel`
 - Learning Registry surface: capability internalization status, validation records,
@@ -32,6 +33,12 @@
 - verify APK sideload on device and confirm voice + gateway pairing work end-to-end
 - run real-device Android acceptance for start voice, assistant playback, interrupt,
   mute/unmute, post-TTS resume, voice switching, and safe multi-task handling
+- validate control-plane web voice against LiveKit/OpenAI in-browser: explicit interrupt,
+  processing/speaking state transitions, parked-task updates, and resumed review offers
+- validate conversation-learning behavior: durable learning signals appear in-session,
+  focus redirection stays concise, and self-programming requests stop at approval
+- verify Supabase-backed memory survives reloads and that local backup/restore captures
+  learning signals, parked tasks, and self-programming requests cleanly
 - wire live Supabase persistence to replace seeded data (ventures, approvals, executions)
 - connect AI Consulting Build metrics and workflow exceptions into the evidence room
 - activate voice agent tools (`top_venture_status`, `pending_approvals`, `weekly_metrics`)
@@ -51,6 +58,8 @@
 
 - Voice Layer Phase 2: memory loops, autonomy hooks, deeper resource-aware concurrency,
   Supabase-backed tool implementations
+- promote conversation learning from durable memory into richer retrieval, review, audit,
+  and rollback controls
 - Self-evolving function runtime: live branch fan-out with governed convergence
 - Multi-tenant internal venture studio support
 - Governed external-facing surfaces after internal operating confidence is high
