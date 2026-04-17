@@ -60,6 +60,16 @@ Freedom in this system is tracked as outcomes, not slogans:
    `npm test`
    `npm run build`
 
+## Local Runtime State
+
+- Live desktop-host and gateway runtime state stays local under `.local-data/` and is not
+  committed.
+- The repo now includes sanitized bootstrap examples for first run:
+  `apps/desktop-host/.local-data/desktop/host-state.example.json`
+  `apps/gateway/.local-data/gateway/state.example.json`
+- If the live state files are missing, the runtime seeds them from those examples and
+  then continues writing machine-specific state locally.
+
 ## Mobile Access
 
 Freedom Engine can already be reached from your phone through the Freedom desktop shell

@@ -23,6 +23,8 @@
 5. Run `npm run backup:freedom-memory` before promoting schema or memory-behavior changes.
 6. For local development, start with `npm run dev`.
 7. Apply new Supabase migrations before promoting any environment changes.
+8. Keep live desktop-host and gateway `.local-data` state out of source control; only the
+   sanitized `*.example.json` bootstrap fixtures should be versioned.
 
 ## Android Companion Release
 

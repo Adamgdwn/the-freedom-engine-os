@@ -31,9 +31,11 @@ const defaultState: HostLocalState = {
 
 export class HostStateStore {
   private readonly filePath: string;
+  private readonly exampleFilePath: string;
 
   constructor(dataDir = ".local-data/desktop") {
     this.filePath = path.join(dataDir, "host-state.json");
+    this.exampleFilePath = path.join(dataDir, "host-state.example.json");
   }
 
   async read(): Promise<HostLocalState> {
@@ -42,7 +44,17 @@ export class HostStateStore {
       const raw = await readFile(this.filePath, "utf8");
       return { ...defaultState, ...(JSON.parse(raw) as Partial<HostLocalState>) };
     } catch {
-      await this.write(defaultState);
+      const seededState = await this.readExampleState();
+      await this.write(seededState);
+      return seededState;
+    }
+  }
+
+  private async readExampleState(): Promise<HostLocalState> {
+    try {
+      const raw = await readFile(this.exampleFilePath, "utf8");
+      return { ...defaultState, ...(JSON.parse(raw) as Partial<HostLocalState>) };
+    } catch {
       return { ...defaultState };
     }
   }

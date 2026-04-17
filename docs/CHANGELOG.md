@@ -30,6 +30,8 @@
 - documented the exact routing posture more clearly: local for day-to-day work, Codex for
   heavier code/build tasks with approval, Claude Code for broad synthesis with approval,
   while voice still uses paid OpenAI Realtime today
+- added sanitized bootstrap state fixtures for desktop-host and gateway so new clones can
+  start with shareable example state while live `.local-data` remains local-only
 
 ## 2026-04-16 (typed knowledge + routing-model pass)
 

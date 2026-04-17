@@ -56,6 +56,9 @@ that ties business outcomes back to freedom outcomes.
   run `npm run backup:freedom-memory`
 - Local memory restore:
   run `npm run restore:freedom-memory -- --input=.local-data/backups/freedom-memory/latest.json`
+- Desktop-host and gateway live runtime state under `.local-data/` is intentionally local-only.
+  The committed `*.example.json` files in those folders are safe bootstrap fixtures for
+  first run and for sharing the repo with others.
 - The scoring workbench is intended for scenario testing, not for silently changing live priorities.
 - Weekly Review is the preferred place to convert observations into approved next actions.
 - Phone access should reuse Adam Connect. Add this repo root to Adam Connect's

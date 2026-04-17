@@ -1,0 +1,13 @@
+{
+  "hostToken": null,
+  "hostId": null,
+  "hostName": "Freedom Desktop",
+  "gatewayUrl": "http://127.0.0.1:43111",
+  "pairingCode": null,
+  "pairingCodeIssuedAt": null,
+  "codexAuthStatus": "logged_out",
+  "codexAuthDetail": "Bootstrap example state. Live auth is written locally at runtime.",
+  "tailscaleStatus": "unknown",
+  "tailscaleDetail": "Bootstrap example state. Live network status is written locally at runtime.",
+  "tailscaleSuggestedUrl": null
+}

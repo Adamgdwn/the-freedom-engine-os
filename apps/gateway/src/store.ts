@@ -146,12 +146,14 @@ const defaultState = (): GatewayState => ({
 
 export class GatewayStore {
   private readonly dataFile: string;
+  private readonly exampleDataFile: string;
   private readonly events = new EventEmitter();
   private state: GatewayState | null = null;
   private readonly realtimeTickets = new Map<string, RealtimeTicketRecord>();
 
   constructor(private readonly dataDir: string) {
     this.dataFile = path.join(dataDir, "state.json");
+    this.exampleDataFile = path.join(dataDir, "state.example.json");
   }
 
   onBroadcast(listener: (payload: BroadcastEnvelope) => void): () => void {
@@ -1704,10 +1706,19 @@ export class GatewayStore {
       this.state = migrateState(JSON.parse(raw) as Partial<GatewayState>);
       recoverStaleSessionStops(this.state);
     } catch {
-      this.state = defaultState();
+      this.state = await this.readExampleState();
       await this.writeState(this.state);
     }
     return this.state;
+  }
+
+  private async readExampleState(): Promise<GatewayState> {
+    try {
+      const raw = await readFile(this.exampleDataFile, "utf8");
+      return migrateState(JSON.parse(raw) as Partial<GatewayState>);
+    } catch {
+      return defaultState();
+    }
   }
 
   private async writeState(state: GatewayState): Promise<void> {

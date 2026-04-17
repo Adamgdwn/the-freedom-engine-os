@@ -53,6 +53,10 @@ For a fast operator-facing view of what is actually live right now, use
 - Persistence boundary:
   Supabase migrations under `supabase/migrations/` mirror both the original control-plane
   entities and the Freedom Connect runtime entities.
+- Local runtime state bootstrap:
+  desktop-host and gateway seed missing local `.local-data` state files from committed,
+  sanitized `*.example.json` fixtures, then continue writing live machine-specific state
+  outside version control.
 - Durable memory layer:
   Server-only Supabase admin client, memory API routes, and local backup/restore scripts
   preserve learning signals, parked voice tasks, approval-gated self-programming requests,

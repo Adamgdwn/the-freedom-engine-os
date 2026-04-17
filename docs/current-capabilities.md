@@ -82,6 +82,8 @@ or the boundary between modeled and fully operational capability.
 - Desktop shell, desktop host, gateway, wake relay, and mobile companion all live in this monorepo.
 - Phone and desktop pair into one Freedom-owned session identity through the Connect runtime.
 - Governed session routing, pairing, and activity surfaces are visible in the control plane.
+- Desktop-host and gateway runtime stores now bootstrap missing local state from committed,
+  sanitized example files while continuing to keep live machine-specific state local-only.
 - Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
   while preserving `latest.apk` as a compatibility alias.
 - Android companion shell now emphasizes:
