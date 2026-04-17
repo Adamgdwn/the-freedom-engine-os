@@ -42,6 +42,15 @@
   focus redirection stays concise, and self-programming requests stop at approval
 - verify Supabase-backed memory survives reloads and that local backup/restore captures
   learning signals, parked tasks, and self-programming requests cleanly
+- validate the new approval-gated autonomy loop: open-task review, side-question handling,
+  topic-shift parking, and duplicate self-programming suppression behave consistently
+- define and validate the outcome model for build / automate / delegate / stop decisions
+  so Freedom is optimizing for long-term personal and organizational freedom rather than
+  just local task completion
+- turn the outcome model into concrete TypeScript contracts and seed/control-plane views so
+  recommendations can show scored alternatives instead of a single unstructured answer
+- define the knowledge-governance model for chat disposition, skill-acquisition decisions,
+  document placement, and retrieval readiness so Freedom can manage knowledge quality deliberately
 - wire live Supabase persistence to replace seeded data (ventures, approvals, executions)
 - connect AI Consulting Build metrics and workflow exceptions into the evidence room
 - activate voice agent tools (`top_venture_status`, `pending_approvals`, `weekly_metrics`)
@@ -52,6 +61,18 @@
 - Learning Registry: promote seed data to live capability tracking backed by Supabase
 - Model Router: wire escalation request + decision flow so Freedom can surface live
   approval requests in the UI
+- Workforce orchestration: add governed contracts, runtime flows, and review surfaces so
+  Freedom can assign work across specialist agents and tools as a measurable agent workforce
+- Outcome Engine: connect the new outcome contracts to venture scoring, recommendation
+  generation, and workforce-routing decisions
+- Knowledge Governance: add contracts, storage, and review surfaces so Freedom can
+  recommend what to document, summarize, archive, discard, and where durable artifacts belong
+- add transcript-based evals for the Freedom partner loop so parking, learning capture,
+  approval-gated self-programming, and email drafting can be regression-tested
+- add evals for “best solution” behavior so Freedom can challenge stale framing and propose
+  stronger organizational or systems-level solutions when appropriate
+- add evals for documentation and retrieval behavior so Freedom can justify preserving,
+  summarizing, discarding, or re-homing knowledge artifacts consistently
 - Authenticated access and role-aware approval flows
 - Persist score-weight versions, approvals, overrides, and weekly reviews
 - Connect PDF Flow metrics directly into evidence room
@@ -63,6 +84,12 @@
   Supabase-backed tool implementations
 - promote conversation learning from durable memory into richer retrieval, review, audit,
   and rollback controls
+- add live external research tools plus governed retrieval policy so Freedom can become
+  a self-researching partner without bluffing unsupported capabilities
+- raise Freedom from operator partner to co-founder-grade agentic OS by connecting outcome
+  modeling, workforce orchestration, approved self-programming, and governed organizational redesign loops
+- connect knowledge governance to durable memory, document structure, and retrieval so
+  Freedom can steward an evolving organizational knowledge base instead of just accumulating chats
 - Self-evolving function runtime: live branch fan-out with governed convergence
 - Multi-tenant internal venture studio support
 - Governed external-facing surfaces after internal operating confidence is high

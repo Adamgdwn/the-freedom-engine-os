@@ -1,6 +1,6 @@
 # Current Capabilities
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -34,6 +34,9 @@ or the boundary between modeled and fully operational capability.
   `speaking`, `error`.
 - Mic mute on assistant playback to prevent assistant self-hearing.
 - Park-and-resume task threads surfaced in the desktop voice console and mobile session controls.
+- Task-aware interruption routing across mobile/gateway/desktop:
+  `quick_question`, `clarification`, `parallel_subtask`, `replace_task`, and `stop_task`.
+- Bounded safe parallel task execution when the scheduler judges tasks non-conflicting.
 - Transcript and state updates streamed back into the browser UI.
 
 ### Persistent Memory
@@ -42,6 +45,8 @@ or the boundary between modeled and fully operational capability.
 - Durable storage of learning signals from conversation.
 - Durable storage of approval-gated self-programming requests.
 - Supabase-backed server-side memory load and persist path.
+- Runtime read access for Freedom to inspect open tasks, recent learning signals,
+  pending self-programming requests, and trusted email recipients during voice sessions.
 - Local backup and restore of memory tables through:
   `npm run backup:freedom-memory`
   `npm run restore:freedom-memory -- --input=...`
@@ -52,6 +57,8 @@ or the boundary between modeled and fully operational capability.
 - On-task redirection posture.
 - Durable learning capture during voice sessions.
 - Approval-gated self-programming requests that stop before execution.
+- Explicit operating policy for topic shifts, side questions, checkpointing,
+  memory recording, and approval-gated improvement requests.
 
 ### Communications
 
@@ -67,6 +74,8 @@ or the boundary between modeled and fully operational capability.
 - Desktop shell, desktop host, gateway, wake relay, and mobile companion all live in this monorepo.
 - Phone and desktop pair into one Freedom-owned session identity through the Connect runtime.
 - Governed session routing, pairing, and activity surfaces are visible in the control plane.
+- Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
+  while preserving `latest.apk` as a compatibility alias.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, desktop oversight, hidden-nav menu sheet,
   and a persistent bottom Freedom Voice dock.
@@ -84,15 +93,56 @@ or the boundary between modeled and fully operational capability.
   escalation requests, and builder routing exist in the model/control-plane layer.
 - They are not yet a fully autonomous, continuously running multi-agent orchestration layer.
 
+### Co-Founder / Trusted Advisor
+
+- Freedom is being shaped toward an almost-autonomous co-founder and trusted advisor that
+  decides what to build, automate, delegate, or stop based on long-term freedom outcomes.
+- That higher-level operating posture is not yet fully operational end to end in the live runtime.
+
+### Outcome-Driven Orchestration
+
+- The explicit outcome engine for comparing `build`, `automate`, `delegate`, `simplify`,
+  `stop`, `defer`, or `redesign` options is now defined in the planning/spec and typed
+  model layer.
+- It is not yet wired into live runtime recommendations, workforce routing, or self-programming decisions.
+
+### Knowledge Governance
+
+- Knowledge-governance and retrieval policies are now defined in the planning/spec and
+  typed model layer:
+  when Freedom should document, summarize, archive, discard, learn a new skill, and where
+  durable documents should live for future retrieval.
+- Those decisions are not yet wired into live chat disposition, document placement, or retrieval workflows.
+
 ### Model Routing
 
-- Model Router policy and escalation views exist.
-- Full live runtime model selection based on those policies is not yet wired end to end.
+- Model Router policy, escalation views, and example execution budgets exist in the control plane.
+- The intended posture is local-first for day-to-day work, with paid providers reserved
+  for heavier approved tasks such as large code changes, governed builds, or broad synthesis.
+- The desktop-host runtime now applies a real routed execution policy for non-voice work:
+  routine read-only operating turns can use a configured local command lane, while
+  workspace-changing or build-lane work routes to the heavier provider lane.
+- Local day-to-day execution becomes truly active when `FREEDOM_LOCAL_MODEL_COMMAND`
+  is configured; otherwise the host falls back to the heavier lane instead of silently
+  pretending local execution exists.
+- The current live web voice runtime still runs on `gpt-4o-realtime-preview`, so local-first
+  routing is not yet the active runtime reality for voice sessions.
+- Environment-level routing config now exists for the modeled router:
+  `FREEDOM_LOCAL_MODELS_ENABLED`, `FREEDOM_DAY_TO_DAY_PROVIDER`,
+  `FREEDOM_HEAVY_CODE_PROVIDER`, `FREEDOM_BROAD_SYNTHESIS_PROVIDER`,
+  `FREEDOM_LOCAL_MODEL_COMMAND`, `FREEDOM_CLAUDE_CODE_COMMAND`,
+  `FREEDOM_VOICE_RUNTIME_PROVIDER`, and `FREEDOM_VOICE_RUNTIME_MODEL`.
 
 ### Self-Programming
 
 - Freedom can record and surface self-programming requests.
 - Approved requests do not yet flow automatically into a governed build-and-apply pipeline.
+
+### Autonomous Research
+
+- Freedom can identify missing information, capability gaps, and candidate follow-up work.
+- The current voice runtime does not yet have a live external research toolchain, so
+  self-research remains approval-gated and partially modeled rather than end-to-end operational.
 
 ## Planned / Intentionally Not Live Yet
 

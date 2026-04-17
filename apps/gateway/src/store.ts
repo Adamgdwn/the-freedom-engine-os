@@ -47,6 +47,8 @@ import type {
 import {
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
+  getModelRouterConfig,
+  hasRunnableLocalDayToDay,
   isPrimaryFreedomSessionTitle
 } from "@freedom/shared";
 import { createEmailProvider, renderOutboundEmail, resolveOutboundEmailStatus } from "./outboundEmail.js";
@@ -1918,10 +1920,12 @@ function notificationTitleForEvent(event: NotificationEvent): string {
 }
 
 function deriveHostAvailability(host: HostRecord): HostAvailability {
+  const routerConfig = getModelRouterConfig(process.env);
+
   if (!isRecent(host.lastSeenAt, 15_000)) {
     return "offline";
   }
-  if (host.auth.status !== "logged_in") {
+  if (host.auth.status !== "logged_in" && !hasRunnableLocalDayToDay(routerConfig)) {
     return "codex_unavailable";
   }
   if (!host.tailscale.connected) {

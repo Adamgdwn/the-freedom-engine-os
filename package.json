@@ -17,7 +17,7 @@
     "restore:freedom-memory": "node scripts/restore-freedom-memory.mjs",
     "format": "prettier --write .",
     "build:packages": "node node_modules/typescript/bin/tsc -b tsconfig.workspace.json",
-    "typecheck:workspace": "node node_modules/typescript/bin/tsc -b tsconfig.workspace.json --noEmit",
+    "typecheck:workspace": "node node_modules/typescript/bin/tsc -p tsconfig.workspace.json --noEmit",
     "build:android-release": "node scripts/write-mobile-runtime-config.mjs && bash scripts/build-android-release.sh",
     "build:android-debug": "node scripts/write-mobile-runtime-config.mjs && bash scripts/build-android-debug.sh",
     "dev:gateway": "npm run dev --workspace @freedom/gateway",

@@ -1,5 +1,93 @@
 # Changelog
 
+## 2026-04-16 (runtime router milestone pass)
+
+- added a shared model-router module and environment-backed routing config so the intended
+  local-first policy is now computed from one place instead of being implied only by docs
+  and seed prose
+- added a real desktop-host routing path for non-voice work: routine read-only turns can
+  run through a configured local command bridge, while heavier code/build work routes
+  through the Codex lane
+- changed the host so Codex login is only required for Codex-routed work instead of
+  blocking every desktop turn, and relaxed gateway availability so a configured local
+  lane can still count as runnable when Codex is logged out
+- wired execution-budget defaults to that shared router logic and surfaced runtime-status
+  messaging in the Model Router page so the gap between intended routing and the current
+  live voice runtime is explicit in the control plane
+- documented the exact routing posture more clearly: local for day-to-day work, Codex for
+  heavier code/build tasks with approval, Claude Code for broad synthesis with approval,
+  while voice still uses paid OpenAI Realtime today
+
+## 2026-04-16 (typed knowledge + routing-model pass)
+
+- implemented typed knowledge-governance contracts in the TypeScript domain layer for
+  documentation decisions, knowledge artifacts, artifact placement, retrieval records,
+  canonical source links, skill-acquisition decisions, and retention policy
+- added seeded control-plane data for knowledge stewardship so the modeled system now has
+  concrete examples of document / summarize / discard decisions and durable artifact placement
+- added execution-budget examples to the Model Router surface so the intended policy is
+  visible in code and UI: local for day-to-day work, Codex for heavier code/build work,
+  and Claude Code for broad synthesis after approval
+- clarified in the capability reference that this routing posture is modeled in the control
+  plane, while the live voice runtime still uses paid OpenAI Realtime today
+
+## 2026-04-16 (knowledge-governance pass)
+
+- expanded the self-evolving platform spec with a knowledge-governance layer so Freedom is
+  expected to decide when to document, summarize, archive, discard, or cross-link chats
+  and artifacts rather than treating all conversation history as equally worth keeping
+- added policy and contract language for skill-acquisition decisions, artifact placement,
+  canonical source-of-truth tracking, and retrieval readiness
+- updated the roadmap and capability reference so knowledge quality, document placement,
+  and retrieval behavior are now part of the planned co-founder-grade operating model
+
+## 2026-04-16 (outcome-model pass)
+
+- expanded the self-evolving platform spec with an explicit outcome engine so Freedom's
+  future recommendations can compare `build`, `automate`, `delegate`, `simplify`, `stop`,
+  `defer`, and `redesign` rather than implicitly defaulting to build-first reasoning
+- added concrete outcome score dimensions, decision outputs, contracts, and integration
+  direction so the co-founder / trusted-advisor posture can eventually map into runtime code
+- updated the roadmap and capability reference to show that outcome-driven orchestration is
+  now specified but not yet wired into live recommendations or workforce routing
+
+## 2026-04-16 (vision alignment pass)
+
+- updated the self-evolving platform spec to reflect Freedom more explicitly as an
+  almost-autonomous co-founder / trusted advisor that optimizes for long-term personal
+  and organizational freedom outcomes
+- clarified that Freedom should look for the best reachable solution, not just the best
+  immediate solution within inherited assumptions
+- expanded the plan to include workforce orchestration, build/automate/delegate/stop
+  decision posture, and a lighter day-to-day governance feel with hard boundaries still
+  preserved around the most consequential actions
+- adjusted the roadmap and capability reference so the broader co-founder-grade agentic OS
+  direction is visible while remaining clearly separated from what is live today
+
+## 2026-04-16 (approval-gated autonomy loop pass)
+
+- strengthened the Freedom Python worker prompt from a general partner posture into a more
+  explicit operating policy covering topic shifts, side questions, checkpointing, durable
+  learning thresholds, truthfulness about missing research capability, and approval-gated
+  improvement requests
+- added read/query tools so Freedom can inspect open tasks, recent learning signals,
+  pending self-programming requests, and trusted email recipients instead of acting only
+  from a thin write-only tool surface
+- expanded startup context hydration so the live voice session now sees parked/open task
+  state alongside learning, pending programming requests, and trusted recipients
+- updated controlled docs to make the approval-gated autonomous partner direction explicit
+  while still marking live external research as not yet operational in the current runtime
+
+## 2026-04-16 (review follow-up)
+
+- refreshed `docs/current-capabilities.md` so the primary live-capability reference now
+  includes task-aware routing / bounded parallel voice work and build-specific Android
+  APK identifiers from the latest April 15 runtime changes
+- tightened the web voice memory persistence path so `/api/freedom-memory` server errors
+  no longer look like successful durable writes in the browser
+- fixed `npm run typecheck:workspace` so the workspace-level TypeScript validation command
+  runs without the project-reference `--noEmit` build-mode conflict
+
 ## 2026-04-15 (APK build identity + gateway download naming)
 
 - updated the gateway install surface so Android downloads expose a visible build identifier

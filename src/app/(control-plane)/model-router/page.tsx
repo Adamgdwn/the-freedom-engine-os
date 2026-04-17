@@ -25,6 +25,24 @@ export default function ModelRouterPage() {
 
   const pending = snapshot.escalationRequests.filter((request) => request.status === 'pending');
   const resolved = snapshot.escalationRequests.filter((request) => request.status !== 'pending');
+  const { modelRouterStatus } = snapshot;
+  const budgetCards = [
+    {
+      label: 'Day-to-day operating work',
+      budget: snapshot.executionBudgets.find((budget) => budget.taskId === 'daily-ops-review'),
+      note: 'Routine planning, analysis, summaries, and low-risk self-improvement should stay local first.',
+    },
+    {
+      label: 'Large code changes / builds',
+      budget: snapshot.executionBudgets.find((budget) => budget.taskId === 'build-request-01'),
+      note: 'Code-heavy implementation or governed agent-build execution should prefer Codex after approval.',
+    },
+    {
+      label: 'Broad synthesis / platform design',
+      budget: snapshot.executionBudgets.find((budget) => budget.taskId === 'self-evolving-platform-plan'),
+      note: 'Big synthesis, research, or architecture work may justify Claude Code after approval.',
+    },
+  ];
 
   return (
     <AppShell
@@ -59,6 +77,18 @@ export default function ModelRouterPage() {
 
         <div className="space-y-4">
           <Panel title="Routing policy" eyebrow="Tier definitions">
+            <div className="mb-4 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4 text-sm">
+              <p className="font-medium text-[color:var(--ink)]">Runtime status</p>
+              <p className="mt-2 leading-6 text-[color:var(--ink-soft)]">
+                {modelRouterStatus.liveStatus}
+              </p>
+              <p className="mt-2 leading-6 text-[color:var(--ink-soft)]">
+                {modelRouterStatus.policyStatus}
+              </p>
+              <p className="mt-2 leading-6 text-[color:var(--ink-soft)]">
+                {modelRouterStatus.synthesisStatus}
+              </p>
+            </div>
             <div className="space-y-3 text-sm">
               {[
                 {
@@ -193,6 +223,26 @@ export default function ModelRouterPage() {
                   </li>
                 ))}
               </ol>
+
+              <div className="mt-6 space-y-3">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-[color:var(--ink-soft-on-dark)]">
+                  Budget examples
+                </p>
+                {budgetCards.map((row) => (
+                  <div
+                    key={row.label}
+                    className="rounded-lg border border-white/[0.08] bg-white/[0.05] p-3 text-sm"
+                  >
+                    <p className="font-medium text-[color:var(--ink-on-dark)]">{row.label}</p>
+                    <p className="mt-1 text-[color:var(--ink-soft-on-dark)]">{row.note}</p>
+                    {row.budget ? (
+                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--ink-soft-on-dark)]">
+                        Preferred: {PROVIDER_LABEL[row.budget.preferredProvider]} • Max local attempts {row.budget.maxLocalAttempts}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             </section>
           </div>
         </div>

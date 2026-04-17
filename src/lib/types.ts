@@ -446,3 +446,104 @@ export type SelfEvolvingFunction = {
   nextPromotionGate: string;
   auditCorrelationId: string;
 };
+
+// ─── Knowledge governance ─────────────────────────────────────────────────────
+
+export type ConversationDisposition =
+  | 'document'
+  | 'summarize'
+  | 'link'
+  | 'archive'
+  | 'discard';
+
+export type KnowledgeArtifactKind =
+  | 'decision-note'
+  | 'summary'
+  | 'spec'
+  | 'runbook-update'
+  | 'memory-record'
+  | 'retrieval-index';
+
+export type ArtifactPermanence = 'temporary' | 'working' | 'durable' | 'canonical';
+
+export type ArtifactPlacementTarget =
+  | 'docs-root'
+  | 'docs-specs'
+  | 'docs-architecture'
+  | 'docs-manual'
+  | 'docs-runbook'
+  | 'runtime-store'
+  | 'working-notes'
+  | 'archive';
+
+export type DocumentationDecision = {
+  id: string;
+  sourceSessionId: string | null;
+  sourceKind: CommunicationIntent | 'internal-review' | 'workflow-analysis';
+  disposition: ConversationDisposition;
+  rationale: string;
+  retrievalValue: 'low' | 'medium' | 'high';
+  decidedAt: string;
+};
+
+export type ArtifactPlacementDecision = {
+  id: string;
+  artifactId: string;
+  target: ArtifactPlacementTarget;
+  pathRecommendation: string;
+  permanence: ArtifactPermanence;
+  rationale: string;
+  decidedAt: string;
+};
+
+export type CanonicalSourceLink = {
+  id: string;
+  concept: string;
+  canonicalArtifactId: string;
+  supersedesArtifactIds: string[];
+  note: string;
+};
+
+export type RetrievalRecord = {
+  id: string;
+  artifactId: string;
+  summary: string;
+  tags: string[];
+  sourceLinks: string[];
+  updatedAt: string;
+  supersededBy: string | null;
+};
+
+export type KnowledgeArtifact = {
+  id: string;
+  title: string;
+  kind: KnowledgeArtifactKind;
+  summary: string;
+  sourceDecisionId: string;
+  placementDecisionId: string | null;
+  permanence: ArtifactPermanence;
+  canonical: boolean;
+  owner: 'Freedom' | 'Adam' | 'hybrid-session';
+  lastReviewedAt: string;
+};
+
+export type SkillAcquisitionDecision = {
+  id: string;
+  skillName: string;
+  triggerPattern: string;
+  decision: 'learn-new-skill' | 'strengthen-existing-skill' | 'keep-external' | 'document-procedure';
+  expectedFreedomGain: 'low' | 'medium' | 'high';
+  validationMethod: string;
+  placement: 'core' | 'capability-layer' | 'documentation-only';
+  decidedAt: string;
+};
+
+export type KnowledgeRetentionPolicy = {
+  id: string;
+  label: string;
+  keepWhen: string[];
+  summarizeWhen: string[];
+  archiveWhen: string[];
+  discardWhen: string[];
+  canonicalityRule: string;
+};

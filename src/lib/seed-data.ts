@@ -1,22 +1,30 @@
 import type {
   AgentProfile,
   AgentBuildRequest,
+  ArtifactPlacementDecision,
   Approval,
   CapabilityDefinition,
+  CanonicalSourceLink,
   ConnectEvent,
   ConnectSession,
+  DocumentationDecision,
   EscalationDecision,
   EscalationRequest,
   EvidenceItem,
   Execution,
+  ExecutionBudget,
   Experiment,
   HumanProfile,
   Integration,
+  KnowledgeArtifact,
+  KnowledgeRetentionPolicy,
   OutboundDecision,
   Override,
   Policy,
+  RetrievalRecord,
   SelfEvolvingFunction,
   SkillDefinition,
+  SkillAcquisitionDecision,
   ToolProfile,
   TrustedContactPolicy,
   Venture,
@@ -24,6 +32,7 @@ import type {
   Workflow,
   WorkflowStep,
 } from '@/lib/types';
+import { getExecutionBudgetDefaults } from '@/lib/model-router';
 
 export const weightSets: WeightSet[] = [
   {
@@ -1126,5 +1135,162 @@ export const escalationDecisions: EscalationDecision[] = [
     decidedBy: 'Adam',
     outcome: 'Plan committed as docs/specs/freedom-core-self-evolving-platform-plan.md.',
     decidedAt: '2026-04-14T19:05:00.000Z',
+  },
+];
+
+export const executionBudgets: ExecutionBudget[] = getExecutionBudgetDefaults();
+
+export const documentationDecisions: DocumentationDecision[] = [
+  {
+    id: 'docdec-01',
+    sourceSessionId: 'connect-session-03',
+    sourceKind: 'build_request',
+    disposition: 'document',
+    rationale: 'Builder-routed requests change governed implementation direction and should remain retrievable.',
+    retrievalValue: 'high',
+    decidedAt: '2026-04-13T08:30:00.000Z',
+  },
+  {
+    id: 'docdec-02',
+    sourceSessionId: 'connect-session-01',
+    sourceKind: 'operator_chat',
+    disposition: 'summarize',
+    rationale: 'Conversation contained durable partner preferences but not enough unique detail to keep full chat transcript as canonical knowledge.',
+    retrievalValue: 'medium',
+    decidedAt: '2026-04-15T17:25:00.000Z',
+  },
+  {
+    id: 'docdec-03',
+    sourceSessionId: null,
+    sourceKind: 'internal-review',
+    disposition: 'discard',
+    rationale: 'Scratch comparison notes were superseded by the finalized platform spec and would only add retrieval noise.',
+    retrievalValue: 'low',
+    decidedAt: '2026-04-16T20:00:00.000Z',
+  },
+];
+
+export const knowledgeArtifacts: KnowledgeArtifact[] = [
+  {
+    id: 'artifact-01',
+    title: 'Freedom Core + Self-Evolving Platform Plan',
+    kind: 'spec',
+    summary: 'Canonical Phase 2 direction for core architecture, outcome engine, knowledge governance, and workforce orchestration.',
+    sourceDecisionId: 'docdec-01',
+    placementDecisionId: 'place-01',
+    permanence: 'canonical',
+    canonical: true,
+    owner: 'hybrid-session',
+    lastReviewedAt: '2026-04-16T20:15:00.000Z',
+  },
+  {
+    id: 'artifact-02',
+    title: 'Conversation Learning Summary',
+    kind: 'summary',
+    summary: 'Condensed record of durable partner preferences, focus drift patterns, and self-programming triggers from recent operator chats.',
+    sourceDecisionId: 'docdec-02',
+    placementDecisionId: 'place-02',
+    permanence: 'durable',
+    canonical: false,
+    owner: 'Freedom',
+    lastReviewedAt: '2026-04-15T17:30:00.000Z',
+  },
+];
+
+export const artifactPlacementDecisions: ArtifactPlacementDecision[] = [
+  {
+    id: 'place-01',
+    artifactId: 'artifact-01',
+    target: 'docs-specs',
+    pathRecommendation: 'docs/specs/freedom-core-self-evolving-platform-plan.md',
+    permanence: 'canonical',
+    rationale: 'Long-lived implementation direction belongs in governed specs rather than ad hoc notes.',
+    decidedAt: '2026-04-14T19:10:00.000Z',
+  },
+  {
+    id: 'place-02',
+    artifactId: 'artifact-02',
+    target: 'runtime-store',
+    pathRecommendation: 'Supabase durable memory + linked control-plane retrieval surface',
+    permanence: 'durable',
+    rationale: 'Reusable partner learning should stay queryable without cluttering canonical docs.',
+    decidedAt: '2026-04-15T17:30:00.000Z',
+  },
+];
+
+export const retrievalRecords: RetrievalRecord[] = [
+  {
+    id: 'retrieval-01',
+    artifactId: 'artifact-01',
+    summary: 'Canonical architectural plan for Freedom Phase 2.',
+    tags: ['architecture', 'phase-2', 'governance', 'workforce', 'knowledge'],
+    sourceLinks: ['docs/specs/freedom-core-self-evolving-platform-plan.md'],
+    updatedAt: '2026-04-16T20:15:00.000Z',
+    supersededBy: null,
+  },
+  {
+    id: 'retrieval-02',
+    artifactId: 'artifact-02',
+    summary: 'Durable conversation patterns worth reusing in future operator guidance.',
+    tags: ['memory', 'preferences', 'focus', 'self-programming'],
+    sourceLinks: ['/api/freedom-memory'],
+    updatedAt: '2026-04-15T17:30:00.000Z',
+    supersededBy: null,
+  },
+];
+
+export const canonicalSourceLinks: CanonicalSourceLink[] = [
+  {
+    id: 'canonical-01',
+    concept: 'Freedom Phase 2 platform direction',
+    canonicalArtifactId: 'artifact-01',
+    supersedesArtifactIds: [],
+    note: 'Use the spec as the first retrieval target before referring to scratch planning notes.',
+  },
+];
+
+export const skillAcquisitionDecisions: SkillAcquisitionDecision[] = [
+  {
+    id: 'skilldec-01',
+    skillName: 'Knowledge Stewardship',
+    triggerPattern: 'Repeated need to decide which chats become durable docs versus summarized memory.',
+    decision: 'learn-new-skill',
+    expectedFreedomGain: 'high',
+    validationMethod: 'Show consistent document/summarize/discard recommendations across conversation evals.',
+    placement: 'capability-layer',
+    decidedAt: '2026-04-16T20:20:00.000Z',
+  },
+  {
+    id: 'skilldec-02',
+    skillName: 'Builder Orchestrator',
+    triggerPattern: 'Repeated governed agent-build requests through the New Build Agent path.',
+    decision: 'strengthen-existing-skill',
+    expectedFreedomGain: 'high',
+    validationMethod: 'Governed artifact parity across repeated agent-build runs.',
+    placement: 'capability-layer',
+    decidedAt: '2026-04-13T09:05:00.000Z',
+  },
+];
+
+export const knowledgeRetentionPolicies: KnowledgeRetentionPolicy[] = [
+  {
+    id: 'retain-01',
+    label: 'Freedom knowledge hygiene baseline',
+    keepWhen: [
+      'A chat changes a decision, policy, workflow, or capability plan.',
+      'The artifact becomes a likely future retrieval target.',
+    ],
+    summarizeWhen: [
+      'The conversation has durable value but too much noise to keep as canonical text.',
+      'The main value is the extracted pattern rather than the full transcript.',
+    ],
+    archiveWhen: [
+      'The artifact was once useful but has been superseded by a clearer canonical source.',
+    ],
+    discardWhen: [
+      'The chat is transient, duplicated, or unlikely to inform future decisions.',
+      'Keeping it would create retrieval debt without adding durable value.',
+    ],
+    canonicalityRule: 'Each concept should have one clear source of truth before additional notes are retained.',
   },
 ];

@@ -42,6 +42,10 @@ For a fast operator-facing view of what is actually live right now, use
   Shared React voice session context, LiveKit room session, interrupt/task data channel,
   and Python Realtime worker coordination surfaced in the Next.js operator workbench
   voice console and mobile voice action surfaces.
+- Voice partner autonomy layer:
+  The Python Freedom worker carries an explicit operating-policy prompt plus read/write
+  coordination tools for open tasks, durable learning, pending programming requests,
+  trusted recipients, parked-task updates, and approval-gated email/programming actions.
 - Persistence boundary:
   Supabase migrations under `supabase/migrations/` mirror both the original control-plane
   entities and the Freedom Connect runtime entities.
@@ -55,7 +59,8 @@ For a fast operator-facing view of what is actually live right now, use
   `apps/mobile` — React Native Android companion (`@freedom/mobile`);
   `apps/gateway` — Node.js pairing and wake gateway (`@freedom/gateway`);
   `apps/desktop` — Electron shell (`@freedom/desktop`);
-  `apps/desktop-host` — Codex bridge / VS Code extension host (`@freedom/desktop-host`);
+  `apps/desktop-host` — routed desktop execution host / VS Code extension with local
+  command lane plus Codex bridge fallback (`@freedom/desktop-host`);
   `apps/wake-relay` — Wake-on-LAN relay server (`@freedom/wake-relay`);
   `packages/shared`, `packages/core`, `packages/provider-adapters` — shared runtime contracts.
 
@@ -72,13 +77,17 @@ For a fast operator-facing view of what is actually live right now, use
 6. The web voice lane exchanges short-lived LiveKit tokens, audio, interrupt events, and
    task-state updates between the browser and the Python Realtime worker.
 7. Voice memory updates are persisted through a server-only Next.js API into Supabase,
-   and the Python worker hydrates recent durable memory into the live session prompt.
+   and the Python worker hydrates recent open-task, learning, programming, and recipient
+   context into the live session prompt.
 8. When Freedom prepares an external email, the Python worker publishes a draft event,
    the control plane presents it for explicit confirmation, and the server sends it
    only to a trusted recipient recorded in Supabase.
 9. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
-10. Future persistence will swap the seed layer for Supabase queries while preserving the
+10. Desktop-host routes non-voice work through a shared model-router policy so routine
+   read-only turns can stay on a configured local command lane while heavier code/build
+   work uses the Codex bridge.
+11. Future persistence will swap the seed layer for Supabase queries while preserving the
    same entity boundaries.
 
 ## Dependencies

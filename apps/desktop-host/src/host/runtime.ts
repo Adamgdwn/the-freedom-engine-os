@@ -1,11 +1,19 @@
 import path from "node:path";
 import dotenv from "dotenv";
 import { createId } from "@freedom/core";
-import { buildTurnPrompt } from "@freedom/shared";
-import type { HostWorkMessage } from "@freedom/shared";
+import {
+  buildThreadInstructions,
+  buildTurnPrompt,
+  getModelRouterConfig,
+  planHostExecution,
+  type HostAuthState,
+  type HostWorkMessage,
+  type RouterProvider,
+} from "@freedom/shared";
 import { HttpGatewayClient } from "../services/gatewayClient.js";
 import { resolveApprovedRoots } from "./approvedRoots.js";
 import { CodexBridge } from "./codexBridge.js";
+import { CommandBridge } from "./commandBridge.js";
 import { HostStateStore } from "./store.js";
 import { getTailscaleStatus } from "./tailscale.js";
 
@@ -20,8 +28,11 @@ interface ActiveRun {
   assistantMessageId: string;
   threadId: string;
   turnId: string;
+  provider: RouterProvider;
   interrupting: boolean;
 }
+
+type RunBridge = CodexBridge | CommandBridge;
 
 const INTERRUPT_START_TIMEOUT_MS = 4_000;
 const INTERRUPT_REQUEST_TIMEOUT_MS = 5_000;
@@ -37,6 +48,17 @@ export class DesktopHostRuntime {
   private readonly gateway = new HttpGatewayClient(this.gatewayUrl);
   private readonly stateStore = new HostStateStore(process.env.DESKTOP_DATA_DIR ?? ".local-data/desktop");
   private readonly codexBridge = new CodexBridge();
+  private readonly routerConfig = getModelRouterConfig(process.env);
+  private readonly localBridge = new CommandBridge(
+    "local",
+    this.routerConfig.localProviderLabel,
+    process.env.FREEDOM_LOCAL_MODEL_COMMAND?.trim() || null,
+  );
+  private readonly claudeBridge = new CommandBridge(
+    "claude-code",
+    "Claude Code",
+    process.env.FREEDOM_CLAUDE_CODE_COMMAND?.trim() || null,
+  );
   private pollHandle: NodeJS.Timeout | null = null;
   private heartbeatHandle: NodeJS.Timeout | null = null;
   private hostToken: string | null = null;
@@ -49,13 +71,12 @@ export class DesktopHostRuntime {
     const hostName = process.env.DESKTOP_HOST_NAME ?? localState.hostName ?? "Adam Connect Desktop";
     const approvedRoots = await resolveApprovedRoots(parseRoots(process.env.DESKTOP_APPROVED_ROOTS));
 
-    await this.codexBridge.start();
     const auth = await this.codexBridge.getAuthState();
     const tailscale = await getTailscaleStatus(Number(new URL(this.gatewayUrl).port || 43111));
     const registration = await this.gateway.registerHost({
       hostId: localState.hostId ?? undefined,
       hostName,
-      approvedRoots
+      approvedRoots,
     });
 
     this.hostToken = registration.hostToken;
@@ -72,7 +93,7 @@ export class DesktopHostRuntime {
       codexAuthDetail: auth.detail,
       tailscaleStatus: tailscale.installed ? (tailscale.connected ? "connected" : "not_connected") : "not_installed",
       tailscaleDetail: tailscale.detail,
-      tailscaleSuggestedUrl: tailscale.suggestedUrl
+      tailscaleSuggestedUrl: tailscale.suggestedUrl,
     });
 
     await this.gateway.heartbeat(registration.hostToken, { auth, tailscale });
@@ -92,9 +113,11 @@ export class DesktopHostRuntime {
         `Host ID: ${registration.host.id}`,
         `Pairing code: ${registration.pairingCode}`,
         `Codex auth: ${auth.detail ?? auth.status}`,
+        `Local lane: ${this.localBridge.isConfigured() ? "configured" : "not configured"}`,
+        `Claude lane: ${this.claudeBridge.isConfigured() ? "configured" : "not configured"}`,
         `Tailscale: ${tailscale.detail ?? "unknown"}`,
-        `Suggested mobile URL: ${tailscale.suggestedUrl ?? "not available"}`
-      ].join("\n") + "\n"
+        `Suggested mobile URL: ${tailscale.suggestedUrl ?? "not available"}`,
+      ].join("\n") + "\n",
     );
 
     await this.syncHeartbeat();
@@ -131,7 +154,7 @@ export class DesktopHostRuntime {
       codexAuthDetail: auth.detail,
       tailscaleStatus: tailscale.installed ? (tailscale.connected ? "connected" : "not_connected") : "not_installed",
       tailscaleDetail: tailscale.detail,
-      tailscaleSuggestedUrl: tailscale.suggestedUrl
+      tailscaleSuggestedUrl: tailscale.suggestedUrl,
     });
   }
 
@@ -154,35 +177,40 @@ export class DesktopHostRuntime {
           if (activeRun && !activeRun.interrupting) {
             activeRun.interrupting = true;
             try {
-              await withTimeout(
-                this.codexBridge.interrupt(activeRun.threadId, activeRun.turnId),
-                INTERRUPT_REQUEST_TIMEOUT_MS,
-                "live interrupt"
-              );
+              await withTimeout(this.interruptActiveRun(activeRun), INTERRUPT_REQUEST_TIMEOUT_MS, "live interrupt");
             } catch {
               activeRun.interrupting = false;
             }
             continue;
           }
 
-          try {
-            await withTimeout(this.codexBridge.start(), INTERRUPT_START_TIMEOUT_MS, "codex app-server start");
-          } catch {
-            // If the bridge is unhealthy, still clear the stale session state in the gateway.
-          }
-          if (work.task.threadId) {
+          if (work.task.threadId && !isCommandThreadId(work.task.threadId)) {
             try {
-              await withTimeout(this.codexBridge.interrupt(work.task.threadId, work.turnId), INTERRUPT_REQUEST_TIMEOUT_MS, "stale interrupt");
+              await withTimeout(this.codexBridge.start(), INTERRUPT_START_TIMEOUT_MS, "codex app-server start");
+            } catch {
+              // If the bridge is unhealthy, still clear the stale session state in the gateway.
+            }
+            try {
+              await withTimeout(
+                this.codexBridge.interrupt(work.task.threadId, work.turnId),
+                INTERRUPT_REQUEST_TIMEOUT_MS,
+                "stale interrupt",
+              );
             } catch {
               // If the desktop lost the live turn handle, still clear the stale session state in the gateway.
             }
           }
-          await withTimeout(this.gateway.interruptTurn(this.hostToken, {
-            sessionId: work.session.id,
-            taskId: work.task.id,
-            assistantMessageId: null,
-            turnId: work.turnId
-          }), GATEWAY_INTERRUPT_TIMEOUT_MS, "gateway interrupt cleanup");
+
+          await withTimeout(
+            this.gateway.interruptTurn(this.hostToken, {
+              sessionId: work.session.id,
+              taskId: work.task.id,
+              assistantMessageId: null,
+              turnId: work.turnId,
+            }),
+            GATEWAY_INTERRUPT_TIMEOUT_MS,
+            "gateway interrupt cleanup",
+          );
           continue;
         }
 
@@ -204,43 +232,33 @@ export class DesktopHostRuntime {
 
     const assistantMessageId = createId("msg");
     let started = false;
+    const plan = planHostExecution(work, process.env);
 
     try {
-      await withTimeout(this.codexBridge.start(), PROCESS_START_TIMEOUT_MS, "codex app-server start");
       const auth = await withTimeout(this.codexBridge.getAuthState(), PROCESS_AUTH_TIMEOUT_MS, "codex auth check");
       const tailscale = await withTimeout(
         getTailscaleStatus(Number(new URL(this.gatewayUrl).port || 43111)),
         PROCESS_TAILSCALE_TIMEOUT_MS,
-        "tailscale status"
+        "tailscale status",
       );
-      await withTimeout(this.gateway.heartbeat(this.hostToken, { auth, tailscale }), PROCESS_HEARTBEAT_TIMEOUT_MS, "gateway heartbeat");
+      await withTimeout(
+        this.gateway.heartbeat(this.hostToken, { auth, tailscale }),
+        PROCESS_HEARTBEAT_TIMEOUT_MS,
+        "gateway heartbeat",
+      );
 
-      if (auth.status !== "logged_in") {
-        await this.gateway.failTurn(this.hostToken, {
-          sessionId: work.session.id,
-          userMessageId: work.message.id,
-          assistantMessageId: null,
-          threadId: work.session.threadId,
-          turnId: null,
-          errorMessage: auth.detail ?? "Codex is not logged in. Run `codex login --device-auth` on the desktop."
-        });
-        return;
-      }
+      const bridge = await this.resolveBridge(plan.provider, auth);
+      const buildPrompt = () =>
+        plan.provider === "codex" ? buildCodexPrompt(work) : buildCommandPrompt(work, plan.reason);
 
       const runTurn = async (threadId: string | null) =>
-        this.codexBridge.runTurn({
+        bridge.runTurn({
           cwd: work.session.rootPath,
           threadId,
+          sessionId: work.session.id,
           sessionTitle: work.session.title,
           sessionKind: work.session.kind,
-          text: buildTurnPrompt({
-            sessionTitle: work.session.title,
-            sessionKind: work.session.kind,
-            userText: work.message.content,
-            responseStyle: work.message.responseStyle,
-            inputMode: work.message.inputMode,
-            transcriptPolished: work.message.transcriptPolished
-          }),
+          text: buildPrompt(),
           onTurnStarted: async ({ threadId: nextThreadId, turnId }) => {
             this.activeRuns.set(work.task.id, {
               taskId: work.task.id,
@@ -249,7 +267,8 @@ export class DesktopHostRuntime {
               assistantMessageId,
               threadId: nextThreadId,
               turnId,
-              interrupting: false
+              provider: plan.provider,
+              interrupting: false,
             });
             started = true;
             await this.gateway.startTurn(this.hostToken as string, {
@@ -258,7 +277,7 @@ export class DesktopHostRuntime {
               userMessageId: work.message.id,
               threadId: nextThreadId,
               turnId,
-              assistantMessageId
+              assistantMessageId,
             });
           },
           onDelta: async (delta) => {
@@ -266,17 +285,17 @@ export class DesktopHostRuntime {
               sessionId: work.session.id,
               taskId: work.task.id,
               assistantMessageId,
-              delta
+              delta,
             });
-          }
+          },
         });
 
       let result;
       try {
         result = await runTurn(work.session.threadId);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Codex run failed.";
-        if (!started && work.session.threadId && isMissingThreadError(message)) {
+        const message = error instanceof Error ? error.message : `${plan.provider} run failed.`;
+        if (plan.provider === "codex" && !started && work.session.threadId && isMissingThreadError(message)) {
           result = await runTurn(null);
         } else {
           throw error;
@@ -289,7 +308,7 @@ export class DesktopHostRuntime {
           sessionId: work.session.id,
           taskId: work.task.id,
           assistantMessageId,
-          turnId: result.turnId
+          turnId: result.turnId,
         });
       } else {
         await this.gateway.completeTurn(this.hostToken, {
@@ -298,18 +317,18 @@ export class DesktopHostRuntime {
           userMessageId: work.message.id,
           assistantMessageId,
           threadId: result.threadId,
-          turnId: result.turnId
+          turnId: result.turnId,
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Codex run failed.";
+      const message = error instanceof Error ? error.message : `${plan.provider} run failed.`;
       const activeRun = this.activeRuns.get(work.task.id);
       if (started && activeRun?.interrupting) {
         await this.gateway.interruptTurn(this.hostToken, {
           sessionId: work.session.id,
           taskId: work.task.id,
           assistantMessageId,
-          turnId: activeRun.turnId
+          turnId: activeRun.turnId,
         });
       } else {
         await this.gateway.failTurn(this.hostToken, {
@@ -319,13 +338,81 @@ export class DesktopHostRuntime {
           assistantMessageId: started ? assistantMessageId : null,
           threadId: activeRun?.threadId ?? work.task.threadId ?? work.session.threadId,
           turnId: activeRun?.turnId ?? work.task.turnId ?? null,
-          errorMessage: message
+          errorMessage: message,
         });
       }
     } finally {
       this.activeRuns.delete(work.task.id);
     }
   }
+
+  private async interruptActiveRun(activeRun: ActiveRun): Promise<void> {
+    const bridge = await this.resolveBridge(activeRun.provider, await this.codexBridge.getAuthState(), false);
+    if (activeRun.provider === "codex") {
+      await withTimeout(this.codexBridge.start(), INTERRUPT_START_TIMEOUT_MS, "codex app-server start");
+    }
+    await bridge.interrupt(activeRun.threadId, activeRun.turnId);
+  }
+
+  private async resolveBridge(
+    provider: RouterProvider,
+    auth: HostAuthState,
+    startCodex = true,
+  ): Promise<RunBridge> {
+    if (provider === "codex") {
+      if (auth.status !== "logged_in") {
+        throw new Error(auth.detail ?? "Codex is not logged in. Run `codex login --device-auth` on the desktop.");
+      }
+      if (startCodex) {
+        await withTimeout(this.codexBridge.start(), PROCESS_START_TIMEOUT_MS, "codex app-server start");
+      }
+      return this.codexBridge;
+    }
+
+    if (provider === "claude-code") {
+      if (!this.claudeBridge.isConfigured()) {
+        throw new Error("Claude Code routing was selected, but FREEDOM_CLAUDE_CODE_COMMAND is not configured.");
+      }
+      return this.claudeBridge;
+    }
+
+    if (!this.localBridge.isConfigured()) {
+      throw new Error(
+        `Local day-to-day routing was selected, but FREEDOM_LOCAL_MODEL_COMMAND is not configured for ${this.routerConfig.localProviderLabel}.`,
+      );
+    }
+    return this.localBridge;
+  }
+}
+
+function buildCodexPrompt(work: HostWorkMessage): string {
+  return buildTurnPrompt({
+    sessionTitle: work.session.title,
+    sessionKind: work.session.kind,
+    userText: work.message.content,
+    responseStyle: work.message.responseStyle,
+    inputMode: work.message.inputMode,
+    transcriptPolished: work.message.transcriptPolished,
+  });
+}
+
+function buildCommandPrompt(work: HostWorkMessage, routingReason: string): string {
+  const sections = [
+    buildThreadInstructions({
+      sessionTitle: work.session.title,
+      sessionKind: work.session.kind,
+    }),
+    `Routing note: ${routingReason}`,
+    "This command lane is stateless for the current turn. Reply directly from the supplied context and do not assume hidden thread memory.",
+    work.task.resumeContext ? `Resume context: ${work.task.resumeContext}` : null,
+    buildCodexPrompt(work),
+  ].filter(Boolean);
+
+  return sections.join("\n\n");
+}
+
+function isCommandThreadId(threadId: string): boolean {
+  return threadId.startsWith("local_thread_") || threadId.startsWith("claude-code_thread_");
 }
 
 function isMissingThreadError(message: string): boolean {

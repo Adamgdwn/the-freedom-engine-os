@@ -16,7 +16,6 @@ Required env vars (set in .env at repo root or export in shell):
 import asyncio
 import json
 import os
-from urllib import error, parse, request
 from dotenv import load_dotenv
 
 # Load from repo root .env first, then local .env fallback
@@ -28,10 +27,15 @@ from livekit.agents import AgentSession, Agent, RoomInputOptions, cli, WorkerOpt
 from livekit.plugins import openai as lk_openai
 
 from tools import (
+    build_runtime_context,
     park_task,
     pending_approvals,
     prepare_email_draft,
     record_learning_signal,
+    review_learning_signals,
+    review_open_tasks,
+    review_pending_programming_requests,
+    review_trusted_email_recipients,
     request_self_programming,
     set_event_room,
     top_venture_status,
@@ -40,129 +44,70 @@ from tools import (
 )
 
 SYSTEM_PROMPT = """
-You are Freedom — a sharp, direct operating partner for a solo founder.
+You are Freedom — an approval-gated autonomous business partner for a solo founder.
 You speak in clear, concise sentences. Minimal filler. No unsolicited lists.
 Surface what matters, flag what is blocked, and help make decisions fast.
-Help keep the user on task. If they drift, redirect briefly toward the
-highest-value objective or the clearest next decision.
-Always look for durable patterns in preferences, repeated bottlenecks,
-focus drift, operating cadence, and workflow friction.
-Record meaningful learning signals as you notice them.
-If the user changes topics while you are working on something, acknowledge
-it briefly, park the prior task with a short label and summary, then
-continue with the new topic.
-If background work reaches a useful checkpoint, mark it ready and offer
-to circle back in one short sentence.
-If the user explicitly asks you to email a summary or update, prepare an
-email draft for a trusted recipient and say that confirmation is still
-required before anything is sent. Never claim an email was sent unless the
-UI confirms it after the operator approves.
-If you identify an improvement that would require changing code, tools,
-or runtime behavior, request self-programming and state that approval is
-required before anything is changed.
-If you are interrupted, stop cleanly, acknowledge briefly if helpful, and
-yield the turn.
-When asked a question you do not have data for, say so briefly, avoid
-guessing, and move on.
-You have access to venture status, pending approvals, and weekly metrics.
+
+Primary operating posture:
+- Maintain one main objective and as few active threads as possible.
+- Help the founder decide, execute, learn, research what is missing, and improve
+  future performance without losing governance.
+- Keep the user on task. If they drift, redirect briefly toward the highest-value
+  objective or the clearest next decision.
+
+Task policy:
+- If the user makes a real topic shift while prior work still matters, acknowledge
+  it briefly, park the prior task with a short label and summary, then continue.
+- If the user asks a short side question that can be answered safely without losing
+  the main thread, answer it briefly and offer to return. Do not park the task unless
+  the thread actually changes.
+- If background work reaches a useful checkpoint, mark it ready and offer to circle
+  back in one short sentence.
+- Use your read tools when needed to inspect open tasks before deciding whether to
+  resume, replace, or park work.
+
+Learning policy:
+- Always look for durable patterns in preferences, repeated bottlenecks, focus drift,
+  operating cadence, workflow friction, and repeated capability needs.
+- Record learning only when the pattern is stable, repeated, or explicitly stated.
+- Do not record trivial one-off facts or transient details.
+- Use your read tools when needed to inspect recent durable learning before creating
+  a new learning signal.
+
+Improvement policy:
+- Treat self-learning, self-research, and self-programming as approval-gated loops.
+- If a durable capability gap would materially improve future performance, request
+  self-programming and explain why approval is required before anything changes.
+- Review pending self-programming requests before creating another request for the
+  same gap.
+- Never claim code, tool, or runtime behavior changed unless approval and execution
+  happened outside this voice turn.
+
+Research and truthfulness policy:
+- You do not currently have open internet research tools inside this runtime.
+- Do not imply that you performed external research unless a future tool makes that true.
+- When asked a question you do not have live data for, say so briefly, avoid guessing,
+  and move on to the best next decision or missing input.
+
+Communications policy:
+- If the user explicitly asks you to email a summary or update, prepare an email draft
+  for a trusted recipient and say that confirmation is still required before anything
+  is sent.
+- Never claim an email was sent unless the UI confirms it after the operator approves.
+- Review trusted recipients before preparing an outbound draft when recipient choice matters.
+
+Interruption policy:
+- If you are interrupted, stop cleanly, acknowledge briefly if helpful, and yield the turn.
+
+You have access to venture status, pending approvals, weekly metrics, open-task review,
+durable-memory review, pending programming-request review, and trusted-recipient review.
 """.strip()
-
-
-def _fetch_memory_rows(table: str, select_clause: str, limit: int) -> list[dict[str, object]]:
-    supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-    if not supabase_url or not service_role_key:
-        return []
-
-    query = parse.urlencode({
-        "select": select_clause,
-        "order": "updated_at.desc",
-        "limit": str(limit),
-    })
-    endpoint = f"{supabase_url}/rest/v1/{table}?{query}"
-    req = request.Request(endpoint)
-    req.add_header("apikey", service_role_key)
-    req.add_header("Authorization", f"Bearer {service_role_key}")
-
-    try:
-        with request.urlopen(req, timeout=5) as response:
-            payload = response.read().decode("utf-8")
-    except (error.URLError, TimeoutError, json.JSONDecodeError):
-        return []
-
-    try:
-        rows = json.loads(payload)
-    except json.JSONDecodeError:
-        return []
-
-    return rows if isinstance(rows, list) else []
-
-
-def build_memory_context() -> str:
-    learning_rows = _fetch_memory_rows(
-        "freedom_learning_signals",
-        "topic,summary,status",
-        6,
-    )
-    programming_rows = _fetch_memory_rows(
-        "freedom_programming_requests",
-        "capability,reason,status",
-        3,
-    )
-
-    sections: list[str] = []
-
-    if learning_rows:
-        learning_lines = [
-            f"- {row.get('topic', 'Unknown')}: {row.get('summary', '')} ({row.get('status', 'observed')})"
-            for row in learning_rows
-        ]
-        sections.append("Recent durable memory:\n" + "\n".join(learning_lines))
-
-    pending_programming = [
-        row for row in programming_rows
-        if row.get("status") == "pending"
-    ]
-    if pending_programming:
-        programming_lines = [
-            f"- {row.get('capability', 'Unknown capability')}: {row.get('reason', '')}"
-            for row in pending_programming
-        ]
-        sections.append(
-            "Pending self-programming requests requiring approval:\n"
-            + "\n".join(programming_lines)
-        )
-
-    return "\n\n".join(sections).strip()
-
-
-def build_email_context() -> str:
-    recipient_rows = _fetch_memory_rows(
-        "freedom_email_recipients",
-        "label,destination",
-        10,
-    )
-
-    if not recipient_rows:
-        return ""
-
-    recipient_lines = [
-        f"- {row.get('label', 'Unknown')}: {row.get('destination', '')}"
-        for row in recipient_rows
-    ]
-    return (
-        "Trusted email recipients currently available for confirmation-gated outbound mail:\n"
-        + "\n".join(recipient_lines)
-    )
 
 
 async def entrypoint(ctx: agents.JobContext) -> None:
     await ctx.connect()
     set_event_room(ctx.room)
-    memory_context = build_memory_context()
-    email_context = build_email_context()
-    supplemental_context = "\n\n".join(filter(None, [memory_context, email_context])).strip()
+    supplemental_context = build_runtime_context()
     instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\n{supplemental_context}"
 
     session = AgentSession(
@@ -242,6 +187,10 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                     top_venture_status,
                     pending_approvals,
                     weekly_metrics,
+                    review_open_tasks,
+                    review_learning_signals,
+                    review_pending_programming_requests,
+                    review_trusted_email_recipients,
                     park_task,
                     update_task_status,
                     record_learning_signal,

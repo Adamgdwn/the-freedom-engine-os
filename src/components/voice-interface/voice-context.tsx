@@ -78,11 +78,15 @@ function isRuntimeState(value: unknown): value is VoiceRuntimeState {
 }
 
 async function persistMemoryUpdate(request: FreedomMemoryUpdateRequest) {
-  await fetch('/api/freedom-memory', {
+  const response = await fetch('/api/freedom-memory', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify(request),
   });
+
+  if (!response.ok) {
+    throw new Error('Freedom memory persistence failed');
+  }
 }
 
 async function fetchEmailSnapshot(): Promise<FreedomEmailSnapshot> {
