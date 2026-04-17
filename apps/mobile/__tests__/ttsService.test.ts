@@ -65,7 +65,22 @@ describe("TtsService", () => {
 
     await service.setPreferredVoice(null);
 
-    expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-us-standard");
-    expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-US");
+    expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
+    expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-GB");
+  });
+
+  test("switches back to the selected voice backend after a fallback", async () => {
+    const service = new TtsService();
+    const internals = service as unknown as {
+      lastSuccessfulBackend: "expo-speech" | "react-native-tts" | null;
+    };
+
+    internals.lastSuccessfulBackend = "expo-speech";
+    jest.clearAllMocks();
+
+    await service.setPreferredVoice("en-gb-enhanced");
+
+    expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
+    expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-GB");
   });
 });

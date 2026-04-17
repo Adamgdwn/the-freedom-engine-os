@@ -128,6 +128,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const roomRef      = useRef<Room | null>(null);
   const localTrack   = useRef<LocalAudioTrack | null>(null);
   const agentAudio   = useRef<HTMLAudioElement | null>(null);
+  const voiceSessionIdRef = useRef<string | null>(null);
   const loadedMemory = useRef(false);
   const loadedEmail  = useRef(false);
 
@@ -223,6 +224,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     localTrack.current = null;
     roomRef.current?.disconnect();
     roomRef.current = null;
+    voiceSessionIdRef.current = null;
     setState('idle');
     setTranscript('');
   }, []);
@@ -309,7 +311,13 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     try {
       setState('connecting');
 
-      const res = await fetch('/api/voice-token', { method: 'POST' });
+      const sessionId = voiceSessionIdRef.current ?? `voice-web-${crypto.randomUUID()}`;
+      voiceSessionIdRef.current = sessionId;
+      const res = await fetch('/api/voice-token', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ sessionId }),
+      });
       if (!res.ok) throw new Error(`Token error: ${res.status}`);
       const { token, wsUrl } = (await res.json()) as {
         token: string;

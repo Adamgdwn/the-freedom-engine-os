@@ -3,6 +3,7 @@ import type {
   ChatSession,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
+  CreateVoiceRuntimeSessionRequest,
   HostAssistantDeltaRequest,
   HostCompleteTurnRequest,
   HostFailTurnRequest,
@@ -20,7 +21,8 @@ import type {
   RegisterHostRequest,
   RegisterHostResponse,
   SendExternalMessageRequest,
-  SendExternalMessageResponse
+  SendExternalMessageResponse,
+  VoiceRuntimeSessionResponse
 } from "../schemas/platform.js";
 import type {
   NotificationEvent,
@@ -28,6 +30,11 @@ import type {
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest
 } from "../schemas/platform.js";
+
+export interface HostWorkPollOptions {
+  waitMs?: number;
+  acceptQueued?: boolean;
+}
 
 export interface MobileApi {
   completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse>;
@@ -41,6 +48,7 @@ export interface MobileApi {
   postMessage(token: string, sessionId: string, input: PostMessageRequest): Promise<ChatMessage>;
   stopSession(token: string, sessionId: string): Promise<ChatSession>;
   createRealtimeTicket(token: string): Promise<RealtimeTicketResponse>;
+  createVoiceRuntimeSession(token: string, input: CreateVoiceRuntimeSessionRequest): Promise<VoiceRuntimeSessionResponse>;
   renameDevice(token: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice>;
   revokeDevice(token: string, deviceId: string): Promise<PairedDevice>;
   registerPushToken(token: string, deviceId: string, input: RegisterPushTokenRequest): Promise<PairedDevice>;
@@ -55,7 +63,7 @@ export interface MobileApi {
 export interface HostApi {
   registerHost(input: RegisterHostRequest): Promise<RegisterHostResponse>;
   heartbeat(token: string, input: HostHeartbeatRequest): Promise<HostStatus>;
-  getNextWork(token: string): Promise<HostWorkItem | null>;
+  getNextWork(token: string, options?: HostWorkPollOptions): Promise<HostWorkItem | null>;
   startTurn(token: string, input: HostStartTurnRequest): Promise<ChatSession>;
   appendAssistantDelta(token: string, input: HostAssistantDeltaRequest): Promise<ChatMessage>;
   completeTurn(token: string, input: HostCompleteTurnRequest): Promise<ChatSession>;

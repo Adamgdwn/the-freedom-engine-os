@@ -37,3 +37,14 @@ using the same operating rules.
 ## Completion standard
 
 A task is not complete until relevant validation is run or a blocker is clearly stated.
+
+For user-visible Android mobile changes, completion also requires shipping the updated APK:
+- bump `versionCode` / `versionName`
+- run `npm run release:android-live` unless there is an explicit reason not to
+- confirm the built artifact at
+  `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
+- confirm the live install page
+  `http://pop-os.taildcb5c5.ts.net:43111/install`
+- confirm the build-specific APK URL shown on that page
+- include all three locations in the final handoff
+- do not rely only on `latest.apk`; the build-specific download URL is the release-grade link

@@ -61,14 +61,14 @@ export function getModelRouterConfig(env: NodeJS.ProcessEnv = process.env): Mode
     localModelsEnabled: parseBoolean(env.FREEDOM_LOCAL_MODELS_ENABLED, false),
     localProviderLabel: env.FREEDOM_LOCAL_PROVIDER_LABEL?.trim() || "Local LLM",
     openaiProviderLabel: env.FREEDOM_OPENAI_PROVIDER_LABEL?.trim() || "OpenAI / ChatGPT",
-    dayToDayProvider: parseRouterProvider(env.FREEDOM_DAY_TO_DAY_PROVIDER, "local"),
+    dayToDayProvider: parseRouterProvider(env.FREEDOM_DAY_TO_DAY_PROVIDER, "codex"),
     heavyCodeProvider: parseRouterProvider(env.FREEDOM_HEAVY_CODE_PROVIDER, "openai"),
     broadSynthesisProvider: parseRouterProvider(env.FREEDOM_BROAD_SYNTHESIS_PROVIDER, "claude-code"),
     voiceRuntimeProvider: parseVoiceRuntimeProvider(
       env.FREEDOM_VOICE_RUNTIME_PROVIDER,
       "openai-realtime",
     ),
-    voiceRuntimeModel: env.FREEDOM_VOICE_RUNTIME_MODEL?.trim() || "gpt-4o-realtime-preview",
+    voiceRuntimeModel: env.FREEDOM_VOICE_RUNTIME_MODEL?.trim() || "gpt-realtime-mini",
     localModelCommandConfigured: hasCommand(env.FREEDOM_LOCAL_MODEL_COMMAND),
     openaiCommandConfigured: hasCommand(env.FREEDOM_OPENAI_COMMAND),
     claudeCodeCommandConfigured: hasCommand(env.FREEDOM_CLAUDE_CODE_COMMAND),
@@ -211,7 +211,7 @@ function reasonForPlan(
       ? "Task can modify the workspace or is explicitly a build lane request."
       : lane === "broad-synthesis"
         ? "Task looks like broad synthesis or planning work."
-        : "Task is routine day-to-day operating work and should stay local first when possible.";
+        : "Task is routine day-to-day operating work and should favor the premium conversational lane by default.";
 
   const providerReason =
     provider === "local"
@@ -237,8 +237,8 @@ export function describeModelRouterStatus(env: NodeJS.ProcessEnv = process.env) 
       : `Voice runtime is currently configured for paid OpenAI Realtime (${config.voiceRuntimeModel}).`;
 
   const policyStatus = hasRunnableLocalDayToDay(config)
-    ? `${config.localProviderLabel} is enabled and a local day-to-day command is configured for desktop-host work.`
-    : `${config.localProviderLabel} is not fully wired for runtime execution yet. Set FREEDOM_LOCAL_MODEL_COMMAND to make day-to-day routing truly local-first.`;
+    ? `${config.localProviderLabel} is enabled as an available lower-cost lane for desktop-host work.`
+    : `${config.localProviderLabel} is not fully wired for runtime execution yet. Set FREEDOM_LOCAL_MODEL_COMMAND to expose a lower-cost local lane when needed.`;
 
   const synthesisStatus = config.claudeCodeCommandConfigured
     ? "Broad synthesis command routing is configured."

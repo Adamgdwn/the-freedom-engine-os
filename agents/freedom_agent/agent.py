@@ -62,7 +62,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
-            model="gpt-4o-realtime-preview",
+            model="gpt-realtime-mini",
             voice=os.getenv("NEXT_PUBLIC_VOICE_ID", "nova"),
         ),
     )
@@ -92,6 +92,8 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             asyncio.create_task(publish_event({
                 "type": "transcript",
                 "text": transcript,
+                "source": "user",
+                "final": True,
             }))
 
     @session.on("conversation_item_added")
@@ -108,6 +110,8 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             asyncio.create_task(publish_event({
                 "type": "transcript",
                 "text": text,
+                "source": "assistant",
+                "final": True,
             }))
 
     @session.on("agent_state_changed")

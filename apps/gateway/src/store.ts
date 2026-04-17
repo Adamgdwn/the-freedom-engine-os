@@ -1,13 +1,16 @@
 import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { createId, generatePairingCode, nowIso } from "@freedom/core";
+import { AccessToken } from "livekit-server-sdk";
 import type {
   AuditEvent,
   ChatMessage,
   ChatSession,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
+  CreateVoiceRuntimeSessionRequest,
   GatewayOverview,
   HostAssistantDeltaRequest,
   HostAvailability,
@@ -42,6 +45,7 @@ import type {
   TailscaleStatus,
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest,
+  VoiceRuntimeSessionResponse,
   WakeControl
 } from "@freedom/shared";
 import {
@@ -133,6 +137,8 @@ const INTERRUPT_RECLAIM_MS = 5_000;
 const STALE_STOP_RECOVERY_MS = 20_000;
 const STALE_QUEUE_CLAIM_MS = 15_000;
 const MAX_PARALLEL_SESSION_TASKS = 2;
+const DEFERRED_WRITE_MS = 200;
+const MAX_WORK_WAIT_MS = 20_000;
 
 const defaultState = (): GatewayState => ({
   hosts: [],
@@ -150,6 +156,9 @@ export class GatewayStore {
   private readonly events = new EventEmitter();
   private state: GatewayState | null = null;
   private readonly realtimeTickets = new Map<string, RealtimeTicketRecord>();
+  private readonly workWaiters = new Map<string, Set<() => void>>();
+  private pendingWriteTimer: NodeJS.Timeout | null = null;
+  private flushInFlight: Promise<void> | null = null;
 
   constructor(private readonly dataDir: string) {
     this.dataFile = path.join(dataDir, "state.json");
@@ -295,6 +304,60 @@ export class GatewayStore {
       expiresAt
     });
     return { ticket, expiresAt };
+  }
+
+  async createVoiceRuntimeSession(
+    token: string,
+    input: CreateVoiceRuntimeSessionRequest,
+  ): Promise<VoiceRuntimeSessionResponse> {
+    const principal = await this.requirePrincipal(token);
+    const apiKey = process.env.LIVEKIT_API_KEY?.trim();
+    const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
+    const wsUrl = process.env.LIVEKIT_URL?.trim();
+
+    if (!apiKey || !apiSecret || !wsUrl) {
+      throw new Error("Realtime voice is not configured on this desktop yet.");
+    }
+
+    const voiceSessionId = input.voiceSessionId.trim().toLowerCase();
+    if (!/^voice-mobile-[a-z0-9-]{8,}$/.test(voiceSessionId)) {
+      throw new Error("Voice session id is invalid.");
+    }
+
+    const roomName = `${principal.host.id}-${voiceSessionId}`;
+    const participantIdentity = `voice-mobile-${randomUUID()}`;
+    const expiresAt = new Date(Date.now() + 120_000).toISOString();
+    const router = getModelRouterConfig();
+    const accessToken = new AccessToken(apiKey, apiSecret, {
+      ttl: "2m",
+      identity: participantIdentity,
+    });
+
+    accessToken.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+    });
+
+    return {
+      token: await accessToken.toJwt(),
+      wsUrl,
+      roomName,
+      participantIdentity,
+      expiresAt,
+      binding: {
+        voiceSessionId,
+        chatSessionId: input.chatSessionId,
+        assistantName: input.assistantName?.trim() || FREEDOM_PRODUCT_NAME,
+        model: router.voiceRuntimeModel,
+        runtimeMode: "realtime_primary",
+        transport: "livekit_webrtc",
+        roomName,
+        participantIdentity,
+        degraded: false,
+      },
+    };
   }
 
   async consumeRealtimeTicket(ticket: string): Promise<string> {
@@ -842,80 +905,105 @@ export class GatewayStore {
     return toPublicSession(targetSession);
   }
 
-  async getNextWork(token: string): Promise<HostWorkItem | null> {
+  async getNextWork(
+    token: string,
+    options?: {
+      waitMs?: number;
+      acceptQueued?: boolean;
+    },
+  ): Promise<HostWorkItem | null> {
     const principal = await this.requireHost(token);
-    const state = await this.readState();
-    const interruptTask = state.tasks.find((task) => {
-      if (!task.turnId || !task.stopRequested || !isTaskRunning(task)) {
-        return false;
+    const tryReadWork = async (): Promise<HostWorkItem | null> => {
+      const state = await this.readState();
+      const interruptTask = state.tasks.find((task) => {
+        if (!task.turnId || !task.stopRequested || !isTaskRunning(task)) {
+          return false;
+        }
+        const session = state.sessions.find((item) => item.id === task.sessionId);
+        return Boolean(
+          session &&
+            session.hostId === principal.host.id &&
+            (!task.interruptClaimedAt || isInterruptClaimStale(task.interruptClaimedAt))
+        );
+      });
+      if (interruptTask) {
+        interruptTask.interruptClaimedAt = nowIso();
+        const interruptSession = this.requireSessionForHostState(state, interruptTask.sessionId, principal.host.id);
+        syncSessionFromTasks(state, interruptSession);
+        await this.writeState(state);
+        return {
+          type: "interrupt",
+          session: toPublicSession(interruptSession),
+          task: toPublicTask(interruptTask),
+          turnId: interruptTask.turnId ?? ""
+        };
       }
-      const session = state.sessions.find((item) => item.id === task.sessionId);
-      return Boolean(
-        session &&
-          session.hostId === principal.host.id &&
-          (!task.interruptClaimedAt || isInterruptClaimStale(task.interruptClaimedAt))
-      );
-    });
-    if (interruptTask) {
-      interruptTask.interruptClaimedAt = nowIso();
-      const interruptSession = this.requireSessionForHostState(state, interruptTask.sessionId, principal.host.id);
-      syncSessionFromTasks(state, interruptSession);
-      await this.writeState(state);
-      return {
-        type: "interrupt",
-        session: toPublicSession(interruptSession),
-        task: toPublicTask(interruptTask),
-        turnId: interruptTask.turnId ?? ""
-      };
-    }
 
-    const runningTasks = state.tasks.filter((task) => {
-      if (!isTaskRunning(task)) {
-        return false;
+      if (options?.acceptQueued === false) {
+        return null;
       }
-      const session = state.sessions.find((item) => item.id === task.sessionId);
-      return Boolean(session && session.hostId === principal.host.id);
-    });
 
-    const queuedTask = state.tasks.find((task) => {
-      if (task.status !== "queued" || task.claimedAt) {
-        return false;
-      }
-      const session = state.sessions.find((item) => item.id === task.sessionId);
-      if (!session || session.hostId !== principal.host.id) {
-        return false;
-      }
-      const relatedRunningTasks = runningTasks.filter((item) => item.resourceKey === task.resourceKey);
-      const sessionRunningTasks = runningTasks.filter((item) => item.sessionId === task.sessionId);
-      return (
-        sessionRunningTasks.length < MAX_PARALLEL_SESSION_TASKS &&
-        canRunTaskInParallel(task, relatedRunningTasks)
-      );
-    });
-    if (!queuedTask) {
-      return null;
-    }
+      const runningTasks = state.tasks.filter((task) => {
+        if (!isTaskRunning(task)) {
+          return false;
+        }
+        const session = state.sessions.find((item) => item.id === task.sessionId);
+        return Boolean(session && session.hostId === principal.host.id);
+      });
 
-    const message = state.messages.find((item) => item.id === queuedTask.userMessageId && item.sessionId === queuedTask.sessionId);
-    const queuedSession = this.requireSessionForHostState(state, queuedTask.sessionId, principal.host.id);
-    if (!message) {
-      markQueuedTaskCancelled(state, queuedTask, "Dropped because the linked user message no longer exists.");
+      const queuedTask = state.tasks.find((task) => {
+        if (task.status !== "queued" || task.claimedAt) {
+          return false;
+        }
+        const session = state.sessions.find((item) => item.id === task.sessionId);
+        if (!session || session.hostId !== principal.host.id) {
+          return false;
+        }
+        const relatedRunningTasks = runningTasks.filter((item) => item.resourceKey === task.resourceKey);
+        const sessionRunningTasks = runningTasks.filter((item) => item.sessionId === task.sessionId);
+        return (
+          sessionRunningTasks.length < MAX_PARALLEL_SESSION_TASKS &&
+          canRunTaskInParallel(task, relatedRunningTasks)
+        );
+      });
+      if (!queuedTask) {
+        return null;
+      }
+
+      const message = state.messages.find((item) => item.id === queuedTask.userMessageId && item.sessionId === queuedTask.sessionId);
+      const queuedSession = this.requireSessionForHostState(state, queuedTask.sessionId, principal.host.id);
+      if (!message) {
+        markQueuedTaskCancelled(state, queuedTask, "Dropped because the linked user message no longer exists.");
+        syncSessionFromTasks(state, queuedSession);
+        await this.writeState(state);
+        this.emitSession(queuedSession);
+        return null;
+      }
+
+      queuedTask.claimedAt = nowIso();
+      queuedTask.updatedAt = queuedTask.claimedAt;
       syncSessionFromTasks(state, queuedSession);
       await this.writeState(state);
-      this.emitSession(queuedSession);
+      return {
+        type: "message",
+        session: toPublicSession(queuedSession),
+        message,
+        task: toPublicTask(queuedTask)
+      };
+    };
+
+    const immediate = await tryReadWork();
+    if (immediate) {
+      return immediate;
+    }
+
+    const waitMs = Math.max(0, Math.min(MAX_WORK_WAIT_MS, options?.waitMs ?? 0));
+    if (!waitMs) {
       return null;
     }
 
-    queuedTask.claimedAt = nowIso();
-    queuedTask.updatedAt = queuedTask.claimedAt;
-    syncSessionFromTasks(state, queuedSession);
-    await this.writeState(state);
-    return {
-      type: "message",
-      session: toPublicSession(queuedSession),
-      message,
-      task: toPublicTask(queuedTask)
-    };
+    await this.waitForWork(principal.host.id, waitMs);
+    return tryReadWork();
   }
 
   async startTurn(token: string, input: HostStartTurnRequest): Promise<ChatSession> {
@@ -994,7 +1082,7 @@ export class GatewayStore {
       task.updatedAt = assistantMessage.updatedAt;
     }
 
-    await this.writeState(state);
+    await this.writeState(state, { defer: true });
     this.emitMessage(principal.host.id, assistantMessage);
     return assistantMessage;
   }
@@ -1545,6 +1633,7 @@ export class GatewayStore {
 
   private emitHostStatus(host: HostRecord): void {
     void this.buildHostStatus(host.id).then((hostStatus) => {
+      this.notifyWorkAvailable(host.id);
       this.events.emit("broadcast", {
         hostId: host.id,
         event: {
@@ -1556,6 +1645,7 @@ export class GatewayStore {
   }
 
   private emitSession(session: SessionRecord): void {
+    this.notifyWorkAvailable(session.hostId);
     this.events.emit("broadcast", {
       hostId: session.hostId,
       event: {
@@ -1566,6 +1656,7 @@ export class GatewayStore {
   }
 
   private emitMessage(hostId: string, message: ChatMessage): void {
+    this.notifyWorkAvailable(hostId);
     this.events.emit("broadcast", {
       hostId,
       event: {
@@ -1721,10 +1812,91 @@ export class GatewayStore {
     }
   }
 
-  private async writeState(state: GatewayState): Promise<void> {
+  private async writeState(state: GatewayState, options?: { defer?: boolean }): Promise<void> {
     this.state = state;
-    await mkdir(this.dataDir, { recursive: true });
-    await writeFile(this.dataFile, JSON.stringify(state, null, 2), "utf8");
+    if (options?.defer) {
+      this.scheduleDeferredWrite();
+      return;
+    }
+    await this.flushPendingWrite();
+  }
+
+  private scheduleDeferredWrite(): void {
+    if (this.pendingWriteTimer) {
+      clearTimeout(this.pendingWriteTimer);
+    }
+    this.pendingWriteTimer = setTimeout(() => {
+      this.pendingWriteTimer = null;
+      void this.flushPendingWrite();
+    }, DEFERRED_WRITE_MS);
+  }
+
+  private async flushPendingWrite(): Promise<void> {
+    if (this.pendingWriteTimer) {
+      clearTimeout(this.pendingWriteTimer);
+      this.pendingWriteTimer = null;
+    }
+
+    const state = this.state;
+    if (!state) {
+      return;
+    }
+
+    if (this.flushInFlight) {
+      await this.flushInFlight;
+      if (this.state !== state) {
+        await this.flushPendingWrite();
+      }
+      return;
+    }
+
+    this.flushInFlight = (async () => {
+      await mkdir(this.dataDir, { recursive: true });
+      await writeFile(this.dataFile, JSON.stringify(state, null, 2), "utf8");
+    })();
+
+    try {
+      await this.flushInFlight;
+    } finally {
+      this.flushInFlight = null;
+    }
+
+    if (this.state !== state) {
+      await this.flushPendingWrite();
+    }
+  }
+
+  private waitForWork(hostId: string, timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const waiters = this.workWaiters.get(hostId) ?? new Set<() => void>();
+      let timer: NodeJS.Timeout | null = null;
+      const finish = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        waiters.delete(finish);
+        if (!waiters.size) {
+          this.workWaiters.delete(hostId);
+        }
+        resolve();
+      };
+
+      waiters.add(finish);
+      this.workWaiters.set(hostId, waiters);
+      timer = setTimeout(finish, timeoutMs);
+    });
+  }
+
+  private notifyWorkAvailable(hostId: string): void {
+    const waiters = this.workWaiters.get(hostId);
+    if (!waiters?.size) {
+      return;
+    }
+    this.workWaiters.delete(hostId);
+    for (const waiter of waiters) {
+      waiter();
+    }
   }
 
   private recoverSiblingSessions(state: GatewayState, host: HostRecord, device: DeviceRecord): void {

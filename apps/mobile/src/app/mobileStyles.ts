@@ -149,6 +149,22 @@ export const styles = StyleSheet.create({
     borderColor: "rgba(23, 34, 37, 0.08)"
   },
   mobileSheetTaskTitle: { color: "#172225", fontSize: 16, lineHeight: 20, fontWeight: "800" },
+  mobileSheetInfoCard: {
+    backgroundColor: "rgba(255,255,255,0.8)",
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(23, 34, 37, 0.08)"
+  },
+  mobileSheetInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  mobileSheetInfoLabel: { color: "#556367", fontSize: 12, lineHeight: 18, fontWeight: "700" },
+  mobileSheetInfoValue: { color: "#172225", fontSize: 14, lineHeight: 18, fontWeight: "800", flexShrink: 1, textAlign: "right" },
   mobileSheetDangerButton: { marginTop: 4, backgroundColor: "#fee2e2" },
   mobileDock: {
     flexDirection: "row",
@@ -911,6 +927,59 @@ export const styles = StyleSheet.create({
   optionChipLabelActive: { color: "#ffffff" },
   optionChipMeta: { color: "#60758f", fontSize: 11, marginTop: 4, fontWeight: "600" },
   optionChipMetaActive: { color: "rgba(255,255,255,0.82)" },
+  voiceChoiceList: { gap: 10 },
+  voiceChoiceCard: {
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    backgroundColor: "#f7efe2",
+    borderWidth: 1,
+    borderColor: "rgba(23, 34, 37, 0.08)"
+  },
+  voiceChoiceCardActive: {
+    backgroundColor: "#172225",
+    borderColor: "#172225"
+  },
+  voiceChoiceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10
+  },
+  voiceChoiceTitle: {
+    flex: 1,
+    color: "#203247",
+    fontWeight: "800",
+    fontSize: 14
+  },
+  voiceChoiceTitleActive: { color: "#ffffff" },
+  voiceChoiceBody: {
+    color: "#5f7288",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600"
+  },
+  voiceChoiceBodyActive: { color: "rgba(255,255,255,0.84)" },
+  voiceBadgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6
+  },
+  voiceBadge: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "#e6dcc9"
+  },
+  voiceBadgeActive: {
+    backgroundColor: "rgba(255,255,255,0.14)"
+  },
+  voiceBadgeLabel: {
+    color: "#5c6874",
+    fontSize: 11,
+    fontWeight: "800"
+  },
+  voiceBadgeLabelActive: { color: "#ffffff" },
   helperText: { color: "#687c97", fontSize: 12, lineHeight: 18 },
   messageBubble: {
     borderRadius: 12,

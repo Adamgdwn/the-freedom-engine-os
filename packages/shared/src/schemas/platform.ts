@@ -30,6 +30,8 @@ export const transportSecuritySchema = z.enum(["secure", "insecure", "unknown"])
 export const outboundProviderSchema = z.enum(["none", "resend"]);
 export const outboundChannelSchema = z.enum(["email"]);
 export const wakeRequestStatusSchema = z.enum(["sent", "awake", "timeout", "error"]);
+export const voiceRuntimeModeSchema = z.enum(["realtime_primary", "device_fallback"]);
+export const voiceTransportSchema = z.enum(["livekit_webrtc", "device_local"]);
 
 export const hostAuthStateSchema = z.object({
   status: hostAuthStatusSchema,
@@ -103,6 +105,18 @@ export const freedomSessionIdentitySchema = z.object({
   originSurface: sessionOriginSurfaceSchema,
   workspaceContext: z.string().nullable(),
   auditCorrelationId: z.string().min(1)
+});
+
+export const voiceSessionBindingSchema = z.object({
+  voiceSessionId: z.string().min(1),
+  chatSessionId: z.string().min(1),
+  assistantName: z.string().min(1),
+  model: z.string().min(1),
+  runtimeMode: voiceRuntimeModeSchema,
+  transport: voiceTransportSchema,
+  roomName: z.string().min(1).nullable(),
+  participantIdentity: z.string().min(1).nullable(),
+  degraded: z.boolean()
 });
 
 export const chatSessionSchema = z.object({
@@ -347,6 +361,21 @@ export const realtimeTicketResponseSchema = z.object({
   expiresAt: z.string().datetime()
 });
 
+export const createVoiceRuntimeSessionRequestSchema = z.object({
+  voiceSessionId: z.string().min(8).max(120),
+  chatSessionId: z.string().min(1),
+  assistantName: z.string().min(1).max(120).optional()
+});
+
+export const voiceRuntimeSessionResponseSchema = z.object({
+  token: z.string().min(1),
+  wsUrl: z.string().min(1),
+  roomName: z.string().min(1),
+  participantIdentity: z.string().min(1),
+  expiresAt: z.string().datetime(),
+  binding: voiceSessionBindingSchema
+});
+
 export const renameDeviceRequestSchema = z.object({
   deviceName: z.string().min(1).max(120)
 });
@@ -472,6 +501,8 @@ export type HostFailTurnRequest = z.infer<typeof hostFailTurnRequestSchema>;
 export type HostInterruptTurnRequest = z.infer<typeof hostInterruptTurnRequestSchema>;
 export type StreamEvent = z.infer<typeof streamEventSchema>;
 export type RealtimeTicketResponse = z.infer<typeof realtimeTicketResponseSchema>;
+export type CreateVoiceRuntimeSessionRequest = z.infer<typeof createVoiceRuntimeSessionRequestSchema>;
+export type VoiceRuntimeSessionResponse = z.infer<typeof voiceRuntimeSessionResponseSchema>;
 export type RenameDeviceRequest = z.infer<typeof renameDeviceRequestSchema>;
 export type RegisterPushTokenRequest = z.infer<typeof registerPushTokenRequestSchema>;
 export type UpdateNotificationPrefsRequest = z.infer<typeof updateNotificationPrefsRequestSchema>;

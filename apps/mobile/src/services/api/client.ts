@@ -3,6 +3,7 @@ import type {
   ChatSession,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
+  CreateVoiceRuntimeSessionRequest,
   HostStatus,
   NotificationEvent,
   OutboundRecipient,
@@ -14,6 +15,7 @@ import type {
   RenameDeviceRequest,
   SendExternalMessageRequest,
   SendExternalMessageResponse,
+  VoiceRuntimeSessionResponse,
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest
 } from "@freedom/shared";
@@ -64,6 +66,14 @@ export class ApiClient {
 
   createRealtimeTicket(token: string, baseUrl: string): Promise<RealtimeTicketResponse> {
     return this.request("POST", `${baseUrl}/realtime/ticket`, token);
+  }
+
+  createVoiceRuntimeSession(
+    token: string,
+    baseUrl: string,
+    input: CreateVoiceRuntimeSessionRequest
+  ): Promise<VoiceRuntimeSessionResponse> {
+    return this.request("POST", `${baseUrl}/voice/runtime/session`, token, input);
   }
 
   renameDevice(token: string, baseUrl: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice> {

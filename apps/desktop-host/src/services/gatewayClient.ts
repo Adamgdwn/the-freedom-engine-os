@@ -13,6 +13,7 @@ import type {
   RegisterHostRequest,
   RegisterHostResponse
 } from "@freedom/shared";
+import type { HostWorkPollOptions } from "@freedom/shared";
 
 export class HttpGatewayClient implements HostApi {
   constructor(private readonly baseUrl: string) {}
@@ -25,8 +26,15 @@ export class HttpGatewayClient implements HostApi {
     return this.request("POST", "/host/heartbeat", token, input);
   }
 
-  getNextWork(token: string): Promise<HostWorkItem | null> {
-    return this.request("GET", "/host/work", token);
+  getNextWork(token: string, options?: HostWorkPollOptions): Promise<HostWorkItem | null> {
+    const url = new URL("/host/work", this.baseUrl);
+    if (options?.waitMs !== undefined) {
+      url.searchParams.set("waitMs", String(options.waitMs));
+    }
+    if (options?.acceptQueued !== undefined) {
+      url.searchParams.set("acceptQueued", options.acceptQueued ? "1" : "0");
+    }
+    return this.request("GET", url, token);
   }
 
   startTurn(token: string, input: HostStartTurnRequest): Promise<ChatSession> {
@@ -53,8 +61,8 @@ export class HttpGatewayClient implements HostApi {
     return this.request("GET", "/host/status", token);
   }
 
-  private async request<T>(method: string, pathname: string, token?: string, body?: unknown): Promise<T> {
-    const response = await fetch(new URL(pathname, this.baseUrl), {
+  private async request<T>(method: string, pathname: string | URL, token?: string, body?: unknown): Promise<T> {
+    const response = await fetch(typeof pathname === "string" ? new URL(pathname, this.baseUrl) : pathname, {
       method,
       headers: {
         ...(token ? { authorization: `Bearer ${token}` } : {}),

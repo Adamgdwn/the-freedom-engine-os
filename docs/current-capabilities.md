@@ -1,6 +1,6 @@
 # Current Capabilities
 
-Last updated: 2026-04-16
+Last updated: 2026-04-17
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -28,14 +28,28 @@ or the boundary between modeled and fully operational capability.
 ### Voice Runtime
 
 - LiveKit WebRTC browser voice session.
-- OpenAI Realtime worker (`gpt-4o-realtime-preview`) in Python.
+- OpenAI Realtime worker (`gpt-realtime-mini`) in Python.
 - Model-level interrupt support through LiveKit data messages.
+- Web voice is the repo's only primary-grade realtime voice path today.
+- Web voice tokens are short-lived and bound to explicit browser voice-session ids instead of a shared room.
+- Mobile can now request its own authenticated LiveKit voice session from the paired
+  gateway and connect directly to the same realtime voice worker contract.
 - UI-visible voice states: `idle`, `connecting`, `listening`, `processing`,
   `speaking`, `error`.
 - Mic mute on assistant playback to prevent assistant self-hearing.
 - Park-and-resume task threads surfaced in the desktop voice console and mobile session controls.
 - Task-aware interruption routing across mobile/gateway/desktop:
   `quick_question`, `clarification`, `parallel_subtask`, `replace_task`, and `stop_task`.
+- Mobile voice loops are pinned to one chat session at a time so switching chats does not silently reroute live speech or spoken replies.
+- Mobile now prefers the realtime voice runtime first and only drops to the older chained
+  device STT -> text agent -> device TTS loop when the paired desktop does not have
+  `LIVEKIT_*` and `OPENAI_API_KEY` configured for the premium path.
+- The mobile utility sheet now shows whether `Auto-send voice turns` is on, and legacy
+  installs that picked up the temporary default-off state are migrated back to auto-send
+  unless the user had explicitly changed that preference.
+- On Android, if the phone lacks the current locale's on-device speech model and has no
+  better recognizer available than the TTS-backed service, Freedom now opens the system
+  speech-model download flow instead of failing silently.
 - Bounded safe parallel task execution when the scheduler judges tasks non-conflicting.
 - Transcript and state updates streamed back into the browser UI.
 
@@ -89,6 +103,16 @@ or the boundary between modeled and fully operational capability.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.
+- The mobile utility menu now includes an `About this build` section that shows the
+  installed app version, build code, and current voice runtime directly on-device for
+  release verification.
+- Mobile voice auto-send is on by default again, and riskier or unusually long spoken requests are pushed into transcript review before they can run.
+- Android live voice now uses the device-default recognizer language instead of forcing
+  `en-US`, which avoids on-device language-pack mismatches on phones whose configured
+  speech locale differs from U.S. English.
+- When Android's on-device recognizer does not have the current locale model installed,
+  the mobile runtime now falls back to another visible recognizer service instead of
+  repeatedly choosing the broken path.
 
 ## Modeled But Not Fully Operational
 
@@ -127,21 +151,27 @@ or the boundary between modeled and fully operational capability.
 ### Model Routing
 
 - Model Router policy, escalation views, and example execution budgets exist in the control plane.
-- The intended posture is local-first for day-to-day work, with paid providers reserved
-  for heavier approved tasks such as large code changes, governed builds, or broad synthesis.
+- The intended posture is Codex-first for day-to-day conversation and operating work, with
+  local models kept as an optional lower-cost lane instead of the default experience.
 - The desktop-host runtime now applies a real routed execution policy for non-voice work:
-  routine read-only operating turns can use a configured local command lane, while
-  workspace-changing or build-lane work routes to the heavier provider lane.
+  routine read-only operating turns can prefer the premium day-to-day lane by default,
+  while workspace-changing or build-lane work routes to the heavier provider lane.
+- Desktop-host work pickup now long-polls the gateway instead of waiting on a fixed
+  one-second polling cadence, reducing idle latency for newly queued turns and interrupts.
 - Escalation is now modeled as:
   Freedom recommends a provider, presents the operator choice set, and the operator
   selects which external lane to use.
 - `OpenAI / ChatGPT` is now a first-class escalation option alongside `Codex` and
   `Claude Code`.
-- Local day-to-day execution becomes truly active when `FREEDOM_LOCAL_MODEL_COMMAND`
-  is configured; otherwise the host falls back to the heavier lane instead of silently
-  pretending local execution exists.
-- The current live web voice runtime still runs on `gpt-4o-realtime-preview`, so local-first
-  routing is not yet the active runtime reality for voice sessions.
+- Local execution becomes truly active when `FREEDOM_LOCAL_MODEL_COMMAND` is configured;
+  it now acts as an explicit optional cost-control lane rather than the default posture.
+- The current live web voice runtime now defaults to `gpt-realtime-mini`, so the default
+  voice lane is cheaper than before even though it is still hosted rather than local.
+- The premium mobile realtime lane still depends on desktop-side `LIVEKIT_*` plus
+  `OPENAI_API_KEY` being present. Without those credentials, the APK degrades to the
+  older device fallback instead of silently pretending the premium path exists.
+- Gateway assistant streaming now defers disk persistence instead of rewriting the full
+  state file on every token chunk.
 - Environment-level routing config now exists for the modeled router:
   `FREEDOM_LOCAL_MODELS_ENABLED`, `FREEDOM_DAY_TO_DAY_PROVIDER`,
   `FREEDOM_HEAVY_CODE_PROVIDER`, `FREEDOM_BROAD_SYNTHESIS_PROVIDER`,
@@ -164,7 +194,7 @@ or the boundary between modeled and fully operational capability.
 - Autonomous self-modification without approval.
 - Silent external sends.
 - Memory loops that independently decide what to store, change, or act on without operator review.
-- Full local-first model execution replacing current hosted voice runtime.
+- Full local model execution replacing current hosted voice runtime.
 - Broad autonomous business operations without governance review.
 
 ## Guardrails That Are Live

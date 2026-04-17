@@ -2,6 +2,8 @@ package com.adamconnectmobile
 
 import android.app.Application
 import android.content.res.Configuration
+import com.livekit.reactnative.LiveKitReactNative
+import com.livekit.reactnative.audio.AudioType
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
@@ -37,6 +39,7 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    LiveKitReactNative.setup(this, AudioType.CommunicationAudioType())
     SoLoader.init(this, OpenSourceMergedSoMapping)
     if (BuildConfig.IS_NEW_ARCHITECTURE_ENABLED) {
       load()

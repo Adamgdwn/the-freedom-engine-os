@@ -9,6 +9,7 @@ export interface StoredSettings {
   currentDeviceId?: string | null;
   autoSpeak: boolean;
   autoSendVoice: boolean;
+  voiceAutoSendPreferenceTouched?: boolean;
   responseStyle?: ResponseStyle;
   assistantVoiceId?: string | null;
   wakeControl?: WakeControl | null;

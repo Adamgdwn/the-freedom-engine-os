@@ -85,12 +85,16 @@ const mockStore = {
   sendingExternalMessage: false,
   renameDraftBySession: {},
   autoSpeak: false,
-  autoSendVoice: true,
+  autoSendVoice: false,
+  voiceAutoSendPreferenceTouched: false,
   voiceAvailable: true,
+  voiceRuntimeMode: "realtime_primary",
+  voiceRuntimeBinding: null,
   pushAvailable: false,
   pushSyncing: false,
   listening: false,
   voiceSessionActive: false,
+  voiceTargetSessionId: null,
   voiceMuted: false,
   voiceSessionPhase: "idle",
   liveTranscript: "",
@@ -270,6 +274,8 @@ describe("refresh affordances", () => {
     expect(labels).toContain("Start");
     expect(labels).toContain("Homebase");
     expect(labels).toContain("Mute");
+    expect(labels).toContain("Auto-send voice turns");
+    expect(labels).toContain("Captured turns pause for review instead of sending automatically.");
     expect(labels).toContain("Resume Thread");
   });
 });

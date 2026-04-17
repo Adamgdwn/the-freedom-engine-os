@@ -20,6 +20,12 @@ that ties business outcomes back to freedom outcomes.
    `npm run typecheck`
    `npm test`
    `npm run build`
+7. For user-visible Android mobile changes, do not stop at source validation. Ship the APK:
+   `npm run release:android-live`
+   Then confirm:
+   `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
+   `http://pop-os.taildcb5c5.ts.net:43111/install`
+   and the build-specific APK URL shown on the install page.
 
 ## Expected Outputs
 
@@ -64,6 +70,9 @@ that ties business outcomes back to freedom outcomes.
 - Phone access should reuse Adam Connect. Add this repo root to Adam Connect's
   `DESKTOP_APPROVED_ROOTS` as a comma-separated absolute path list, then launch Adam
   Connect and pair from your phone.
+- Premium mobile voice now expects the paired desktop to have `LIVEKIT_URL`,
+  `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY` configured. If those are
+  absent, the Android companion falls back to the older device STT/TTS voice path.
 - The operating rule for focus is simple:
   if a task is interesting but off-plan, the system should challenge it, park it, or turn
   it into a bounded experiment instead of silently expanding scope.

@@ -8,7 +8,12 @@ import {
   humanizeResponseStyle
 } from "@freedom/shared";
 import type { AppState } from "../store/appStore";
-import type { TtsVoiceOption } from "../services/voice/ttsService";
+import {
+  buildVoiceSelectionBadges,
+  describeVoiceOption,
+  describeVoiceOptionRecommendation,
+  shortlistVoiceOptions
+} from "../services/voice/voiceOptionPersona";
 import { isValidExternalEmail } from "../utils/externalSend";
 import { findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
 import { Banner, LabeledInput, MessageBubble, StatusChip, WorkingBubble } from "./components";
@@ -174,6 +179,7 @@ export function HostScreen(props: {
   const { store, onRefresh, bottomPadding } = props;
   const currentDevice = store.devices.find((device) => device.id === store.currentDeviceId) ?? null;
   const selectedVoice = store.assistantVoices.find((voice) => voice.id === store.selectedAssistantVoiceId) ?? null;
+  const curatedVoices = shortlistVoiceOptions(store.assistantVoices, store.selectedAssistantVoiceId, 4);
   const outboundEmail = store.hostStatus?.outboundEmail ?? null;
   const wakeConfigured = Boolean(store.wakeControl?.enabled);
   const hostOnline = store.hostStatus?.availability === "ready";
@@ -273,7 +279,7 @@ export function HostScreen(props: {
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Voice & reply loop</Text>
-        <Text style={styles.supportingText}>Keep spoken replies usable without exposing the full control plane on mobile.</Text>
+        <Text style={styles.supportingText}>Keep spoken replies usable without exposing the full control plane on mobile. Voice auto-send is on by default, but risky or unusually long spoken turns still pause for review before they run.</Text>
         <View style={styles.rowBetween}>
           <Text style={styles.metric}>Voice available</Text>
           <Text style={styles.metric}>{store.voiceAvailable ? "yes" : "no"}</Text>
@@ -288,24 +294,51 @@ export function HostScreen(props: {
         </View>
         <View style={styles.insetCard}>
           <Text style={styles.inputLabel}>Spoken Reply Voice</Text>
-          <View style={styles.optionGrid}>
+          <Text style={styles.helperText}>
+            Freedom is now only surfacing the strongest installed voices instead of the full raw list, with cues aimed at sounding less mechanical.
+          </Text>
+          <View style={styles.voiceChoiceList}>
             <Pressable
-              style={[styles.optionChip, !store.selectedAssistantVoiceId ? styles.optionChipActive : null]}
+              style={[styles.voiceChoiceCard, !store.selectedAssistantVoiceId ? styles.voiceChoiceCardActive : null]}
               onPress={() => store.selectAssistantVoice(null).catch((error) => console.warn(error))}
             >
-              <Text style={[styles.optionChipLabel, !store.selectedAssistantVoiceId ? styles.optionChipLabelActive : null]}>Automatic</Text>
+              <View style={styles.voiceChoiceHeader}>
+                <Text style={[styles.voiceChoiceTitle, !store.selectedAssistantVoiceId ? styles.voiceChoiceTitleActive : null]}>Automatic</Text>
+                <View style={[styles.voiceBadge, !store.selectedAssistantVoiceId ? styles.voiceBadgeActive : null]}>
+                  <Text style={[styles.voiceBadgeLabel, !store.selectedAssistantVoiceId ? styles.voiceBadgeLabelActive : null]}>Recommended</Text>
+                </View>
+              </View>
+              <Text style={[styles.voiceChoiceBody, !store.selectedAssistantVoiceId ? styles.voiceChoiceBodyActive : null]}>
+                Freedom will favor the richest installed English voice and keep the picker focused on the least robotic choices.
+              </Text>
             </Pressable>
-            {store.assistantVoices.map((voice) => (
+            {curatedVoices.map((voice) => (
               <Pressable
                 key={voice.id}
-                style={[styles.optionChip, store.selectedAssistantVoiceId === voice.id ? styles.optionChipActive : null]}
+                style={[styles.voiceChoiceCard, store.selectedAssistantVoiceId === voice.id ? styles.voiceChoiceCardActive : null]}
                 onPress={() => store.selectAssistantVoice(voice.id).catch((error) => console.warn(error))}
               >
-                <Text style={[styles.optionChipLabel, store.selectedAssistantVoiceId === voice.id ? styles.optionChipLabelActive : null]}>
-                  {voice.label}
-                </Text>
-                <Text style={[styles.optionChipMeta, store.selectedAssistantVoiceId === voice.id ? styles.optionChipMetaActive : null]}>
-                  {summarizeVoiceOption(voice)}
+                <View style={styles.voiceChoiceHeader}>
+                  <Text style={[styles.voiceChoiceTitle, store.selectedAssistantVoiceId === voice.id ? styles.voiceChoiceTitleActive : null]}>
+                    {voice.label}
+                  </Text>
+                </View>
+                <View style={styles.voiceBadgeRow}>
+                  {buildVoiceSelectionBadges(voice).map((badge) => (
+                    <View
+                      key={`${voice.id}-${badge}`}
+                      style={[styles.voiceBadge, store.selectedAssistantVoiceId === voice.id ? styles.voiceBadgeActive : null]}
+                    >
+                      <Text
+                        style={[styles.voiceBadgeLabel, store.selectedAssistantVoiceId === voice.id ? styles.voiceBadgeLabelActive : null]}
+                      >
+                        {badge}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={[styles.voiceChoiceBody, store.selectedAssistantVoiceId === voice.id ? styles.voiceChoiceBodyActive : null]}>
+                  {describeVoiceOptionRecommendation(voice)}
                 </Text>
               </Pressable>
             ))}
@@ -313,7 +346,7 @@ export function HostScreen(props: {
           <Text style={styles.helperText}>
             {selectedVoice
               ? `Current spoken reply voice: ${describeVoiceOption(selectedVoice)}.`
-              : "Automatic uses the phone's best available English voice. Freedom labels accent, quality, style, and any safe Android voice hints it can detect."}
+              : "Automatic now looks for the strongest available English voice instead of just showing every installed option."}
           </Text>
         </View>
         <View style={styles.insetCard}>
@@ -1184,93 +1217,4 @@ function humanizeSessionKind(kind: "operator" | "project" | "admin" | "build" | 
     default:
       return "Project";
   }
-}
-
-function describeVoiceOption(voice: TtsVoiceOption): string {
-  const details = [
-    `${humanizeVoiceLocale(voice.language)} accent`,
-    voice.backend === "react-native-tts" ? "Native Android engine" : "Expo speech engine"
-  ];
-  if (voice.qualityLabel) {
-    details.push(`${voice.qualityLabel} quality`);
-  }
-  details.push(inferVoiceGender(voice));
-
-  const style = inferVoiceStyle(voice);
-  if (style) {
-    details.push(style);
-  }
-
-  return `${voice.label} (${details.join(" • ")})`;
-}
-
-function summarizeVoiceOption(voice: TtsVoiceOption): string {
-  const details = [`${humanizeVoiceLocale(voice.language)} accent`];
-  if (voice.qualityLabel) {
-    details.push(`${voice.qualityLabel} quality`);
-  }
-  details.push(inferVoiceGender(voice));
-
-  const style = inferVoiceStyle(voice);
-  if (style) {
-    details.push(style);
-  }
-  return details.join(" • ");
-}
-
-function humanizeVoiceLocale(language: string): string {
-  const normalized = language.replace("_", "-").toLowerCase();
-  switch (normalized) {
-    case "en-us":
-      return "English US";
-    case "en-gb":
-      return "English UK";
-    case "en-au":
-      return "English AU";
-    case "en-ca":
-      return "English CA";
-    case "en-in":
-      return "English IN";
-    case "en-ie":
-      return "English IE";
-    case "en-nz":
-      return "English NZ";
-    case "en-za":
-      return "English ZA";
-    default:
-      return language.toUpperCase();
-  }
-}
-
-function inferVoiceGender(voice: TtsVoiceOption): string {
-  const haystack = `${voice.label} ${voice.nativeIdentifier ?? ""}`.toLowerCase();
-  if (/\bfemale\b|\bwoman\b|\bgirl\b/.test(haystack)) {
-    return "likely female";
-  }
-  if (/\bmale\b|\bman\b|\bboy\b/.test(haystack)) {
-    return "likely male";
-  }
-
-  return "gender not exposed";
-}
-
-function inferVoiceStyle(voice: TtsVoiceOption): string | null {
-  const haystack = `${voice.label} ${voice.nativeIdentifier ?? ""}`.toLowerCase();
-  if (/\bneural\b/.test(haystack)) {
-    return "neural style";
-  }
-  if (/\bnatural\b/.test(haystack)) {
-    return "natural style";
-  }
-  if (/\bstudio\b/.test(haystack)) {
-    return "studio style";
-  }
-  if (/\bcompact\b/.test(haystack)) {
-    return "compact style";
-  }
-  if (/\benhanced\b/.test(haystack)) {
-    return "richer style";
-  }
-
-  return null;
 }

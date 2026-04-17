@@ -35,6 +35,8 @@ jest.mock('expo-speech-recognition', () => {
       isRecognitionAvailable: jest.fn(() => true),
       getSpeechRecognitionServices: jest.fn(() => ['com.google.android.tts']),
       getDefaultRecognitionService: jest.fn(() => ({packageName: 'com.google.android.tts'})),
+      getSupportedLocales: jest.fn(async () => ({locales: ['en-US'], installedLocales: ['en-US']})),
+      androidTriggerOfflineModelDownload: jest.fn(async () => ({status: 'opened_dialog', message: 'Opened the model download dialog.'})),
       start: jest.fn(() => undefined),
       stop: jest.fn(() => undefined),
       abort: jest.fn(() => undefined),
@@ -106,3 +108,58 @@ jest.mock('react-native-permissions', () => ({
     Object.fromEntries(permissions.map(permission => [permission, 'granted'])),
   ),
 }));
+
+jest.mock('@livekit/react-native', () => ({
+  registerGlobals: jest.fn(),
+  AudioSession: {
+    configureAudio: jest.fn(async () => undefined),
+    startAudioSession: jest.fn(async () => undefined),
+    stopAudioSession: jest.fn(async () => undefined),
+  },
+  AndroidAudioTypePresets: {
+    communication: {
+      manageAudioFocus: true,
+      audioMode: 'inCommunication',
+      audioFocusMode: 'gain',
+      audioStreamType: 'voiceCall',
+      audioAttributesUsageType: 'voiceCommunication',
+      audioAttributesContentType: 'speech',
+    },
+  },
+}));
+
+jest.mock('livekit-client', () => {
+  class MockRoom {
+    constructor() {
+      this.handlers = new Map();
+      this.localParticipant = {
+        setMicrophoneEnabled: jest.fn(async () => undefined),
+        publishData: jest.fn(async () => undefined),
+      };
+    }
+
+    on(event, handler) {
+      this.handlers.set(event, handler);
+      return this;
+    }
+
+    prepareConnection = jest.fn(async () => undefined);
+    connect = jest.fn(async () => undefined);
+    disconnect = jest.fn(() => {
+      const handler = this.handlers.get('disconnected');
+      if (handler) {
+        handler();
+      }
+    });
+  }
+
+  return {
+    Room: MockRoom,
+    RoomEvent: {
+      Reconnecting: 'reconnecting',
+      Reconnected: 'reconnected',
+      Disconnected: 'disconnected',
+      DataReceived: 'dataReceived',
+    },
+  };
+});

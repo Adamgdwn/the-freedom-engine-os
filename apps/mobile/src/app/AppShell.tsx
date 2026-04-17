@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Keyboard, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Keyboard, Modal, Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { FREEDOM_PRODUCT_NAME, FREEDOM_RUNTIME_NAME } from "@freedom/shared";
 import { Banner, StatusChip } from "./components";
@@ -8,6 +8,7 @@ import { ChatScreen, HostScreen, PairingScreen, SessionsScreen, StartScreen } fr
 import type { AppState } from "../store/appStore";
 import { useAppStore } from "../store/appStore";
 import { humanizeVoiceSessionPhase } from "../services/voice/voiceSessionMachine";
+import { MOBILE_APP_VERSION_CODE, MOBILE_APP_VERSION_NAME } from "../generated/runtimeConfig";
 
 export function AppShell(): React.JSX.Element {
   const store = useAppStore();
@@ -224,6 +225,15 @@ export function AppShell(): React.JSX.Element {
                     <Text style={styles.secondaryLabel}>{controlsExpanded ? "Hide Manual Tools" : "Show Manual Tools"}</Text>
                   </Pressable>
                 </View>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.metric}>Auto-send voice turns</Text>
+                  <Switch value={store.autoSendVoice} onValueChange={() => store.toggleAutoSendVoice().catch((error) => console.warn(error))} />
+                </View>
+                <Text style={styles.mobileSheetHelper}>
+                  {store.autoSendVoice
+                    ? "Captured low-risk turns send immediately after recognition."
+                    : "Captured turns pause for review instead of sending automatically."}
+                </Text>
               </View>
 
               <View style={styles.mobileSheetSection}>
@@ -280,6 +290,19 @@ export function AppShell(): React.JSX.Element {
                 </View>
               </View>
 
+              <View style={styles.mobileSheetSection}>
+                <Text style={styles.mobileSheetSectionTitle}>About this build</Text>
+                <View style={styles.mobileSheetInfoCard}>
+                  <InfoRow label="App version" value={MOBILE_APP_VERSION_NAME} />
+                  <InfoRow label="Build code" value={String(MOBILE_APP_VERSION_CODE)} />
+                  <InfoRow label="Product" value={`${FREEDOM_PRODUCT_NAME} mobile companion`} />
+                  <InfoRow label="Voice runtime" value={humanizeVoiceRuntimeMode(store)} />
+                  <Text style={styles.mobileSheetHelper}>
+                    Use this section to confirm the phone is running the APK you expect before testing voice fixes.
+                  </Text>
+                </View>
+              </View>
+
               <Pressable
                 style={[styles.secondaryButton, styles.mobileSheetDangerButton]}
                 onPress={() => {
@@ -294,6 +317,15 @@ export function AppShell(): React.JSX.Element {
         </Pressable>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }): React.JSX.Element {
+  return (
+    <View style={styles.mobileSheetInfoRow}>
+      <Text style={styles.mobileSheetInfoLabel}>{label}</Text>
+      <Text style={styles.mobileSheetInfoValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -345,11 +377,15 @@ function humanizeVoiceStatus(store: AppState): string {
   return "Ready for voice";
 }
 
+function humanizeVoiceRuntimeMode(store: AppState): string {
+  return store.voiceRuntimeMode === "realtime_primary" ? "LiveKit + OpenAI Realtime" : "Device STT/TTS fallback";
+}
+
 function voiceActionCopy(store: AppState): { label: string; hint: string } {
   if (!store.voiceAvailable) {
     return {
       label: "Voice Unavailable",
-      hint: "This build cannot start the local speech loop yet."
+      hint: "This build cannot start the current phone voice runtime yet."
     };
   }
 

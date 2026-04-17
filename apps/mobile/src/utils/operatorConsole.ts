@@ -7,6 +7,10 @@ const RISKY_VOICE_PATTERNS = [
   /\brm\s+-rf\b/i,
   /\bsudo\b/i,
   /\bdrop table\b/i,
+  /\b(delete|remove|rename|move|replace|overwrite)\b.{0,40}\b(file|folder|directory|repo|branch|database|table|record|message|email)\b/i,
+  /\b(send|email|text|message|notify|post|publish|deploy)\b/i,
+  /\b(open|write|edit|modify|change|create)\b.{0,40}\b(file|repo|directory|folder|branch|database|table|record|service|server)\b/i,
+  /\binstall\b|\buninstall\b|\brestart\b|\breboot\b|\bshutdown\b/i,
   /```/,
   /`[^`]+`/
 ];

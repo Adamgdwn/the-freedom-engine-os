@@ -57,4 +57,9 @@ export type VoiceDataMessage =
   | { type: typeof VOICE_DATA_MESSAGE_TYPES.selfProgrammingUpdate; payload: SelfProgrammingRequestUpdate }
   | { type: typeof VOICE_DATA_MESSAGE_TYPES.personaUpdate; payload: FreedomPersonaUpdate }
   | { type: typeof VOICE_DATA_MESSAGE_TYPES.emailDraftUpdate; payload: FreedomEmailDraftUpdate }
-  | { type: typeof VOICE_DATA_MESSAGE_TYPES.transcript; text: string };
+  | {
+      type: typeof VOICE_DATA_MESSAGE_TYPES.transcript;
+      text: string;
+      source?: 'assistant' | 'user';
+      final?: boolean;
+    };

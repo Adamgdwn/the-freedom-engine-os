@@ -921,7 +921,7 @@ export const capabilityDefinitions: CapabilityDefinition[] = [
     state: 'internalized',
     internalizationStatus: 'internalized',
     runtimeCost: 'medium',
-    modelPreference: 'gpt-4o-realtime-preview',
+    modelPreference: 'gpt-realtime-mini',
     safetyNotes: 'Mic must be muted while agent audio plays. Never expose LIVEKIT_API_SECRET to the browser.',
     builderDependency: null,
     validationRecord: {

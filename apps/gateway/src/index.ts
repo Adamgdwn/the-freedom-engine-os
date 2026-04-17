@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import {
   createOutboundRecipientRequestSchema,
   createSessionRequestSchema,
+  createVoiceRuntimeSessionRequestSchema,
   hostAssistantDeltaRequestSchema,
   hostCompleteTurnRequestSchema,
   hostFailTurnRequestSchema,
@@ -219,6 +220,12 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === "POST" && url.pathname === "/voice/runtime/session") {
+      const parsed = createVoiceRuntimeSessionRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.createVoiceRuntimeSession(readBearer(req), parsed));
+      return;
+    }
+
     if (method === "POST" && url.pathname === "/host/heartbeat") {
       const parsed = hostHeartbeatRequestSchema.parse(await readJson(req));
       sendJson(res, 200, await store.heartbeat(readBearer(req), parsed));
@@ -226,7 +233,16 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === "GET" && url.pathname === "/host/work") {
-      sendJson(res, 200, await store.getNextWork(readBearer(req)));
+      const waitMs = Number(url.searchParams.get("waitMs") ?? "0");
+      const acceptQueued = url.searchParams.get("acceptQueued");
+      sendJson(
+        res,
+        200,
+        await store.getNextWork(readBearer(req), {
+          waitMs: Number.isFinite(waitMs) ? waitMs : 0,
+          acceptQueued: acceptQueued === null ? true : acceptQueued !== "0",
+        }),
+      );
       return;
     }
 

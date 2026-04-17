@@ -15,6 +15,7 @@
     "@freedom/core": "0.2.0",
     "@freedom/shared": "0.2.0",
     "dotenv": "^16.4.7",
+    "livekit-server-sdk": "^2.15.1",
     "qrcode": "^1.5.4",
     "ws": "^8.18.0"
   },

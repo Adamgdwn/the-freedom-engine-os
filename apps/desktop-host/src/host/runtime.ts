@@ -42,6 +42,8 @@ const PROCESS_AUTH_TIMEOUT_MS = 4_000;
 const PROCESS_TAILSCALE_TIMEOUT_MS = 4_000;
 const PROCESS_HEARTBEAT_TIMEOUT_MS = 4_000;
 const MAX_ACTIVE_RUNS = 2;
+const HOST_WORK_WAIT_MS = 20_000;
+const HOST_INTERRUPT_WAIT_MS = 2_000;
 
 export class DesktopHostRuntime {
   private readonly gatewayUrl = process.env.DESKTOP_GATEWAY_URL ?? "http://127.0.0.1:43111";
@@ -64,12 +66,13 @@ export class DesktopHostRuntime {
     "Claude Code",
     process.env.FREEDOM_CLAUDE_CODE_COMMAND?.trim() || null,
   );
-  private pollHandle: NodeJS.Timeout | null = null;
   private heartbeatHandle: NodeJS.Timeout | null = null;
   private hostToken: string | null = null;
   private hostId: string | null = null;
   private readonly activeRuns = new Map<string, ActiveRun>();
   private ticking = false;
+  private running = false;
+  private workLoopPromise: Promise<void> | null = null;
 
   async start(): Promise<void> {
     const localState = await this.stateStore.read();
@@ -103,13 +106,11 @@ export class DesktopHostRuntime {
 
     await this.gateway.heartbeat(registration.hostToken, { auth, tailscale });
 
-    this.pollHandle = setInterval(() => {
-      void this.tick();
-    }, 1000);
-
     this.heartbeatHandle = setInterval(() => {
       void this.syncHeartbeat();
     }, 5000);
+    this.running = true;
+    this.startWorkLoop();
 
     process.stdout.write(
       [
@@ -127,7 +128,6 @@ export class DesktopHostRuntime {
     );
 
     await this.syncHeartbeat();
-    await this.tick();
   }
 
   async getLocalState() {
@@ -135,15 +135,34 @@ export class DesktopHostRuntime {
   }
 
   stop(): void {
-    if (this.pollHandle) {
-      clearInterval(this.pollHandle);
-      this.pollHandle = null;
-    }
+    this.running = false;
     if (this.heartbeatHandle) {
       clearInterval(this.heartbeatHandle);
       this.heartbeatHandle = null;
     }
     void this.codexBridge.stop();
+  }
+
+  private startWorkLoop(): void {
+    if (this.workLoopPromise) {
+      return;
+    }
+    this.workLoopPromise = this.runWorkLoop().finally(() => {
+      this.workLoopPromise = null;
+    });
+  }
+
+  private async runWorkLoop(): Promise<void> {
+    while (this.running && this.hostToken) {
+      try {
+        await this.tick({ waitForWork: true });
+      } catch (error) {
+        process.stderr.write(
+          `[desktop-host] work loop error: ${error instanceof Error ? error.message : String(error)}\n`,
+        );
+        await delay(1_000);
+      }
+    }
   }
 
   private async syncHeartbeat(): Promise<void> {
@@ -164,7 +183,7 @@ export class DesktopHostRuntime {
     });
   }
 
-  private async tick(): Promise<void> {
+  private async tick(options?: { waitForWork?: boolean }): Promise<void> {
     if (!this.hostToken || this.ticking) {
       return;
     }
@@ -173,7 +192,11 @@ export class DesktopHostRuntime {
     try {
       const workLimit = Math.max(1, MAX_ACTIVE_RUNS - this.activeRuns.size + 1);
       for (let index = 0; index < workLimit; index += 1) {
-        const work = await this.gateway.getNextWork(this.hostToken);
+        const canAcceptQueued = this.activeRuns.size < MAX_ACTIVE_RUNS;
+        const work = await this.gateway.getNextWork(this.hostToken, {
+          waitMs: index === 0 && options?.waitForWork ? (canAcceptQueued ? HOST_WORK_WAIT_MS : HOST_INTERRUPT_WAIT_MS) : 0,
+          acceptQueued: canAcceptQueued,
+        });
         if (!work) {
           break;
         }
@@ -461,4 +484,10 @@ function parseRoots(raw: string | undefined): string[] {
     throw new Error("DESKTOP_APPROVED_ROOTS must include at least one absolute path.");
   }
   return roots;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
