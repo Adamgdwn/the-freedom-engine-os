@@ -1,4 +1,8 @@
 import type {
+  FreedomPersonaOverlay,
+  FreedomPersonaUpdate,
+} from '@/lib/freedom-persona';
+import type {
   SelfProgrammingRequest,
   SelfProgrammingRequestUpdate,
   VoiceLearningSignal,
@@ -10,10 +14,12 @@ export interface FreedomMemorySnapshot {
   tasks:               VoiceTask[];
   learningSignals:     VoiceLearningSignal[];
   programmingRequests: SelfProgrammingRequest[];
+  personaOverlays:     FreedomPersonaOverlay[];
   configured:          boolean;
 }
 
 export type FreedomMemoryUpdateRequest =
   | { channel: 'task'; update: VoiceTaskUpdate }
   | { channel: 'learning'; update: VoiceLearningUpdate }
-  | { channel: 'programming'; update: SelfProgrammingRequestUpdate };
+  | { channel: 'programming'; update: SelfProgrammingRequestUpdate }
+  | { channel: 'persona'; update: FreedomPersonaUpdate };

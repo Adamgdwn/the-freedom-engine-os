@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { FreedomPersonaOverlay } from '@/lib/freedom-persona';
 import type { FreedomMemorySnapshot, FreedomMemoryUpdateRequest } from '@/lib/freedom-memory';
 import type { SelfProgrammingRequest } from '@/lib/voice-learning';
 import type { VoiceLearningSignal } from '@/lib/voice-learning';
@@ -30,6 +31,19 @@ type ProgrammingRequestRow = {
   capability: string;
   reason: string;
   status: SelfProgrammingRequest['status'];
+  created_at: string;
+  updated_at: string;
+};
+
+type PersonaOverlayRow = {
+  id: string;
+  title: string;
+  instruction: string;
+  rationale: string;
+  source: FreedomPersonaOverlay['source'];
+  status: FreedomPersonaOverlay['status'];
+  change_type: FreedomPersonaOverlay['changeType'];
+  target_overlay_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -76,12 +90,28 @@ function mapProgrammingRequest(row: ProgrammingRequestRow): SelfProgrammingReque
   };
 }
 
+function mapPersonaOverlay(row: PersonaOverlayRow): FreedomPersonaOverlay {
+  return {
+    id: row.id,
+    title: row.title,
+    instruction: row.instruction,
+    rationale: row.rationale,
+    source: row.source,
+    status: row.status,
+    changeType: row.change_type,
+    targetOverlayId: row.target_overlay_id,
+    createdAt: toEpoch(row.created_at),
+    updatedAt: toEpoch(row.updated_at),
+  };
+}
+
 export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot> {
   if (!isSupabaseAdminConfigured()) {
     return {
       tasks:               [],
       learningSignals:     [],
       programmingRequests: [],
+      personaOverlays:     [],
       configured:          false,
     };
   }
@@ -92,6 +122,7 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
     tasksResult,
     learningSignalsResult,
     programmingRequestsResult,
+    personaOverlaysResult,
   ] = await Promise.all([
     client
       .from('freedom_voice_tasks')
@@ -108,6 +139,11 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
       .select('id, capability, reason, status, created_at, updated_at')
       .order('updated_at', { ascending: false })
       .limit(25),
+    client
+      .from('freedom_persona_overlays')
+      .select('id, title, instruction, rationale, source, status, change_type, target_overlay_id, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(25),
   ]);
 
   if (tasksResult.error) {
@@ -119,11 +155,15 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
   if (programmingRequestsResult.error) {
     throw programmingRequestsResult.error;
   }
+  if (personaOverlaysResult.error) {
+    throw personaOverlaysResult.error;
+  }
 
   return {
     tasks:               (tasksResult.data ?? []).map(mapTask),
     learningSignals:     (learningSignalsResult.data ?? []).map(mapLearningSignal),
     programmingRequests: (programmingRequestsResult.data ?? []).map(mapProgrammingRequest),
+    personaOverlays:     (personaOverlaysResult.data ?? []).map(mapPersonaOverlay),
     configured:          true,
   };
 }
@@ -206,6 +246,76 @@ export async function persistFreedomMemoryUpdate(request: FreedomMemoryUpdateReq
         updated_at: new Date().toISOString(),
       })
       .eq('id', request.update.signalId);
+    if (error) throw error;
+    return { configured: true };
+  }
+
+  if (request.channel === 'persona') {
+    if (request.update.type === 'recorded') {
+      const { error } = await client.from('freedom_persona_overlays').upsert({
+        id:                request.update.overlay.id,
+        title:             request.update.overlay.title,
+        instruction:       request.update.overlay.instruction,
+        rationale:         request.update.overlay.rationale,
+        source:            request.update.overlay.source,
+        status:            request.update.overlay.status,
+        change_type:       request.update.overlay.changeType,
+        target_overlay_id: request.update.overlay.targetOverlayId,
+        created_at:        toIso(request.update.overlay.createdAt),
+        updated_at:        toIso(request.update.overlay.updatedAt),
+      });
+      if (error) throw error;
+      return { configured: true };
+    }
+
+    if (request.update.type === 'status') {
+      const targetOverlayResult = await client
+        .from('freedom_persona_overlays')
+        .select('change_type, target_overlay_id')
+        .eq('id', request.update.overlayId)
+        .maybeSingle();
+      if (targetOverlayResult.error) throw targetOverlayResult.error;
+
+      const targetOverlay = targetOverlayResult.data as {
+        change_type: FreedomPersonaOverlay['changeType'];
+        target_overlay_id: string | null;
+      } | null;
+
+      const updatedAt = new Date().toISOString();
+      const { error } = await client
+        .from('freedom_persona_overlays')
+        .update({
+          status:     request.update.status,
+          updated_at: updatedAt,
+        })
+        .eq('id', request.update.overlayId);
+      if (error) throw error;
+
+      if (
+        request.update.status === 'approved'
+        && targetOverlay?.target_overlay_id
+        && targetOverlay.change_type !== 'new'
+      ) {
+        const { error: retireTargetError } = await client
+          .from('freedom_persona_overlays')
+          .update({
+            status:     'retired',
+            updated_at: updatedAt,
+          })
+          .eq('id', targetOverlay.target_overlay_id);
+        if (retireTargetError) throw retireTargetError;
+      }
+
+      return { configured: true };
+    }
+
+    const { error } = await client
+      .from('freedom_persona_overlays')
+      .update({
+        instruction: request.update.instruction,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', request.update.overlayId);
     if (error) throw error;
     return { configured: true };
   }

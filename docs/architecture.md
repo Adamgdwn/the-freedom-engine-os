@@ -35,6 +35,9 @@ For a fast operator-facing view of what is actually live right now, use
 - Learning Registry:
   Capability internalization tracking — state, validation records, builder dependencies,
   safety notes, and learning history at `/learning-registry`.
+- Personality:
+  Stable Freedom persona artifact, pending persona-adjustment approvals, active overlays,
+  revision/retirement requests, and resolved persona history at `/personality`.
 - Model Router:
   Local-first model tier policy, escalation request queue, provider recommendation,
   operator-selectable provider choices, and resolved decision audit trail at `/model-router`.
@@ -45,13 +48,15 @@ For a fast operator-facing view of what is actually live right now, use
 - Voice partner autonomy layer:
   The Python Freedom worker carries an explicit operating-policy prompt plus read/write
   coordination tools for open tasks, durable learning, pending programming requests,
-  trusted recipients, parked-task updates, and approval-gated email/programming actions.
+  trusted recipients, approved persona overlays, parked-task updates, and approval-gated
+  email, programming, persona-adjustment, overlay-revision, and overlay-retirement actions.
 - Persistence boundary:
   Supabase migrations under `supabase/migrations/` mirror both the original control-plane
   entities and the Freedom Connect runtime entities.
 - Durable memory layer:
   Server-only Supabase admin client, memory API routes, and local backup/restore scripts
-  preserve learning signals, parked voice tasks, and approval-gated self-programming requests.
+  preserve learning signals, parked voice tasks, approval-gated self-programming requests,
+  and approval-gated persona overlays.
 - Outbound communication layer:
   Server-side Resend delivery, Supabase-backed trusted recipients, and recent delivery
   audit records bridge the current web/voice Freedom surface to explicit external email.
@@ -77,18 +82,20 @@ For a fast operator-facing view of what is actually live right now, use
 6. The web voice lane exchanges short-lived LiveKit tokens, audio, interrupt events, and
    task-state updates between the browser and the Python Realtime worker.
 7. Voice memory updates are persisted through a server-only Next.js API into Supabase,
-   and the Python worker hydrates recent open-task, learning, programming, and recipient
-   context into the live session prompt.
-8. When Freedom prepares an external email, the Python worker publishes a draft event,
+   and the Python worker hydrates recent open-task, learning, programming, recipient,
+   and approved persona-overlay context into the live session prompt.
+8. The operator reviews persona-adjustment, revision, and retirement requests in the
+   Personality page and only approved overlays remain active runtime refinements.
+9. When Freedom prepares an external email, the Python worker publishes a draft event,
    the control plane presents it for explicit confirmation, and the server sends it
    only to a trusted recipient recorded in Supabase.
-9. Local backup and restore scripts export the durable memory tables into repo-local
+10. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
-10. Desktop-host routes non-voice work through a shared model-router policy so routine
+11. Desktop-host routes non-voice work through a shared model-router policy so routine
    read-only turns can stay on a configured local command lane while escalated work can
    use an operator-selected external lane such as `OpenAI / ChatGPT`, `Codex`, or
    `Claude Code`.
-11. Future persistence will swap the seed layer for Supabase queries while preserving the
+12. Future persistence will swap the seed layer for Supabase queries while preserving the
    same entity boundaries.
 
 ## Dependencies

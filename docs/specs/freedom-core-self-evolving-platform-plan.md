@@ -239,6 +239,18 @@
 - The operator, not Freedom, chooses the final external provider from the presented option set.
 - Every provider escalation and outcome must be audited so Freedom can learn when local was enough and when escalation was justified.
 
+## Personality Persistence
+
+- Freedom's core persona should live in a stable, versioned prompt artifact rather than only inline runtime prose.
+- Durable personality evolution should happen through approval-gated persona overlays:
+  small behavioral adjustments, communication refinements, or advisor-style lenses that do not replace the core Freedom identity.
+- Freedom may request persona adjustments when repeated interaction shows a stable benefit,
+  but it must not silently rewrite its core persona, governance posture, or safety logic.
+- Freedom should also be able to propose revision requests for existing overlays and
+  retirement requests for stale overlays. Revisions should supersede prior overlays only
+  after approval. Retirement requests should remove obsolete overlays only after approval.
+- Approved persona overlays may be injected into runtime context. Pending or denied overlays must not alter live behavior.
+
 ## Interfaces, Policies, And Runtime Contracts
 
 - Add shared capability types:

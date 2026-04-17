@@ -2,6 +2,16 @@
 
 ## 2026-04-16 (runtime router milestone pass)
 
+- extracted the core Freedom persona into a dedicated prompt artifact and stopped treating
+  the full business-partner identity as an inline string inside the Python worker
+- added a new durable persona-overlay memory channel plus approval-gated persona-adjustment
+  requests so personality refinements can persist without silently rewriting the core prompt
+- wired approved persona overlays into runtime context hydration so Freedom's style can
+  evolve in governed ways alongside learning and self-programming signals
+- added a dedicated Personality control-plane page so pending persona adjustments can be
+  approved, denied, or retired through a visible operator review surface
+- added persona-overlay lineage and retirement support so Freedom can propose revisions
+  to active overlays or retire stale ones, with supersession happening only after approval
 - added a shared model-router module and environment-backed routing config so the intended
   local-first policy is now computed from one place instead of being implied only by docs
   and seed prose

@@ -8,5 +8,6 @@
 | PR-004 | Governance Reviewer | Check proposed actions against policies, approvals, and exception records | Draft |
 | PR-005 | Weekly Review | Summarize created value, wasted effort, freedom changes, and required human judgment | Draft |
 | PR-006 | Focus Guardrail | Detect off-roadmap drift, ask whether the work advances the current north-star objective, and redirect weakly evidenced ideas into a parking lot or experiment | Draft |
-| PR-007 | Freedom Voice Partner | Voice-first operating partner prompt for LiveKit/OpenAI Realtime with interruption, topic parking, open-task review, checkpointing, and concise decision support behavior | Active |
+| PR-007 | Freedom Voice Partner | Voice-first operating partner prompt for LiveKit/OpenAI Realtime, now assembled from the stable Freedom core persona, runtime policy artifact, and runtime memory context | Active |
 | PR-008 | Conversation Learning Guardrail | Capture durable preferences, workflow friction, and focus patterns while suppressing trivial memory writes and routing any self-programming impulse through explicit approval | Active |
+| PR-009 | Freedom Core Persona | Stable co-founder-grade Freedom identity, response protocol, and governance posture loaded from a dedicated prompt artifact and adjusted only through approved overlays, revisions, and retirements | Active |

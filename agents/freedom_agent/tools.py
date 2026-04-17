@@ -141,12 +141,62 @@ def get_trusted_recipient_context(limit: int = 10) -> str:
     )
 
 
+def get_persona_overlay_context(limit: int = 8) -> str:
+    rows = _fetch_rows(
+        "freedom_persona_overlays",
+        "title,instruction,rationale,source,status,change_type,target_overlay_id",
+        limit,
+    )
+    approved_rows = [
+        row for row in rows
+        if row.get("status") == "approved" and row.get("change_type") != "retirement"
+    ]
+    if not approved_rows:
+        return ""
+
+    overlay_lines = [
+        (
+            f"- {row.get('title', 'Persona overlay')}"
+            f" [{row.get('change_type', 'new')}, {row.get('source', 'freedom')}]: "
+            f"{row.get('instruction', '')}"
+        )
+        for row in approved_rows
+    ]
+    return "Approved persona overlays:\n" + "\n".join(overlay_lines)
+
+
+def get_pending_persona_adjustment_context(limit: int = 6) -> str:
+    rows = _fetch_rows(
+        "freedom_persona_overlays",
+        "title,rationale,status,change_type,source,target_overlay_id",
+        limit,
+    )
+    pending_rows = [
+        row for row in rows
+        if row.get("status") == "pending"
+    ]
+    if not pending_rows:
+        return ""
+
+    overlay_lines = [
+        (
+            f"- {row.get('title', 'Persona adjustment')}"
+            f" [{row.get('change_type', 'new')}, {row.get('source', 'freedom')}]: "
+            f"{row.get('rationale', '')}"
+        )
+        for row in pending_rows
+    ]
+    return "Pending persona adjustments requiring approval:\n" + "\n".join(overlay_lines)
+
+
 def build_runtime_context() -> str:
     sections = [
         get_open_task_context(),
         get_learning_signal_context(),
         get_pending_programming_context(),
         get_trusted_recipient_context(),
+        get_persona_overlay_context(),
+        get_pending_persona_adjustment_context(),
     ]
     return "\n\n".join(section for section in sections if section).strip()
 
@@ -218,6 +268,20 @@ async def review_trusted_email_recipients() -> str:
     email draft.
     """
     return get_trusted_recipient_context() or "No trusted email recipients are configured right now."
+
+
+@function_tool
+async def review_persona_overlays() -> str:
+    """
+    Review approved persona overlays and pending persona-adjustment requests before
+    proposing or repeating a personality change, revision, or retirement.
+    """
+    sections = [
+        get_persona_overlay_context(),
+        get_pending_persona_adjustment_context(),
+    ]
+    message = "\n\n".join(section for section in sections if section).strip()
+    return message or "No approved or pending persona overlays are available right now."
 
 
 @function_tool
@@ -333,6 +397,110 @@ async def request_self_programming(request_id: str, capability: str, reason: str
         },
     })
     return "Self-programming request recorded for approval."
+
+
+@function_tool
+async def request_persona_adjustment(
+    overlay_id: str,
+    title: str,
+    instruction: str,
+    rationale: str,
+) -> str:
+    """
+    Request an approval-gated persona adjustment without modifying the core Freedom
+    prompt directly.
+
+    Use this for stable style refinements or behavioral overlays that should only
+    apply after approval.
+    """
+    now = int(time.time() * 1000)
+    await _publish_event({
+        "type": "persona_update",
+        "payload": {
+            "type": "recorded",
+            "overlay": {
+                "id": overlay_id,
+                "title": title,
+                "instruction": instruction,
+                "rationale": rationale,
+                "source": "freedom",
+                "status": "pending",
+                "changeType": "new",
+                "targetOverlayId": None,
+                "createdAt": now,
+                "updatedAt": now,
+            },
+        },
+    })
+    return "Persona adjustment recorded for approval."
+
+
+@function_tool
+async def request_persona_overlay_revision(
+    target_overlay_id: str,
+    overlay_id: str,
+    title: str,
+    instruction: str,
+    rationale: str,
+) -> str:
+    """
+    Request a revised persona overlay that supersedes an existing approved overlay
+    only after operator approval.
+    """
+    now = int(time.time() * 1000)
+    await _publish_event({
+        "type": "persona_update",
+        "payload": {
+            "type": "recorded",
+            "overlay": {
+                "id": overlay_id,
+                "title": title,
+                "instruction": instruction,
+                "rationale": rationale,
+                "source": "freedom",
+                "status": "pending",
+                "changeType": "revision",
+                "targetOverlayId": target_overlay_id,
+                "createdAt": now,
+                "updatedAt": now,
+            },
+        },
+    })
+    return "Persona overlay revision recorded for approval."
+
+
+@function_tool
+async def request_persona_overlay_retirement(
+    request_id: str,
+    target_overlay_id: str,
+    title: str,
+    rationale: str,
+) -> str:
+    """
+    Request retirement of an approved persona overlay when it is obsolete,
+    redundant, or counterproductive. The target overlay remains active until
+    the operator approves the retirement request.
+    """
+    now = int(time.time() * 1000)
+    await _publish_event({
+        "type": "persona_update",
+        "payload": {
+            "type": "recorded",
+            "overlay": {
+                "id": request_id,
+                "title": title,
+                "instruction": "",
+                "rationale": rationale,
+                "source": "freedom",
+                "status": "pending",
+                "changeType": "retirement",
+                "targetOverlayId": target_overlay_id,
+                "createdAt": now,
+                "updatedAt": now,
+            },
+        },
+    })
+    return "Persona overlay retirement request recorded for approval."
 
 
 @function_tool

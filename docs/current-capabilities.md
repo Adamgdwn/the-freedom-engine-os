@@ -44,19 +44,27 @@ or the boundary between modeled and fully operational capability.
 - Durable storage of parked voice tasks.
 - Durable storage of learning signals from conversation.
 - Durable storage of approval-gated self-programming requests.
+- Durable storage of persona overlays and persona-adjustment requests.
 - Supabase-backed server-side memory load and persist path.
 - Runtime read access for Freedom to inspect open tasks, recent learning signals,
-  pending self-programming requests, and trusted email recipients during voice sessions.
+  pending self-programming requests, approved persona overlays, and trusted email recipients during voice sessions.
 - Local backup and restore of memory tables through:
   `npm run backup:freedom-memory`
   `npm run restore:freedom-memory -- --input=...`
 
 ### Partner Behavior
 
-- Unified Freedom prompt across browser/runtime and Python worker.
+- Stable Freedom core persona loaded from a dedicated prompt artifact.
 - On-task redirection posture.
 - Durable learning capture during voice sessions.
 - Approval-gated self-programming requests that stop before execution.
+- Approval-gated persona-adjustment requests that do not rewrite the core persona.
+- Revision-aware persona overlays so Freedom can propose a better version of an active
+  overlay and supersede the old one only after approval.
+- Approval-gated persona-overlay retirement requests so Freedom can propose removing stale
+  or counterproductive overlays without silently dropping them.
+- Dedicated `Personality` review surface in the control plane for approving, denying,
+  denying, and retiring Freedom-originated persona overlays, revisions, and retirements.
 - Explicit operating policy for topic shifts, side questions, checkpointing,
   memory recording, and approval-gated improvement requests.
 

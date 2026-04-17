@@ -18,6 +18,11 @@ import {
   type FreedomEmailStatus,
 } from '@/lib/freedom-email';
 import {
+  applyFreedomPersonaUpdate,
+  type FreedomPersonaOverlay,
+  type FreedomPersonaUpdate,
+} from '@/lib/freedom-persona';
+import {
   MIC_CONSTRAINTS,
   VOICE_DATA_MESSAGE_TYPES,
   type VoiceDataMessage,
@@ -52,6 +57,8 @@ interface VoiceSessionValue {
   applyTaskUpdate(update: VoiceTaskUpdate): void;
   learningSignals: VoiceLearningSignal[];
   programmingRequests: SelfProgrammingRequest[];
+  personaOverlays: FreedomPersonaOverlay[];
+  updatePersonaOverlayStatus(overlayId: string, status: FreedomPersonaOverlay['status']): Promise<void>;
   emailStatus: FreedomEmailStatus;
   emailRecipients: FreedomEmailRecipient[];
   recentEmailDeliveries: FreedomEmailDelivery[];
@@ -112,6 +119,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [tasks,      setTasks]      = useState<VoiceTask[]>([]);
   const [learningSignals,    setLearningSignals]    = useState<VoiceLearningSignal[]>([]);
   const [programmingRequests, setProgrammingRequests] = useState<SelfProgrammingRequest[]>([]);
+  const [personaOverlays, setPersonaOverlays] = useState<FreedomPersonaOverlay[]>([]);
   const [emailStatus, setEmailStatus] = useState<FreedomEmailStatus>(EMPTY_EMAIL_STATUS);
   const [emailRecipients, setEmailRecipients] = useState<FreedomEmailRecipient[]>([]);
   const [recentEmailDeliveries, setRecentEmailDeliveries] = useState<FreedomEmailDelivery[]>([]);
@@ -136,6 +144,34 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       applySelfProgrammingRequestUpdate(currentRequests, update)
     ));
   }, []);
+
+  const applyPersonaOverlayUpdate = useCallback((update: FreedomPersonaUpdate) => {
+    setPersonaOverlays((currentOverlays) => applyFreedomPersonaUpdate(currentOverlays, update));
+  }, []);
+
+  const updatePersonaOverlayStatus = useCallback(async (
+    overlayId: string,
+    status: FreedomPersonaOverlay['status'],
+  ) => {
+    const update: FreedomPersonaUpdate = {
+      type: 'status',
+      overlayId,
+      status,
+    };
+
+    applyPersonaOverlayUpdate(update);
+
+    try {
+      await persistMemoryUpdate({ channel: 'persona', update });
+    } catch (error) {
+      const response = await fetch('/api/freedom-memory', { cache: 'no-store' });
+      if (response.ok) {
+        const snapshot = await response.json() as FreedomMemorySnapshot;
+        setPersonaOverlays(snapshot.personaOverlays ?? []);
+      }
+      throw error instanceof Error ? error : new Error('Freedom persona persistence failed');
+    }
+  }, [applyPersonaOverlayUpdate]);
 
   const refreshEmailState = useCallback(async () => {
     const snapshot = await fetchEmailSnapshot();
@@ -162,6 +198,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         setTasks(snapshot.tasks ?? []);
         setLearningSignals(snapshot.learningSignals ?? []);
         setProgrammingRequests(snapshot.programmingRequests ?? []);
+        setPersonaOverlays(snapshot.personaOverlays ?? []);
       } catch {
         // Keep the UI usable even if memory bootstrap is offline.
       }
@@ -359,6 +396,14 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        if (msg.type === VOICE_DATA_MESSAGE_TYPES.personaUpdate && msg.payload) {
+          applyPersonaOverlayUpdate(msg.payload);
+          void persistMemoryUpdate({ channel: 'persona', update: msg.payload }).catch(() => {
+            console.error('[voice] persona persistence failed');
+          });
+          return;
+        }
+
         if (msg.type === VOICE_DATA_MESSAGE_TYPES.emailDraftUpdate && msg.payload) {
           setPendingEmailDraft((currentDraft) => (
             applyFreedomEmailDraftUpdate(currentDraft, msg.payload)
@@ -393,7 +438,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       disconnect();
       setState('error');
     }
-  }, [applyLearningUpdate, applyProgrammingRequestUpdate, applyTaskUpdate, disconnect]);
+  }, [applyLearningUpdate, applyPersonaOverlayUpdate, applyProgrammingRequestUpdate, applyTaskUpdate, disconnect]);
 
   return (
     <VoiceSessionContext
@@ -407,6 +452,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         applyTaskUpdate,
         learningSignals,
         programmingRequests,
+        personaOverlays,
+        updatePersonaOverlayStatus,
         emailStatus,
         emailRecipients,
         recentEmailDeliveries,

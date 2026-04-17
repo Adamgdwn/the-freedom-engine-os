@@ -5,6 +5,7 @@ import {
   CalendarCheck,
   FolderSearch,
   FlaskConical,
+  Fingerprint,
   Home,
   Mail,
   ShieldCheck,
@@ -27,6 +28,7 @@ export const CONTROL_PLANE_NAVIGATION: NavigationItem[] = [
   { href: '/evidence-room', label: 'Evidence Room', shortLabel: 'Evidence', icon: FolderSearch },
   { href: '/weekly-review', label: 'Weekly Review', shortLabel: 'Weekly', icon: CalendarCheck },
   { href: '/learning-registry', label: 'Learning Registry', shortLabel: 'Learning', icon: BookOpen },
+  { href: '/personality', label: 'Personality', shortLabel: 'Persona', icon: Fingerprint },
   { href: '/model-router', label: 'Model Router', shortLabel: 'Router', icon: Shuffle },
 ];
 

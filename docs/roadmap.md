@@ -44,6 +44,13 @@
   learning signals, parked tasks, and self-programming requests cleanly
 - validate the new approval-gated autonomy loop: open-task review, side-question handling,
   topic-shift parking, and duplicate self-programming suppression behave consistently
+- validate the new personality layering: the stable core prompt stays intact, approved
+  persona overlays load correctly, and pending persona-adjustment requests do not silently change behavior
+- validate overlay lineage and retirement behavior so approved revisions supersede the prior
+  overlay cleanly and approved retirement requests remove stale refinements without drifting the core persona
+- validate the new Personality review surface end to end: Freedom-originated overlay
+  requests appear in the UI, operator approvals activate them, and retire actions remove
+  them from runtime context cleanly
 - define and validate the outcome model for build / automate / delegate / stop decisions
   so Freedom is optimizing for long-term personal and organizational freedom rather than
   just local task completion
@@ -70,6 +77,8 @@
   recommend what to document, summarize, archive, discard, and where durable artifacts belong
 - add transcript-based evals for the Freedom partner loop so parking, learning capture,
   approval-gated self-programming, and email drafting can be regression-tested
+- add evals for personality persistence and self-correction so Freedom's core stance stays
+  stable while approved persona overlays can refine behavior without drifting governance
 - add evals for “best solution” behavior so Freedom can challenge stale framing and propose
   stronger organizational or systems-level solutions when appropriate
 - add evals for documentation and retrieval behavior so Freedom can justify preserving,

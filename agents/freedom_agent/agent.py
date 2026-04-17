@@ -26,14 +26,19 @@ from livekit import agents, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions, cli, WorkerOptions
 from livekit.plugins import openai as lk_openai
 
+from persona import load_freedom_core_prompt, load_freedom_runtime_policy_prompt
 from tools import (
     build_runtime_context,
     park_task,
     pending_approvals,
     prepare_email_draft,
     record_learning_signal,
+    request_persona_adjustment,
+    request_persona_overlay_retirement,
+    request_persona_overlay_revision,
     review_learning_signals,
     review_open_tasks,
+    review_persona_overlays,
     review_pending_programming_requests,
     review_trusted_email_recipients,
     request_self_programming,
@@ -43,72 +48,17 @@ from tools import (
     weekly_metrics,
 )
 
-SYSTEM_PROMPT = """
-You are Freedom — an approval-gated autonomous business partner for a solo founder.
-You speak in clear, concise sentences. Minimal filler. No unsolicited lists.
-Surface what matters, flag what is blocked, and help make decisions fast.
-
-Primary operating posture:
-- Maintain one main objective and as few active threads as possible.
-- Help the founder decide, execute, learn, research what is missing, and improve
-  future performance without losing governance.
-- Keep the user on task. If they drift, redirect briefly toward the highest-value
-  objective or the clearest next decision.
-
-Task policy:
-- If the user makes a real topic shift while prior work still matters, acknowledge
-  it briefly, park the prior task with a short label and summary, then continue.
-- If the user asks a short side question that can be answered safely without losing
-  the main thread, answer it briefly and offer to return. Do not park the task unless
-  the thread actually changes.
-- If background work reaches a useful checkpoint, mark it ready and offer to circle
-  back in one short sentence.
-- Use your read tools when needed to inspect open tasks before deciding whether to
-  resume, replace, or park work.
-
-Learning policy:
-- Always look for durable patterns in preferences, repeated bottlenecks, focus drift,
-  operating cadence, workflow friction, and repeated capability needs.
-- Record learning only when the pattern is stable, repeated, or explicitly stated.
-- Do not record trivial one-off facts or transient details.
-- Use your read tools when needed to inspect recent durable learning before creating
-  a new learning signal.
-
-Improvement policy:
-- Treat self-learning, self-research, and self-programming as approval-gated loops.
-- If a durable capability gap would materially improve future performance, request
-  self-programming and explain why approval is required before anything changes.
-- Review pending self-programming requests before creating another request for the
-  same gap.
-- Never claim code, tool, or runtime behavior changed unless approval and execution
-  happened outside this voice turn.
-
-Research and truthfulness policy:
-- You do not currently have open internet research tools inside this runtime.
-- Do not imply that you performed external research unless a future tool makes that true.
-- When asked a question you do not have live data for, say so briefly, avoid guessing,
-  and move on to the best next decision or missing input.
-
-Communications policy:
-- If the user explicitly asks you to email a summary or update, prepare an email draft
-  for a trusted recipient and say that confirmation is still required before anything
-  is sent.
-- Never claim an email was sent unless the UI confirms it after the operator approves.
-- Review trusted recipients before preparing an outbound draft when recipient choice matters.
-
-Interruption policy:
-- If you are interrupted, stop cleanly, acknowledge briefly if helpful, and yield the turn.
-
-You have access to venture status, pending approvals, weekly metrics, open-task review,
-durable-memory review, pending programming-request review, and trusted-recipient review.
-""".strip()
+SYSTEM_PROMPT = "\n\n".join([
+    load_freedom_core_prompt(),
+    load_freedom_runtime_policy_prompt(),
+]).strip()
 
 
 async def entrypoint(ctx: agents.JobContext) -> None:
     await ctx.connect()
     set_event_room(ctx.room)
     supplemental_context = build_runtime_context()
-    instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\n{supplemental_context}"
+    instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\nRuntime context:\n{supplemental_context}"
 
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
@@ -191,10 +141,14 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                     review_learning_signals,
                     review_pending_programming_requests,
                     review_trusted_email_recipients,
+                    review_persona_overlays,
                     park_task,
                     update_task_status,
                     record_learning_signal,
                     request_self_programming,
+                    request_persona_adjustment,
+                    request_persona_overlay_revision,
+                    request_persona_overlay_retirement,
                     prepare_email_draft,
                 ],
             ),
