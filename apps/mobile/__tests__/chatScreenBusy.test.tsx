@@ -172,18 +172,35 @@ const baseStore = {
 } as unknown as AppState;
 
 describe("ChatScreen busy send state", () => {
-  test("keeps Send available while the target session is busy", async () => {
+  test("keeps the draft in the bottom bar while the target session is busy", async () => {
     let tree!: ReactTestRenderer.ReactTestRenderer;
 
     await ReactTestRenderer.act(async () => {
       tree = ReactTestRenderer.create(
-        <ChatScreen store={baseStore} onRefresh={() => undefined} keyboardInset={0} composerBottomPadding={12} manualToolsVisible />
+        <ChatScreen
+          store={baseStore}
+          onRefresh={() => undefined}
+          keyboardInset={0}
+          footerBottomPadding={12}
+          toolSheetBottomPadding={98}
+          manualToolsVisible
+          onOpenStart={() => undefined}
+          onOpenUtility={() => undefined}
+          onToggleManualTools={() => undefined}
+          onStartOrStopVoice={() => undefined}
+        />
       );
     });
 
-    const sendButton = tree.root.findByProps({ testID: "chat-send-button" });
+    const composer = tree.root.findByProps({ testID: "voice-inline-composer" });
+    const secondaryAction = tree.root.findByProps({ testID: "chat-secondary-action-button" });
+    const primaryAction = tree.root.findByProps({ testID: "chat-primary-action-button" });
+    const labels = tree.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(sendButton.props.disabled).toBe(false);
+    expect(composer.props.value).toBe("check the repo status");
+    expect(secondaryAction.props.disabled).toBe(true);
+    expect(primaryAction.props.disabled).toBe(false);
+    expect(labels).toContain("Stop");
   });
 
   test("keeps Stop enabled when another busy chat is the actual target", async () => {
@@ -210,16 +227,29 @@ describe("ChatScreen busy send state", () => {
 
     await ReactTestRenderer.act(async () => {
       tree = ReactTestRenderer.create(
-        <ChatScreen store={mismatchedStore} onRefresh={() => undefined} keyboardInset={0} composerBottomPadding={12} manualToolsVisible />
+        <ChatScreen
+          store={mismatchedStore}
+          onRefresh={() => undefined}
+          keyboardInset={0}
+          footerBottomPadding={12}
+          toolSheetBottomPadding={98}
+          manualToolsVisible
+          onOpenStart={() => undefined}
+          onOpenUtility={() => undefined}
+          onToggleManualTools={() => undefined}
+          onStartOrStopVoice={() => undefined}
+        />
       );
     });
 
-    const stopButton = tree.root.findByProps({ testID: "chat-stop-button" });
+    const primaryAction = tree.root.findByProps({ testID: "chat-primary-action-button" });
+    const labels = tree.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(stopButton.props.disabled).toBe(false);
+    expect(primaryAction.props.disabled).toBe(false);
+    expect(labels).toContain("Stop");
   });
 
-  test("keeps Stop available as a recovery action even when the selected chat is idle", async () => {
+  test("keeps typed send available from the bottom bar when the selected chat is idle", async () => {
     const idleStore = {
       ...baseStore,
       sessions: [
@@ -238,13 +268,26 @@ describe("ChatScreen busy send state", () => {
 
     await ReactTestRenderer.act(async () => {
       tree = ReactTestRenderer.create(
-        <ChatScreen store={idleStore} onRefresh={() => undefined} keyboardInset={0} composerBottomPadding={12} manualToolsVisible />
+        <ChatScreen
+          store={idleStore}
+          onRefresh={() => undefined}
+          keyboardInset={0}
+          footerBottomPadding={12}
+          toolSheetBottomPadding={98}
+          manualToolsVisible
+          onOpenStart={() => undefined}
+          onOpenUtility={() => undefined}
+          onToggleManualTools={() => undefined}
+          onStartOrStopVoice={() => undefined}
+        />
       );
     });
 
-    const stopButton = tree.root.findByProps({ testID: "chat-stop-button" });
+    const secondaryAction = tree.root.findByProps({ testID: "chat-secondary-action-button" });
+    const labels = tree.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(stopButton.props.disabled).toBe(false);
+    expect(secondaryAction.props.disabled).toBe(false);
+    expect(labels).toContain("Talk");
   });
 
   test("stays voice-first until manual tools are opened", async () => {
@@ -268,16 +311,21 @@ describe("ChatScreen busy send state", () => {
           store={voiceFirstStore}
           onRefresh={() => undefined}
           keyboardInset={0}
-          composerBottomPadding={12}
+          footerBottomPadding={12}
+          toolSheetBottomPadding={98}
           manualToolsVisible={false}
+          onOpenStart={() => undefined}
+          onOpenUtility={() => undefined}
+          onToggleManualTools={() => undefined}
+          onStartOrStopVoice={() => undefined}
         />
       );
     });
 
     const labels = tree.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Voice-first mode is on.");
-    expect(labels).not.toContain("Send");
+    expect(labels).toContain("Start talking");
+    expect(tree.root.findAllByProps({ testID: "voice-inline-composer" })).toHaveLength(0);
   });
 });
 

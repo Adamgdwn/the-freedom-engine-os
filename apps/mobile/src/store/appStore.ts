@@ -58,7 +58,7 @@ import {
   shouldInterruptAssistant
 } from "../services/voice/voiceSessionMachine";
 
-type View = "host" | "sessions" | "chat";
+type View = "start" | "host" | "sessions" | "chat";
 type EditableField =
   | "baseUrl"
   | "deviceName"
@@ -300,7 +300,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   refreshing: false,
   sendingMessage: false,
   realtimeConnected: false,
-  view: "host",
+  view: "start",
   baseUrl: DEFAULT_BASE_URL,
   deviceName: "Adam's Phone",
   pairingCode: "",
@@ -497,7 +497,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         newSessionRootPath: paired.host.approvedRoots[0] ?? "",
         realtimeConnected: false,
         notice: `${FREEDOM_PRODUCT_NAME} is paired. Your primary chat will be ready for quick turns.`,
-        view: "host"
+        view: "start"
       });
       syncPushTokenRefresh(baseUrl, paired.deviceToken, get, set);
       connectSocket(baseUrl, paired.deviceToken, set, get);
@@ -565,7 +565,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       sendingMessage: false,
       realtimeConnected: false,
       error: null,
-      view: "host"
+        view: "start"
     });
     voiceInterruptRequested = false;
   },
@@ -574,6 +574,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
     set({ refreshing: true });
     try {
+      const previousView = get().view;
       const [hostStatus, sessions, devices, outboundRecipients] = await Promise.all([
         api.getHostStatus(token, baseUrl),
         api.listSessions(token, baseUrl),
@@ -614,6 +615,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (nextSelected) {
         await get().selectSession(nextSelected);
+        if (previousView === "start") {
+          set({ view: "start" });
+        }
       } else if (hostStatus.host.approvedRoots[0]) {
         const operatorSession = await ensureOperatorSession(get, set, {
           token,
@@ -622,6 +626,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         if (operatorSession) {
           await get().selectSession(operatorSession.id);
+          if (previousView === "start") {
+            set({ view: "start" });
+          }
         }
       }
 
@@ -2214,7 +2221,7 @@ async function enterRepairMode(
     pendingExternalRequest: null,
     notice: "Saved desktop settings were kept so you can repair this link quickly.",
     error: message,
-    view: "host"
+    view: "start"
   });
   voiceInterruptRequested = false;
 }

@@ -50,8 +50,8 @@ that ties business outcomes back to freedom outcomes.
   Portfolio Home acts as a launcher, deeper routes use list/detail layouts, and the
   desktop voice surface lives in the shell instead of a decorative marketing panel.
 - The Android companion now treats the phone as command-and-capture:
-  navigation is tucked behind a menu sheet and Freedom Voice is always reachable from
-  the persistent bottom dock.
+  launch opens on a sparse Start screen, live conversation stays on a dedicated Talk
+  canvas, and secondary controls live behind the hidden utility sheet.
 - Local memory backup:
   run `npm run backup:freedom-memory`
 - Local memory restore:

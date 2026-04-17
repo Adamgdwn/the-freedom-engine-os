@@ -43,7 +43,8 @@ surface than a one-shot relay:
   though Connect still carries the runtime and transport
 - compact top bar plus menu sheet so navigation and session controls stay available
   without taking over the whole screen
-- persistent bottom Freedom Voice dock so the primary talk control is always reachable
+- sparse `Start` launch surface, dedicated `Talk` voice canvas, and a hidden utility
+  sheet so the phone behaves more like a focused voice companion than a dashboard
 
 ## What To Configure
 
@@ -87,10 +88,16 @@ The companion install page remains:
 
 - Every distributed Android build must use a unique `versionCode`.
 - Bump `versionName` whenever you want the human-visible release label to change.
-- The gateway install page should expose a build-specific APK identifier and filename so you
-  can tell at a glance which build a phone is about to install.
+- Use `npm run release:android-live` for the normal release path. It builds the Android APK,
+  publishes it to the currently live website-backed release directory, and verifies the
+  served `latest.apk` matches the local artifact.
+- If the APK is already built and only the live website needs to be refreshed, run
+  `npm run publish:android-release`.
+- The live install page should expose a build-specific APK identifier and filename so you
+  can tell at a glance which build a phone is about to install, even if `latest.apk`
+  remains as a compatibility alias.
 - Before sharing a new install link, verify the served APK matches the local release
-  artifact by size or checksum.
+  artifact by size or checksum. The publish script performs that verification automatically.
 - If a phone appears to "start where it left off" after reinstalling, check for
   preserved app storage or a restored paired device token before assuming the APK is stale.
 

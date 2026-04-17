@@ -10,8 +10,8 @@ import {
 import type { AppState } from "../store/appStore";
 import type { TtsVoiceOption } from "../services/voice/ttsService";
 import { isValidExternalEmail } from "../utils/externalSend";
-import { findManualStopTargetSession, findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
-import { Banner, LabeledInput, MessageBubble, RoboticOwlBadge, StatusChip, VoiceSessionPanel, WorkingBubble } from "./components";
+import { findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
+import { Banner, LabeledInput, MessageBubble, StatusChip, WorkingBubble } from "./components";
 import { styles } from "./mobileStyles";
 
 const keyboardDismissMode: "interactive" | "on-drag" = Platform.OS === "ios" ? "interactive" : "on-drag";
@@ -98,6 +98,74 @@ export function PairingScreen(props: {
   );
 }
 
+export function StartScreen(props: {
+  store: AppState;
+  onRefresh(): void;
+  bottomPadding: number;
+  onOpenTypedChat(): void;
+  onOpenUtility(): void;
+  onStartTalk(): void;
+}): React.JSX.Element {
+  const { store, onRefresh, bottomPadding, onOpenTypedChat, onOpenUtility, onStartTalk } = props;
+  const currentSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
+  const voiceHeadline = store.voiceAvailable ? "Start talking" : "Voice unavailable";
+  const voiceHint = currentSession?.title ?? "Freedom is ready when you are.";
+  const surfaceMessage = store.error ?? store.notice;
+  const surfaceMessageTone = store.error ? "error" : "info";
+
+  return (
+    <ScrollView
+      style={styles.screenContent}
+      contentContainerStyle={[styles.startContent, { paddingBottom: bottomPadding }]}
+      refreshControl={<RefreshControl refreshing={store.refreshing} onRefresh={onRefresh} tintColor="#0f766e" progressViewOffset={12} />}
+      {...refreshScrollInteractionProps}
+    >
+      <View style={styles.voiceSurfaceHeader}>
+        <Pressable testID="controls-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenUtility}>
+          <Text style={styles.voiceSurfaceIconGlyph}>≡</Text>
+        </Pressable>
+        <View style={styles.voiceSurfaceTitleWrap}>
+          <Text style={styles.voiceSurfaceTitle}>{FREEDOM_PRODUCT_NAME}</Text>
+          <Text style={styles.voiceSurfaceTitleAccent}>Voice</Text>
+        </View>
+        <Pressable style={styles.voiceSurfaceIconButton} onPress={onOpenUtility}>
+          <Text style={styles.voiceSurfaceIconGlyph}>⋮</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.voiceSurfaceCenter}>
+        <Text style={styles.voiceSurfaceHeadline}>{voiceHeadline}</Text>
+        <Text style={styles.voiceSurfaceSubhead}>{voiceHint}</Text>
+        {surfaceMessage ? (
+          <View
+            style={[
+              styles.voiceSurfaceStatusPill,
+              surfaceMessageTone === "error" ? styles.voiceSurfaceStatusPillError : styles.voiceSurfaceStatusPillInfo
+            ]}
+          >
+            <Text style={styles.voiceSurfaceStatusLabel}>{surfaceMessage}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={[styles.voiceSurfaceFooter, styles.startVoiceSurfaceFooter]}>
+        <Pressable style={styles.voiceSurfaceRoundButton} onPress={onOpenUtility}>
+          <Text style={styles.voiceSurfaceRoundGlyph}>+</Text>
+        </Pressable>
+        <Pressable style={styles.voiceSurfaceTypeButton} onPress={onOpenTypedChat}>
+          <Text style={styles.voiceSurfaceTypeLabel}>Type</Text>
+        </Pressable>
+        <Pressable style={styles.voiceSurfaceRoundButton} onPress={onStartTalk}>
+          <Text style={styles.voiceSurfaceRoundGlyph}>◉</Text>
+        </Pressable>
+        <Pressable style={[styles.voiceSurfaceActionButton, !store.voiceAvailable ? styles.disabledButton : null]} onPress={onStartTalk} disabled={!store.voiceAvailable}>
+          <Text style={styles.voiceSurfaceActionLabel}>{store.voiceSessionActive ? "End" : "Talk"}</Text>
+        </Pressable>
+      </View>
+    </ScrollView>
+  );
+}
+
 export function HostScreen(props: {
   store: AppState;
   onRefresh(): void;
@@ -117,23 +185,15 @@ export function HostScreen(props: {
       refreshControl={<RefreshControl refreshing={store.refreshing} onRefresh={onRefresh} tintColor="#0f766e" progressViewOffset={12} />}
       {...refreshScrollInteractionProps}
     >
-      <View style={styles.assistantStageCard}>
-        <RoboticOwlBadge compact />
+      <View style={styles.homebaseHeroCard}>
         <View style={styles.stageHeaderRow}>
-          <Text style={styles.stageEyebrow}>OWL-01</Text>
-          <Text style={styles.stageBadge}>Companion Link</Text>
+          <Text style={styles.stageEyebrow}>Homebase</Text>
+          <Text style={styles.stageBadge}>{hostOnline ? "Live" : "Attention"}</Text>
         </View>
-        <Text style={styles.stageTitle}>Freedom companion, tuned for quick oversight.</Text>
+        <Text style={styles.stageTitle}>Secondary detail stays here.</Text>
         <Text style={styles.stageBody}>
-          This phone should stay useful at a glance: connection health, voice readiness, trusted devices, and wake controls without crowding the screen.
+          Connection health, wake controls, trusted devices, and outbound setup remain available without taking over the phone’s front door.
         </Text>
-      </View>
-
-      {store.notice ? <Banner text={store.notice} tone="info" /> : null}
-      {store.error ? <Banner text={store.error} tone="error" /> : null}
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Mission Control</Text>
         <View style={styles.statusRow}>
           <StatusChip label={store.hostStatus?.host.isOnline ? "Desktop online" : "Desktop offline"} tone={store.hostStatus?.host.isOnline ? "teal" : "orange"} />
           <StatusChip
@@ -142,14 +202,38 @@ export function HostScreen(props: {
           />
           <StatusChip label={humanizeAvailability(store.hostStatus?.availability ?? "needs_attention")} tone={store.hostStatus?.availability === "ready" ? "teal" : "orange"} />
         </View>
+      </View>
+
+      {store.notice ? <Banner text={store.notice} tone="info" /> : null}
+      {store.error ? <Banner text={store.error} tone="error" /> : null}
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Mission summary</Text>
         <Text style={styles.supportingText}>{store.hostStatus?.auth.detail ?? "Waiting for desktop heartbeat."}</Text>
-        <Text style={styles.metric}>Active chats: {store.hostStatus?.activeSessionCount ?? 0}</Text>
-        <Text style={styles.metric}>Paired devices: {store.hostStatus?.pairedDeviceCount ?? 0}</Text>
-        <Text style={styles.metric}>Run state: {store.hostStatus?.runState ?? "ready"} | Repair: {store.hostStatus?.repairState ?? "healthy"}</Text>
-        <Text style={styles.metric}>Realtime link: {store.realtimeConnected ? "connected" : "reconnecting"}</Text>
+        <View style={styles.homebaseSummaryGrid}>
+          <View style={styles.homebaseSummaryTile}>
+            <Text style={styles.homebaseSummaryValue}>{store.hostStatus?.activeSessionCount ?? 0}</Text>
+            <Text style={styles.homebaseSummaryLabel}>Active chats</Text>
+          </View>
+          <View style={styles.homebaseSummaryTile}>
+            <Text style={styles.homebaseSummaryValue}>{store.hostStatus?.pairedDeviceCount ?? 0}</Text>
+            <Text style={styles.homebaseSummaryLabel}>Paired devices</Text>
+          </View>
+          <View style={styles.homebaseSummaryTile}>
+            <Text style={styles.homebaseSummaryValue}>{store.hostStatus?.runState ?? "ready"}</Text>
+            <Text style={styles.homebaseSummaryLabel}>Run state</Text>
+          </View>
+          <View style={styles.homebaseSummaryTile}>
+            <Text style={styles.homebaseSummaryValue}>{store.realtimeConnected ? "live" : "retrying"}</Text>
+            <Text style={styles.homebaseSummaryLabel}>Realtime</Text>
+          </View>
+        </View>
         <View style={styles.actions}>
           <Pressable style={styles.secondaryButton} onPress={() => store.reconnectRealtime().catch((error) => console.warn(error))}>
             <Text style={styles.secondaryLabel}>Reconnect Realtime</Text>
+          </Pressable>
+          <Pressable style={styles.secondaryButton} onPress={onRefresh}>
+            <Text style={styles.secondaryLabel}>Refresh Homebase</Text>
           </Pressable>
         </View>
       </View>
@@ -188,16 +272,8 @@ export function HostScreen(props: {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Approved Workspace Context</Text>
-        {(store.hostStatus?.host.approvedRoots ?? []).map((rootPath) => (
-          <Text key={rootPath} style={styles.rootPath}>
-            {rootPath}
-          </Text>
-        ))}
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Voice & Reply Loop</Text>
+        <Text style={styles.sectionTitle}>Voice & reply loop</Text>
+        <Text style={styles.supportingText}>Keep spoken replies usable without exposing the full control plane on mobile.</Text>
         <View style={styles.rowBetween}>
           <Text style={styles.metric}>Voice available</Text>
           <Text style={styles.metric}>{store.voiceAvailable ? "yes" : "no"}</Text>
@@ -237,7 +313,7 @@ export function HostScreen(props: {
           <Text style={styles.helperText}>
             {selectedVoice
               ? `Current spoken reply voice: ${describeVoiceOption(selectedVoice)}.`
-              : "Automatic uses the phone's best available English voice. Freedom now labels accent, quality, style, and whether Android exposes a gender hint for each voice."}
+              : "Automatic uses the phone's best available English voice. Freedom labels accent, quality, style, and any safe Android voice hints it can detect."}
           </Text>
         </View>
         <View style={styles.insetCard}>
@@ -340,7 +416,7 @@ export function HostScreen(props: {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>This Phone</Text>
         <Text style={styles.supportingText}>
-          Manage the current device name and Android background updates without leaving the operator console.
+          Rename the current device and manage Android background updates without leaving the companion.
         </Text>
         <LabeledInput
           label="Device Name"
@@ -364,8 +440,8 @@ export function HostScreen(props: {
           Push status: {!store.pushAvailable ? "This build does not include Android FCM yet." : currentDevice?.pushToken ? "Enabled" : "Not enabled"}
         </Text>
         {currentDevice ? (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Android Update Preferences</Text>
+          <View style={styles.insetCard}>
+            <Text style={styles.inputLabel}>Android Update Preferences</Text>
             {notificationEvents.map((event) => (
               <View key={event.id} style={styles.rowBetween}>
                 <View style={styles.preferenceCopy}>
@@ -396,16 +472,15 @@ export function HostScreen(props: {
         <Text style={styles.sectionTitle}>Trusted Devices</Text>
         {store.devices.length ? (
           store.devices.map((device) => (
-            <View key={device.id} style={[styles.card, styles.sessionCard]}>
+            <View key={device.id} style={styles.insetCard}>
               <View style={styles.statusRow}>
                 <Text style={device.id === store.currentDeviceId ? styles.operatorBadge : styles.kindBadge}>
                   {device.id === store.currentDeviceId ? "This Phone" : "Trusted Device"}
                 </Text>
                 {device.pushToken ? <Text style={styles.pinnedBadge}>Push Ready</Text> : null}
               </View>
-              <Text style={styles.sectionTitle}>{device.deviceName}</Text>
-              <Text style={styles.metric}>Last seen: {formatMessageTimestamp(device.lastSeenAt)}</Text>
-              <Text style={styles.metric}>Repairs: {device.repairCount}</Text>
+              <Text style={styles.metric}>{device.deviceName}</Text>
+              <Text style={styles.helperText}>Last seen: {formatMessageTimestamp(device.lastSeenAt)}</Text>
               <View style={styles.actions}>
                 <Pressable
                   style={styles.secondaryButton}
@@ -429,9 +504,14 @@ export function HostScreen(props: {
         )}
       </View>
 
-      <Pressable style={styles.secondaryButton} onPress={onRefresh}>
-        <Text style={styles.secondaryLabel}>Refresh Host</Text>
-      </Pressable>
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Approved Workspace Context</Text>
+        {(store.hostStatus?.host.approvedRoots ?? []).map((rootPath) => (
+          <Text key={rootPath} style={styles.rootPath}>
+            {rootPath}
+          </Text>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -456,27 +536,47 @@ export function SessionsScreen(props: {
       {...refreshScrollInteractionProps}
     >
       <View style={styles.assistantStageCard}>
-        <RoboticOwlBadge compact />
         <View style={styles.stageHeaderRow}>
-          <Text style={styles.stageEyebrow}>OWL-01</Text>
-          <Text style={styles.stageBadge}>Build Surface</Text>
+          <Text style={styles.stageEyebrow}>Build</Text>
+          <Text style={styles.stageBadge}>{visibleSessions.length} ready</Text>
         </View>
-        <Text style={styles.stageTitle}>Launch structured work from the phone.</Text>
+        <Text style={styles.stageTitle}>Launch or resume structured work.</Text>
         <Text style={styles.stageBody}>
-          Start a build chat, capture the outcome you want, and keep active projects moving while the desktop handles the deeper execution surface.
+          Keep project threads moving from the phone while the heavier execution surface remains on desktop.
         </Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Build Studio</Text>
-        <Text style={styles.supportingText}>Launch a new build or project chat with the goal, output, and response style already set.</Text>
-        <Text style={styles.supportingText}>{FREEDOM_RUNTIME_NAME} keeps the default `{FREEDOM_PRIMARY_SESSION_TITLE}` chat ready for fast voice turns, while this tab handles deeper build work.</Text>
+        <Text style={styles.sectionTitle}>Resume work</Text>
+        <Text style={styles.supportingText}>Open one of your active threads or search for an existing project before starting a fresh kickoff.</Text>
         <LabeledInput
           label="Find Existing Projects"
           value={searchQuery}
           onChange={setSearchQuery}
           autoCapitalize="none"
         />
+        {visibleSessions.length ? (
+          visibleSessions.slice(0, 3).map((item) => (
+            <Pressable key={item.id} style={styles.buildResumeCard} onPress={() => store.selectSession(item.id).catch((error) => console.warn(error))}>
+              <View style={styles.statusRow}>
+                {isOperatorSession(item) ? <Text style={styles.operatorBadge}>Default {FREEDOM_PRODUCT_NAME}</Text> : <Text style={styles.kindBadge}>{humanizeSessionKind(item.kind)}</Text>}
+                {item.pinned ? <Text style={styles.pinnedBadge}>Pinned</Text> : null}
+              </View>
+              <Text style={styles.buildResumeTitle}>{item.title}</Text>
+              <Text style={styles.helperText}>{item.lastPreview ?? item.rootPath}</Text>
+            </Pressable>
+          ))
+        ) : searchQuery.trim() ? (
+          <Text style={styles.metric}>No active projects match that search yet.</Text>
+        ) : (
+          <Text style={styles.metric}>No active projects yet. Launch one from an approved root.</Text>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Launch build chat</Text>
+        <Text style={styles.supportingText}>Start a new build or project thread with the goal, output, and response style already set.</Text>
+        <Text style={styles.supportingText}>{FREEDOM_RUNTIME_NAME} keeps `{FREEDOM_PRIMARY_SESSION_TITLE}` ready for fast voice turns while this surface handles deeper build work.</Text>
         <LabeledInput
           label="Build Name"
           value={store.newSessionTitle}
@@ -554,8 +654,8 @@ export function SessionsScreen(props: {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Active Projects</Text>
-        <Text style={styles.supportingText}>These are the current Freedom work threads you can reopen, rename, or clean up from the phone.</Text>
+        <Text style={styles.sectionTitle}>Manage threads</Text>
+        <Text style={styles.supportingText}>Rename, reopen, or clean up current Freedom work threads from the phone.</Text>
       </View>
 
       {visibleSessions.length ? (
@@ -605,24 +705,29 @@ export function ChatScreen(props: {
   store: AppState;
   onRefresh(): void;
   keyboardInset: number;
-  composerBottomPadding: number;
+  footerBottomPadding: number;
+  toolSheetBottomPadding: number;
   manualToolsVisible: boolean;
+  onOpenStart(): void;
+  onOpenUtility(): void;
+  onToggleManualTools(): void;
+  onStartOrStopVoice(): void;
 }): React.JSX.Element {
-  const { store, onRefresh, keyboardInset, composerBottomPadding, manualToolsVisible } = props;
+  const { store, onRefresh, keyboardInset, footerBottomPadding, toolSheetBottomPadding, manualToolsVisible, onOpenStart, onOpenUtility, onToggleManualTools, onStartOrStopVoice } = props;
   const selectedSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? null;
   const stopTargetSession = findStopTargetSession(store.selectedSessionId, store.sessions);
-  const manualStopTargetSession = findManualStopTargetSession(store.selectedSessionId, store.sessions);
   const hasSelectedSession = Boolean(store.selectedSessionId);
   const hasFallbackSession = store.sessions.length > 0;
   const canCreateFromApprovedRoot = Boolean(store.newSessionRootPath || store.hostStatus?.host.approvedRoots[0]);
+  const busy = isSessionBusy(stopTargetSession);
+  const hasDraftText = Boolean(store.composer.trim());
   const canSend = Boolean(
     (hasSelectedSession || hasFallbackSession || canCreateFromApprovedRoot) &&
       store.composer.trim().length > 0 &&
-      !store.sendingMessage
+      !store.sendingMessage &&
+      !busy
   );
   const messages = store.selectedSessionId ? store.messagesBySession[store.selectedSessionId] ?? [] : [];
-  const busy = isSessionBusy(stopTargetSession);
-  const canRequestStop = Boolean(manualStopTargetSession || store.voiceSessionActive || store.voiceAssistantDraft);
   const lastMessage = messages[messages.length - 1] ?? null;
   const lastMessageSnapshot = lastMessage ? `${lastMessage.id}:${lastMessage.status}:${lastMessage.updatedAt}:${lastMessage.content.length}` : "empty";
   const selectedExternalMessage =
@@ -637,26 +742,40 @@ export function ChatScreen(props: {
   const scrollRef = useRef<ScrollView | null>(null);
   const [stickToBottom, setStickToBottom] = useState(true);
   const [expandExternalDraft, setExpandExternalDraft] = useState(false);
-  const showChatChrome = !selectedSession || Boolean(selectedSession.lastError) || (!hasSelectedSession && hasFallbackSession);
+  const [showTranscript, setShowTranscript] = useState(false);
   const showExternalDraftCard = Boolean(store.externalDraft);
-  const showManualComposer = manualToolsVisible || Boolean(store.composer.trim()) || !store.voiceAvailable;
-  const chatHelperText = !hasFallbackSession
-    ? "Start or resume a chat before sending your first prompt."
-    : !store.voiceAvailable
-      ? "Voice needs the phone's speech recognition service. Tap the top-right mic button if Android is missing it."
+  const showInlineComposer = manualToolsVisible || hasDraftText;
+  const shouldShowTranscript = showTranscript || showExternalDraftCard;
+  const centerHeadline =
+    busy || store.sendingMessage
+      ? "Working"
       : store.voiceSessionActive
-        ? "Voice loop is active. Speak naturally, interrupt when needed, or type if you want to steer the session."
-      : null;
+        ? humanizeVoiceCenterState(store.voiceSessionPhase)
+        : store.voiceAvailable
+          ? "Start talking"
+          : "Voice unavailable";
+  const centerSubhead = store.liveTranscript
+    ? store.liveTranscript
+    : store.voiceAssistantDraft
+      ? store.voiceAssistantDraft
+      : busy || store.sendingMessage
+        ? `${FREEDOM_RUNTIME_NAME} is still working on the current request.`
+        : selectedSession?.title ?? "Talk to Freedom";
+  const surfaceMessage = store.error ?? store.notice;
+  const surfaceMessageTone = store.error ? "error" : "info";
+  const primaryActionLabel = busy || store.sendingMessage ? "Stop" : store.voiceSessionActive ? "End" : "Talk";
+  const secondaryActionGlyph = showInlineComposer && hasDraftText ? "↑" : "◉";
+  const secondaryActionDisabled = showInlineComposer && hasDraftText ? !canSend : !store.voiceAvailable;
 
   useEffect(() => {
-    if (!stickToBottom) {
+    if (!stickToBottom || !shouldShowTranscript) {
       return;
     }
     const timer = setTimeout(() => {
       scrollRef.current?.scrollToEnd({ animated: true });
     }, 50);
     return () => clearTimeout(timer);
-  }, [lastMessageSnapshot, selectedSession?.id, stickToBottom]);
+  }, [lastMessageSnapshot, selectedSession?.id, shouldShowTranscript, stickToBottom]);
 
   useEffect(() => {
     if (!store.externalDraft) {
@@ -667,12 +786,18 @@ export function ChatScreen(props: {
     setExpandExternalDraft(manualToolsVisible || !store.externalDraft.confirmationRequired);
   }, [manualToolsVisible, store.externalDraft]);
 
+  useEffect(() => {
+    if (showExternalDraftCard) {
+      setShowTranscript(true);
+    }
+  }, [showExternalDraftCard]);
+
   return (
     <View style={styles.chatScreen}>
       <ScrollView
         ref={scrollRef}
         style={styles.chatScrollArea}
-        contentContainerStyle={styles.chatScrollContent}
+        contentContainerStyle={[styles.chatScrollContent, styles.voiceScreenContent]}
         refreshControl={<RefreshControl refreshing={store.refreshing} onRefresh={onRefresh} tintColor="#0f766e" progressViewOffset={12} />}
         {...refreshScrollInteractionProps}
         onScroll={(event) => {
@@ -681,255 +806,250 @@ export function ChatScreen(props: {
           setStickToBottom(distanceFromBottom < 140);
         }}
         onContentSizeChange={() => {
-          if (stickToBottom) {
+          if (stickToBottom && shouldShowTranscript) {
             scrollRef.current?.scrollToEnd({ animated: true });
           }
         }}
         scrollEventThrottle={16}
       >
-        <View style={styles.assistantStageCard}>
-          <View style={styles.stageHeaderRow}>
-            <Text style={styles.stageEyebrow}>Freedom</Text>
-            <Text style={styles.stageBadge}>Voice-first runtime</Text>
+        <View style={styles.voiceSurfaceHeader}>
+          <Pressable style={styles.voiceSurfaceIconButton} onPress={onOpenStart}>
+            <Text style={styles.voiceSurfaceIconGlyph}>‹</Text>
+          </Pressable>
+          <View style={styles.voiceSurfaceTitleWrap}>
+            <Text style={styles.voiceSurfaceTitle}>{FREEDOM_PRODUCT_NAME}</Text>
+            <Text style={styles.voiceSurfaceTitleAccent}>Voice</Text>
           </View>
-          <Text style={styles.stageTitle}>Talk to Freedom like your operating partner.</Text>
-          <Text style={styles.stageBody}>
-            Voice is the primary surface here. Ask for the next move, interrupt when needed, or keep one issue running while you raise the next.
-          </Text>
-          <View style={styles.stageActionRow}>
-            <Pressable style={styles.secondaryButton} onPress={() => store.setView("sessions")}>
-              <Text style={styles.secondaryLabel}>Open Build</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={() => store.setView("host")}>
-              <Text style={styles.secondaryLabel}>Open Homebase</Text>
-            </Pressable>
-          </View>
+          <Pressable testID="controls-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenUtility}>
+            <Text style={styles.voiceSurfaceIconGlyph}>⋮</Text>
+          </Pressable>
         </View>
 
-        {showChatChrome ? (
-          <View style={[styles.card, styles.chatChromeCard]}>
-            <View style={styles.chatSummaryHeader}>
-              <View style={styles.chatSummaryCopy}>
-                <View style={styles.chatSummaryBadgeRow}>
-                  {selectedSession && isOperatorSession(selectedSession) ? <Text style={styles.operatorBadge}>{FREEDOM_PRODUCT_NAME}</Text> : null}
-                  {!selectedSession || isOperatorSession(selectedSession) ? null : <Text style={styles.kindBadge}>{humanizeSessionKind(selectedSession.kind)}</Text>}
-                  <Text style={styles.styleBadge}>{responseStyles.find((style) => style.id === store.responseStyle)?.label ?? "Natural"}</Text>
-                </View>
-                <Text style={styles.chatSummaryTitle}>{selectedSession?.title ?? "No chat selected"}</Text>
-                <Text style={styles.chatSummaryMetaLine} numberOfLines={2}>
-                  {selectedSession?.rootPath ??
-                    (hasFallbackSession
-                      ? "Send will resume your latest chat."
-                      : canCreateFromApprovedRoot
-                        ? "Send will create the first chat from the default root."
-                        : "Open or launch a chat first.")}
-                </Text>
-                {selectedSession?.lastError ? <Text style={styles.helperText}>{selectedSession.lastError}</Text> : null}
-              </View>
-              <StatusChip label={selectedSession ? `Status: ${selectedSession.status}` : "Waiting for a chat"} tone={selectedSession?.status === "error" ? "orange" : "teal"} />
+        <View style={styles.voiceSurfaceCenter}>
+          <Text style={styles.voiceSurfaceHeadline}>{centerHeadline}</Text>
+          <Text style={styles.voiceSurfaceSubhead} numberOfLines={shouldShowTranscript ? 3 : 2}>
+            {centerSubhead}
+          </Text>
+          {surfaceMessage ? (
+            <View
+              style={[
+                styles.voiceSurfaceStatusPill,
+                surfaceMessageTone === "error" ? styles.voiceSurfaceStatusPillError : styles.voiceSurfaceStatusPillInfo
+              ]}
+            >
+              <Text style={styles.voiceSurfaceStatusLabel}>{surfaceMessage}</Text>
             </View>
-            {!hasSelectedSession && hasFallbackSession ? (
-              <Pressable style={[styles.secondaryButton, styles.chatResumeButton]} onPress={() => store.selectSession(store.sessions[0].id).catch((error) => console.warn(error))}>
-                <Text style={styles.secondaryLabel}>Resume Latest Chat</Text>
+          ) : null}
+        </View>
+
+        {shouldShowTranscript ? (
+          <View style={styles.voiceTranscriptPanel}>
+            <View style={styles.voiceTranscriptHeader}>
+              <Text style={styles.voiceTranscriptTitle}>{selectedSession?.title ?? "Conversation"}</Text>
+              <Pressable
+                style={styles.voiceTranscriptToggle}
+                onPress={() => {
+                  if (!hasSelectedSession && store.sessions[0]) {
+                    store.selectSession(store.sessions[0].id).catch((error) => console.warn(error));
+                  }
+                  setShowTranscript(false);
+                }}
+              >
+                <Text style={styles.voiceTranscriptToggleLabel}>Hide</Text>
               </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        <VoiceSessionPanel
-          active={store.voiceSessionActive}
-          phase={store.voiceSessionPhase}
-          liveTranscript={store.liveTranscript}
-          assistantDraft={store.voiceAssistantDraft}
-          audioLevel={store.voiceAudioLevel}
-          notice={store.notice}
-          selectedVoiceLabel={
-            store.selectedAssistantVoiceId
-              ? store.assistantVoices.find((voice) => voice.id === store.selectedAssistantVoiceId)?.label ?? null
-              : null
-          }
-          telemetry={store.voiceTelemetry}
-        />
-
-        <View style={styles.messages}>
-          {messages.length > 0 ? (
-            messages.map((item) => (
-              <MessageBubble
-                key={item.id}
-                message={item}
-                actionLabel={item.role === "assistant" && item.status === "completed" ? "Email this reply" : undefined}
-                onActionPress={
-                  item.role === "assistant" && item.status === "completed"
-                    ? () => store.beginExternalMessageDraft(item.id, item.sessionId)
-                    : undefined
+            </View>
+            <View style={styles.messages}>
+            {messages.length > 0 ? (
+              messages.map((item) => (
+                <MessageBubble
+                  key={item.id}
+                  message={item}
+                  actionLabel={item.role === "assistant" && item.status === "completed" ? "Email this reply" : undefined}
+                  onActionPress={
+                    item.role === "assistant" && item.status === "completed"
+                      ? () => store.beginExternalMessageDraft(item.id, item.sessionId)
+                      : undefined
+                  }
+                />
+              ))
+            ) : (
+              <Text style={styles.metric}>Open a chat to see message history.</Text>
+            )}
+            {busy || store.sendingMessage ? (
+              <WorkingBubble
+                label={
+                  store.sendingMessage
+                    ? `${FREEDOM_RUNTIME_NAME} is sending your turn to the desktop.`
+                    : `${FREEDOM_RUNTIME_NAME} is still working, but you can interrupt, ask a side question, or queue the next task.`
                 }
               />
-            ))
-          ) : (
-            <Text style={styles.metric}>Open a chat to see message history.</Text>
-          )}
-          {busy || store.sendingMessage ? (
-            <WorkingBubble
-              label={
-                store.sendingMessage
-                  ? `${FREEDOM_RUNTIME_NAME} is sending your turn to the desktop.`
-                  : `${FREEDOM_RUNTIME_NAME} is still working, but you can interrupt, ask a side question, or queue the next task.`
-              }
-            />
-          ) : null}
-        </View>
-      </ScrollView>
-
-      {showExternalDraftCard || showManualComposer ? (
-        <View style={[styles.card, styles.chatComposerCard, { marginBottom: composerBottomPadding + keyboardInset }]}>
-        {store.externalDraft ? (
-          <View style={styles.insetCard}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.sectionTitle}>Send Externally</Text>
-              {store.externalDraft.confirmationRequired ? (
-                <Pressable style={styles.secondaryButton} onPress={() => setExpandExternalDraft((value) => !value)}>
-                  <Text style={styles.secondaryLabel}>{expandExternalDraft ? "Collapse" : "Edit"}</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            <Text style={styles.supportingText}>
-              {selectedExternalMessage
-                ? store.externalDraft.confirmationRequired
-                  ? `${FREEDOM_RUNTIME_NAME} prepared this email draft from your conversation and is waiting for a final confirmation before it sends.`
-                  : `You are sending a completed ${FREEDOM_PRODUCT_NAME} reply from this chat to an email recipient.`
-                : `Select a completed ${FREEDOM_PRODUCT_NAME} reply before sending it externally.`}
-            </Text>
-            {selectedExternalMessage ? (
-              <Text style={styles.helperText} numberOfLines={3}>
-                {selectedExternalMessage.content.trim().replace(/\s+/g, " ")}
-              </Text>
             ) : null}
-            <View style={styles.optionGrid}>
-              {store.outboundRecipients.map((recipient) => (
-                <Pressable
-                  key={recipient.id}
-                  style={[styles.optionChip, store.externalDraft?.recipientId === recipient.id ? styles.optionChipActive : null]}
-                  onPress={() => store.updateExternalDraft("recipientId", recipient.id)}
-                >
-                  <Text
-                    style={[styles.optionChipLabel, store.externalDraft?.recipientId === recipient.id ? styles.optionChipLabelActive : null]}
-                  >
-                    {recipient.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            {!store.outboundRecipients.length ? (
-              <Text style={styles.helperText}>Add at least one trusted recipient from Overview first.</Text>
-            ) : null}
-            {store.externalDraft.confirmationRequired ? (
-              <Text style={styles.helperText}>
-                You can confirm by voice with “yes, send it” or cancel with “cancel”. The edit fields stay open below if you want to adjust the draft manually.
-              </Text>
-            ) : null}
-            {!expandExternalDraft ? (
-              <View style={styles.insetCard}>
-                <Text style={styles.metric}>To: {store.externalDraft.recipientDestination || "Choose recipient"}</Text>
-                <Text style={styles.metric}>Subject: {store.externalDraft.subject || "Add subject"}</Text>
-              </View>
-            ) : (
-              <>
-                <LabeledInput
-                  label="Recipient Email"
-                  value={store.externalDraft.recipientDestination}
-                  onChange={(value) => store.updateExternalDraft("recipientDestination", value)}
-                  autoCapitalize="none"
-                  placeholder="name@example.com"
-                />
-                <LabeledInput
-                  label="Email Subject"
-                  value={store.externalDraft.subject}
-                  onChange={(value) => store.updateExternalDraft("subject", value)}
-                  autoCapitalize="sentences"
-                />
-                <LabeledInput
-                  label="Intro"
-                  value={store.externalDraft.intro}
-                  onChange={(value) => store.updateExternalDraft("intro", value)}
-                  autoCapitalize="sentences"
-                  multiline
-                  placeholder={`Optional note before the ${FREEDOM_PRODUCT_NAME} output...`}
-                />
-              </>
-            )}
-            <View style={styles.actions}>
-              <Pressable style={styles.secondaryButton} onPress={() => store.cancelExternalMessageDraft()}>
-                <Text style={styles.secondaryLabel}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.primaryButton, !canSendExternal ? styles.disabledButton : null]}
-                disabled={!canSendExternal}
-                onPress={() => store.sendExternalMessage().catch((error) => console.warn(error))}
-              >
-                <Text style={styles.primaryLabel}>{store.sendingExternalMessage ? "Sending..." : "Send Email"}</Text>
-              </Pressable>
             </View>
           </View>
-        ) : null}
-        {showManualComposer ? (
-          <>
-            <TextInput
-              value={store.composer}
-              onChangeText={(value) => store.setField("composer", value)}
-              placeholder={`Ask ${FREEDOM_PRODUCT_NAME} something about this repo...`}
-              placeholderTextColor="#64748b"
-              multiline
-              style={[styles.composer, Platform.OS === "android" ? styles.composerCompact : null]}
-            />
-            <View style={[styles.actions, styles.chatComposerActions]}>
-              <Pressable
-                testID="chat-stop-button"
-                style={[styles.secondaryButton, styles.chatComposerActionButton, !canRequestStop ? styles.disabledButton : null]}
-                onPress={() => store.stopSession().catch((error) => console.warn(error))}
-                disabled={!canRequestStop}
-              >
-                <Text style={styles.secondaryLabel}>Stop</Text>
-              </Pressable>
-              <Pressable
-                testID="chat-send-button"
-                style={[styles.primaryButton, styles.chatComposerActionButton, !canSend ? styles.disabledButton : null]}
-                onPress={() => store.sendMessage().catch((error) => console.warn(error))}
-                disabled={!canSend}
-              >
-                <Text style={styles.primaryLabel}>Send</Text>
-              </Pressable>
-            </View>
-          </>
         ) : (
-          <Pressable
-            testID="chat-stop-button"
-            style={[styles.secondaryButton, styles.chatComposerActionButton, !canRequestStop ? styles.disabledButton : null]}
-            onPress={() => store.stopSession().catch((error) => console.warn(error))}
-            disabled={!canRequestStop}
-          >
-            <Text style={styles.secondaryLabel}>Stop</Text>
+          <Pressable style={styles.voicePeekPill} onPress={() => setShowTranscript(true)}>
+            <Text style={styles.voicePeekTitle}>{selectedSession?.title ?? "Ready for a new turn"}</Text>
+            <Text style={styles.voicePeekMeta} numberOfLines={1}>
+              {busy || store.sendingMessage
+                ? "Freedom is still working"
+                : summarizeThreadPeek(selectedSession, lastMessage, hasFallbackSession, canCreateFromApprovedRoot)}
+            </Text>
           </Pressable>
         )}
-        {busy ? <Text style={styles.helperText}>Stop targets the currently busy chat, even if you are viewing a different thread.</Text> : null}
-        {!busy && canRequestStop ? <Text style={styles.helperText}>Stop can also be used as a recovery action if this chat feels stuck.</Text> : null}
-        {chatHelperText ? <Text style={styles.helperText}>{chatHelperText}</Text> : null}
-        </View>
-      ) : (
-        <View style={[styles.card, styles.voiceFirstFooterCard, { marginBottom: composerBottomPadding + keyboardInset }]}>
-          <Text style={styles.metric}>Voice-first mode is on.</Text>
-          <Text style={styles.helperText}>Manual text and email tools stay available below whenever you need them.</Text>
-          {canRequestStop ? (
-            <Pressable
-              testID="chat-stop-button"
-              style={[styles.secondaryButton, styles.chatComposerActionButton]}
-              onPress={() => store.stopSession().catch((error) => console.warn(error))}
-            >
-              <Text style={styles.secondaryLabel}>Stop</Text>
-            </Pressable>
+      </ScrollView>
+
+      {showExternalDraftCard ? (
+        <View style={[styles.voiceToolSheet, { marginBottom: toolSheetBottomPadding }]}>
+          {store.externalDraft ? (
+            <View style={styles.insetCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.sectionTitle}>Send Externally</Text>
+                {store.externalDraft.confirmationRequired ? (
+                  <Pressable style={styles.secondaryButton} onPress={() => setExpandExternalDraft((value) => !value)}>
+                    <Text style={styles.secondaryLabel}>{expandExternalDraft ? "Collapse" : "Edit"}</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+              <Text style={styles.supportingText}>
+                {selectedExternalMessage
+                  ? store.externalDraft.confirmationRequired
+                    ? `${FREEDOM_RUNTIME_NAME} prepared this email draft from your conversation and is waiting for a final confirmation before it sends.`
+                    : `You are sending a completed ${FREEDOM_PRODUCT_NAME} reply from this chat to an email recipient.`
+                  : `Select a completed ${FREEDOM_PRODUCT_NAME} reply before sending it externally.`}
+              </Text>
+              {selectedExternalMessage ? (
+                <Text style={styles.helperText} numberOfLines={3}>
+                  {selectedExternalMessage.content.trim().replace(/\s+/g, " ")}
+                </Text>
+              ) : null}
+              <View style={styles.optionGrid}>
+                {store.outboundRecipients.map((recipient) => (
+                  <Pressable
+                    key={recipient.id}
+                    style={[styles.optionChip, store.externalDraft?.recipientId === recipient.id ? styles.optionChipActive : null]}
+                    onPress={() => store.updateExternalDraft("recipientId", recipient.id)}
+                  >
+                    <Text
+                      style={[styles.optionChipLabel, store.externalDraft?.recipientId === recipient.id ? styles.optionChipLabelActive : null]}
+                    >
+                      {recipient.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              {!store.outboundRecipients.length ? (
+                <Text style={styles.helperText}>Add at least one trusted recipient from Overview first.</Text>
+              ) : null}
+              {store.externalDraft.confirmationRequired ? (
+                <Text style={styles.helperText}>
+                  You can confirm by voice with “yes, send it” or cancel with “cancel”. The edit fields stay open below if you want to adjust the draft manually.
+                </Text>
+              ) : null}
+              {!expandExternalDraft ? (
+                <View style={styles.insetCard}>
+                  <Text style={styles.metric}>To: {store.externalDraft.recipientDestination || "Choose recipient"}</Text>
+                  <Text style={styles.metric}>Subject: {store.externalDraft.subject || "Add subject"}</Text>
+                </View>
+              ) : (
+                <>
+                  <LabeledInput
+                    label="Recipient Email"
+                    value={store.externalDraft.recipientDestination}
+                    onChange={(value) => store.updateExternalDraft("recipientDestination", value)}
+                    autoCapitalize="none"
+                    placeholder="name@example.com"
+                  />
+                  <LabeledInput
+                    label="Email Subject"
+                    value={store.externalDraft.subject}
+                    onChange={(value) => store.updateExternalDraft("subject", value)}
+                    autoCapitalize="sentences"
+                  />
+                  <LabeledInput
+                    label="Intro"
+                    value={store.externalDraft.intro}
+                    onChange={(value) => store.updateExternalDraft("intro", value)}
+                    autoCapitalize="sentences"
+                    multiline
+                    placeholder={`Optional note before the ${FREEDOM_PRODUCT_NAME} output...`}
+                  />
+                </>
+              )}
+              <View style={styles.actions}>
+                <Pressable style={styles.secondaryButton} onPress={() => store.cancelExternalMessageDraft()}>
+                  <Text style={styles.secondaryLabel}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.primaryButton, !canSendExternal ? styles.disabledButton : null]}
+                  disabled={!canSendExternal}
+                  onPress={() => store.sendExternalMessage().catch((error) => console.warn(error))}
+                >
+                  <Text style={styles.primaryLabel}>{store.sendingExternalMessage ? "Sending..." : "Send Email"}</Text>
+                </Pressable>
+              </View>
+            </View>
           ) : null}
-          {chatHelperText ? <Text style={styles.helperText}>{chatHelperText}</Text> : null}
         </View>
-      )}
+      ) : null}
+
+      <View style={[styles.voiceSurfaceFooter, { marginBottom: footerBottomPadding }]}>
+        <Pressable style={styles.voiceSurfaceRoundButton} onPress={onOpenUtility}>
+          <Text style={styles.voiceSurfaceRoundGlyph}>+</Text>
+        </Pressable>
+        {showInlineComposer ? (
+          <TextInput
+            testID="voice-inline-composer"
+            value={store.composer}
+            onChangeText={(value) => store.setField("composer", value)}
+            placeholder="Type"
+            placeholderTextColor="#a1a1aa"
+            autoCapitalize="sentences"
+            autoCorrect
+            returnKeyType="send"
+            style={styles.voiceSurfaceInlineComposer}
+            onSubmitEditing={() => {
+              if (canSend) {
+                store.sendMessage().catch((error) => console.warn(error));
+              }
+            }}
+          />
+        ) : (
+          <Pressable style={styles.voiceSurfaceTypeButton} onPress={onToggleManualTools}>
+            <Text style={styles.voiceSurfaceTypeLabel}>Type</Text>
+          </Pressable>
+        )}
+        <Pressable
+          testID="chat-secondary-action-button"
+          style={[styles.voiceSurfaceRoundButton, secondaryActionDisabled ? styles.disabledButton : null]}
+          onPress={() => {
+            if (showInlineComposer && hasDraftText) {
+              store.sendMessage().catch((error) => console.warn(error));
+              return;
+            }
+            onStartOrStopVoice();
+          }}
+          disabled={secondaryActionDisabled}
+        >
+          <Text style={styles.voiceSurfaceRoundGlyph}>{secondaryActionGlyph}</Text>
+        </Pressable>
+        <Pressable
+          testID="chat-primary-action-button"
+          style={[
+            styles.voiceSurfaceActionButton,
+            !busy && !store.sendingMessage && !store.voiceAvailable ? styles.disabledButton : null
+          ]}
+          onPress={() => {
+            if (busy || store.sendingMessage) {
+              store.stopSession().catch((error) => console.warn(error));
+              return;
+            }
+            onStartOrStopVoice();
+          }}
+          disabled={!busy && !store.sendingMessage && !store.voiceAvailable}
+        >
+          <Text style={styles.voiceSurfaceActionLabel}>{primaryActionLabel}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -961,6 +1081,57 @@ function humanizeAvailability(value: "ready" | "offline" | "reconnecting" | "rep
     default:
       return "Needs attention";
   }
+}
+
+function humanizeVoiceCenterState(phase: AppState["voiceSessionPhase"]): string {
+  switch (phase) {
+    case "assistant-speaking":
+      return "Speaking";
+    case "processing":
+      return "Thinking";
+    case "listening":
+    case "user-speaking":
+      return "Listening";
+    case "muted":
+      return "Muted";
+    case "reconnecting":
+      return "Reconnecting";
+    case "review":
+      return "Reviewing";
+    case "error":
+      return "Voice error";
+    default:
+      return "Start talking";
+  }
+}
+
+function summarizeThreadPeek(
+  session: AppState["sessions"][number] | null,
+  lastMessage: AppState["messagesBySession"][string][number] | null,
+  hasFallbackSession: boolean,
+  canCreateFromApprovedRoot: boolean
+): string {
+  if (session?.lastPreview) {
+    return session.lastPreview;
+  }
+
+  if (lastMessage?.content) {
+    return lastMessage.content.trim().replace(/\s+/g, " ").slice(0, 180);
+  }
+
+  if (session?.rootPath) {
+    return session.rootPath;
+  }
+
+  if (hasFallbackSession) {
+    return "Resume your latest thread to bring the conversation context back into view.";
+  }
+
+  if (canCreateFromApprovedRoot) {
+    return "Start the first chat from the approved workspace root, then come back here to continue by voice.";
+  }
+
+  return "Open or launch a chat first.";
 }
 
 const notificationEvents: Array<{

@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { FREEDOM_PRODUCT_NAME, FREEDOM_RUNTIME_NAME } from "@freedom/shared";
 import { Banner, StatusChip } from "./components";
 import { styles } from "./mobileStyles";
-import { ChatScreen, HostScreen, PairingScreen, SessionsScreen } from "./screens";
+import { ChatScreen, HostScreen, PairingScreen, SessionsScreen, StartScreen } from "./screens";
 import type { AppState } from "../store/appStore";
 import { useAppStore } from "../store/appStore";
 import { humanizeVoiceSessionPhase } from "../services/voice/voiceSessionMachine";
@@ -52,24 +52,15 @@ export function AppShell(): React.JSX.Element {
     selectSession(store.selectedSessionId).catch((error) => console.warn(error));
   }, [selectSession, selectedMessageCount, store.selectedSessionId, store.token]);
 
+  const activeSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
   const keyboardInset = store.view === "sessions" || store.view === "chat" ? keyboardHeight : 0;
-  const screenBottomPadding = Math.max(insets.bottom, 16) + keyboardInset + 96;
-  const composerBottomPadding = Math.max(insets.bottom, 12) + 86;
+  const startBottomPadding = Math.max(insets.bottom, 16) + 16;
+  const screenBottomPadding = Math.max(insets.bottom, 16) + keyboardInset + 112;
+  const footerBottomPadding = keyboardInset > 0 ? keyboardInset + 12 : Math.max(insets.bottom, 12);
+  const toolSheetBottomPadding = footerBottomPadding + 86;
   const voiceStatus = humanizeVoiceStatus(store);
-  const chatHeaderSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
-  const headerTitle =
-    store.view === "chat"
-      ? chatHeaderSession?.title ?? "Talk"
-      : store.view === "sessions"
-        ? "Build"
-        : "Homebase";
-  const headerSubtitle =
-    store.view === "chat"
-      ? "Voice-first operator link"
-      : store.view === "sessions"
-        ? `${store.sessions.length} project chats ready`
-        : store.hostStatus?.host.hostName ?? "Desktop oversight";
   const voiceCta = voiceActionCopy(store);
+  const showGlobalBanners = store.view === "host" || store.view === "sessions";
 
   if (store.booting) {
     return (
@@ -91,100 +82,85 @@ export function AppShell(): React.JSX.Element {
     );
   }
 
-  const handleNavPress = (view: "host" | "sessions" | "chat") => {
-    if (view !== "chat") {
-      store.setView(view);
-      return;
+  const handleNavPress = (view: "start" | "host" | "sessions" | "chat") => {
+    if (view === "chat") {
+      const targetSessionId = store.selectedSessionId ?? store.sessions[0]?.id;
+      if (targetSessionId) {
+        store.selectSession(targetSessionId).catch((error) => console.warn(error));
+        return;
+      }
     }
 
-    const targetSessionId = store.selectedSessionId ?? store.sessions[0]?.id;
-    if (targetSessionId) {
-      store.selectSession(targetSessionId).catch((error) => console.warn(error));
-      return;
-    }
-
-    store.setView("chat");
+    store.setView(view);
   };
 
   const handleTalkPress = () => {
     if (store.view !== "chat") {
-      store.setView("chat");
+      handleNavPress("chat");
     }
     store.toggleListening().catch((error) => console.warn(error));
   };
 
+  const handleResumeSession = (sessionId: string) => {
+    store.selectSession(sessionId).catch((error) => console.warn(error));
+  };
+
+  const handleOpenTypedChat = () => {
+    setControlsExpanded(true);
+    handleNavPress("chat");
+  };
+
+  const handleOpenUtility = () => {
+    setMenuOpen(true);
+  };
+
+  const handleBackToStart = () => {
+    setControlsExpanded(false);
+    store.setView("start");
+  };
+
   return (
-    <SafeAreaView style={styles.root} edges={["top", "left", "right", "bottom"]}>
+      <SafeAreaView style={styles.root} edges={["top", "left", "right", "bottom"]}>
       <View style={styles.mobileShell}>
-        <View style={styles.mobileTopBar}>
-          <View style={styles.mobileIdentity}>
-            <Pressable testID="controls-toggle" style={styles.mobileQuickAction} onPress={() => setMenuOpen(true)}>
-              <Text style={styles.mobileQuickActionLabel}>≡</Text>
-            </Pressable>
-            <View style={styles.mobileIdentityCopy}>
-              <Text style={styles.mobileIdentityTitle}>{headerTitle}</Text>
-              <Text style={styles.mobileIdentitySubtitle}>
-                {headerSubtitle} · {store.realtimeConnected ? "Live sync on" : "Reconnecting"}
-              </Text>
-            </View>
+        {showGlobalBanners ? (
+          <View style={styles.mobileBannerStack}>
+            {store.notice ? <Banner text={store.notice} tone="info" /> : null}
+            {store.error ? <Banner text={store.error} tone="error" /> : null}
           </View>
-          <View style={styles.mobileQuickActions}>
-            <Pressable
-              style={[styles.mobileQuickAction, store.refreshing ? styles.disabledButton : null]}
-              onPress={() => store.refresh().catch((error) => console.warn(error))}
-              disabled={store.refreshing}
-            >
-              <Text style={styles.mobileQuickActionLabel}>↻</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.mobileQuickAction, !store.voiceAvailable ? styles.warningButton : null]}
-              onPress={handleTalkPress}
-            >
-              <Text style={[styles.mobileQuickActionText, !store.voiceAvailable ? styles.warningButtonLabel : null]}>
-                {store.voiceSessionActive ? "Live" : "Voice"}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.mobileStatusStrip}>
-          <StatusChip label={store.hostStatus?.host.isOnline ? "Desktop online" : "Desktop offline"} tone={store.hostStatus?.host.isOnline ? "teal" : "orange"} />
-          <StatusChip label={humanizeCodexState(store.hostStatus?.auth.status ?? "logged_out")} tone={store.hostStatus?.auth.status === "logged_in" ? "teal" : "orange"} />
-          <StatusChip label={voiceStatus} tone={store.voiceAvailable ? "teal" : "orange"} />
-        </View>
-
-        {store.notice ? <Banner text={store.notice} tone="info" /> : null}
-        {store.error ? <Banner text={store.error} tone="error" /> : null}
+        ) : null}
 
         <View style={styles.mobileViewport}>
-          {store.view === "host" ? <HostScreen store={store} onRefresh={() => store.refresh().catch((error) => console.warn(error))} bottomPadding={screenBottomPadding} /> : null}
-          {store.view === "sessions" ? <SessionsScreen store={store} onRefresh={() => store.refresh().catch((error) => console.warn(error))} bottomPadding={screenBottomPadding} /> : null}
+          {store.view === "start" ? (
+            <StartScreen
+              store={store}
+              bottomPadding={startBottomPadding}
+              onRefresh={() => store.refresh().catch((error) => console.warn(error))}
+              onOpenTypedChat={handleOpenTypedChat}
+              onOpenUtility={handleOpenUtility}
+              onStartTalk={handleTalkPress}
+            />
+          ) : null}
+          {store.view === "host" ? (
+            <HostScreen store={store} onRefresh={() => store.refresh().catch((error) => console.warn(error))} bottomPadding={screenBottomPadding} />
+          ) : null}
+          {store.view === "sessions" ? (
+            <SessionsScreen store={store} onRefresh={() => store.refresh().catch((error) => console.warn(error))} bottomPadding={screenBottomPadding} />
+          ) : null}
           {store.view === "chat" ? (
             <ChatScreen
               store={store}
               onRefresh={() => store.refresh().catch((error) => console.warn(error))}
               keyboardInset={keyboardInset}
-              composerBottomPadding={composerBottomPadding}
+              footerBottomPadding={footerBottomPadding}
+              toolSheetBottomPadding={toolSheetBottomPadding}
               manualToolsVisible={controlsExpanded}
+              onOpenStart={handleBackToStart}
+              onOpenUtility={handleOpenUtility}
+              onToggleManualTools={() => setControlsExpanded((value) => !value)}
+              onStartOrStopVoice={handleTalkPress}
             />
           ) : null}
         </View>
-      </View>
-
-      <View style={[styles.mobileVoiceDock, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <Pressable
-          style={[styles.mobileVoiceButton, !store.voiceAvailable ? styles.warningButton : null]}
-          onPress={handleTalkPress}
-        >
-          <View style={styles.mobileVoiceButtonCopy}>
-            <Text style={styles.mobileVoiceButtonEyebrow}>Freedom Voice</Text>
-            <Text style={[styles.mobileVoiceButtonTitle, !store.voiceAvailable ? styles.warningButtonLabel : null]}>
-              {voiceCta.label}
-            </Text>
-            <Text style={styles.mobileVoiceButtonHint}>{voiceCta.hint}</Text>
-          </View>
-          <Text style={styles.mobileVoiceButtonGlyph}>{store.voiceSessionActive ? "■" : "●"}</Text>
-        </Pressable>
       </View>
 
       <Modal visible={menuOpen} animationType="slide" transparent onRequestClose={() => setMenuOpen(false)}>
@@ -194,13 +170,13 @@ export function AppShell(): React.JSX.Element {
             <View style={styles.mobileSheetHeader}>
               <Text style={styles.mobileSheetEyebrow}>{FREEDOM_RUNTIME_NAME}</Text>
               <Text style={styles.mobileSheetTitle}>{FREEDOM_PRODUCT_NAME}</Text>
-              <Text style={styles.mobileSheetSubtitle}>Phone = command and capture. Desktop = build and govern.</Text>
+              <Text style={styles.mobileSheetSubtitle}>Voice-first operator link with build and status details behind a calmer utility layer.</Text>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mobileSheetScroll}>
               <View style={styles.mobileSheetSection}>
                 <Text style={styles.mobileSheetSectionTitle}>Destinations</Text>
-                {(["chat", "sessions", "host"] as const).map((view) => (
+                {(["start", "chat", "sessions", "host"] as const).map((view) => (
                   <Pressable
                     key={view}
                     style={[styles.mobileSheetNavButton, store.view === view ? styles.mobileSheetNavButtonActive : null]}
@@ -220,15 +196,8 @@ export function AppShell(): React.JSX.Element {
               </View>
 
               <View style={styles.mobileSheetSection}>
-                <Text style={styles.mobileSheetSectionTitle}>Session controls</Text>
+                <Text style={styles.mobileSheetSectionTitle}>Voice controls</Text>
                 <View style={styles.mobileSheetActionRow}>
-                  <Pressable
-                    style={[styles.secondaryButton, styles.mobileSheetActionButton, store.refreshing ? styles.disabledButton : null]}
-                    onPress={() => store.refresh().catch((error) => console.warn(error))}
-                    disabled={store.refreshing}
-                  >
-                    <Text style={styles.secondaryLabel}>{store.refreshing ? "Refreshing..." : "Refresh"}</Text>
-                  </Pressable>
                   <Pressable
                     style={[styles.secondaryButton, styles.mobileSheetActionButton, !store.voiceAvailable ? styles.warningButton : null]}
                     onPress={() => {
@@ -236,9 +205,7 @@ export function AppShell(): React.JSX.Element {
                       setMenuOpen(false);
                     }}
                   >
-                    <Text style={[styles.secondaryLabel, !store.voiceAvailable ? styles.warningButtonLabel : null]}>
-                      {voiceCta.label}
-                    </Text>
+                    <Text style={[styles.secondaryLabel, !store.voiceAvailable ? styles.warningButtonLabel : null]}>{voiceCta.label}</Text>
                   </Pressable>
                   {store.voiceSessionActive ? (
                     <Pressable
@@ -254,20 +221,63 @@ export function AppShell(): React.JSX.Element {
                     style={[styles.secondaryButton, styles.mobileSheetActionButton]}
                     onPress={() => setControlsExpanded((value) => !value)}
                   >
-                    <Text style={styles.secondaryLabel}>{controlsExpanded ? "Hide Tools" : "Show Tools"}</Text>
+                    <Text style={styles.secondaryLabel}>{controlsExpanded ? "Hide Manual Tools" : "Show Manual Tools"}</Text>
                   </Pressable>
+                </View>
+              </View>
+
+              <View style={styles.mobileSheetSection}>
+                <Text style={styles.mobileSheetSectionTitle}>Current task</Text>
+                <View style={styles.mobileSheetTaskCard}>
+                  <Text style={styles.mobileSheetTaskTitle}>{activeSession?.title ?? "No active thread yet"}</Text>
+                  <Text style={styles.mobileSheetHelper}>
+                    {activeSession?.lastPreview ??
+                      (activeSession ? activeSession.rootPath : "Open Build or Talk to start a governed thread from your phone.")}
+                  </Text>
+                  {activeSession ? (
+                    <Pressable
+                      style={[styles.secondaryButton, styles.mobileSheetActionButton]}
+                      onPress={() => {
+                        handleResumeSession(activeSession.id);
+                        setMenuOpen(false);
+                      }}
+                    >
+                      <Text style={styles.secondaryLabel}>Resume Thread</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
 
               <View style={styles.mobileSheetSection}>
                 <Text style={styles.mobileSheetSectionTitle}>Status</Text>
                 <View style={styles.statusRow}>
-                  <StatusChip label={store.hostStatus?.host.isOnline ? "Host online" : "Host offline"} tone={store.hostStatus?.host.isOnline ? "teal" : "orange"} />
+                  <StatusChip label={store.hostStatus?.host.isOnline ? "Desktop online" : "Desktop offline"} tone={store.hostStatus?.host.isOnline ? "teal" : "orange"} />
                   <StatusChip label={store.realtimeConnected ? "Live sync on" : "Live sync reconnecting"} tone={store.realtimeConnected ? "teal" : "orange"} />
+                  <StatusChip label={voiceStatus} tone={store.voiceAvailable ? "teal" : "orange"} />
                 </View>
-                <Text style={styles.mobileSheetHelper}>
-                  {store.hostStatus?.auth.detail ?? "Waiting for desktop heartbeat."}
-                </Text>
+                <Text style={styles.mobileSheetHelper}>{store.hostStatus?.auth.detail ?? "Waiting for desktop heartbeat."}</Text>
+              </View>
+
+              <View style={styles.mobileSheetSection}>
+                <Text style={styles.mobileSheetSectionTitle}>Session actions</Text>
+                <View style={styles.mobileSheetActionRow}>
+                  <Pressable
+                    style={[styles.secondaryButton, styles.mobileSheetActionButton, store.refreshing ? styles.disabledButton : null]}
+                    onPress={() => store.refresh().catch((error) => console.warn(error))}
+                    disabled={store.refreshing}
+                  >
+                    <Text style={styles.secondaryLabel}>{store.refreshing ? "Refreshing..." : "Refresh"}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.secondaryButton, styles.mobileSheetActionButton]}
+                    onPress={() => {
+                      handleNavPress("host");
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Text style={styles.secondaryLabel}>Open Status Details</Text>
+                  </Pressable>
+                </View>
               </View>
 
               <Pressable
@@ -287,34 +297,30 @@ export function AppShell(): React.JSX.Element {
   );
 }
 
-function labelForView(view: "host" | "sessions" | "chat"): string {
-  if (view === "host") {
-    return "Homebase";
+function labelForView(view: "start" | "host" | "sessions" | "chat"): string {
+  switch (view) {
+    case "start":
+      return "Start";
+    case "host":
+      return "Homebase";
+    case "sessions":
+      return "Build";
+    default:
+      return "Talk";
   }
-  if (view === "sessions") {
-    return "Build";
-  }
-  return "Talk";
 }
 
-function descriptionForView(view: "host" | "sessions" | "chat"): string {
-  if (view === "host") {
-    return "Connection health, wake, and trusted device controls.";
+function descriptionForView(view: "start" | "host" | "sessions" | "chat"): string {
+  switch (view) {
+    case "start":
+      return "Launch voice, build work, and status details from one calm entry surface.";
+    case "host":
+      return "Connection health, wake, trusted devices, and secondary operational detail.";
+    case "sessions":
+      return "Project chats and structured build requests.";
+    default:
+      return "Live voice with quick access to the active operator thread.";
   }
-  if (view === "sessions") {
-    return "Project chats and structured build requests.";
-  }
-  return "Live voice and the active operator conversation.";
-}
-
-function humanizeCodexState(status: "logged_in" | "logged_out" | "error"): string {
-  if (status === "logged_in") {
-    return "Freedom ready";
-  }
-  if (status === "error") {
-    return "Freedom needs attention";
-  }
-  return "Freedom login required";
 }
 
 function humanizeVoiceStatus(store: AppState): string {
@@ -386,9 +392,9 @@ function voiceActionCopy(store: AppState): { label: string; hint: string } {
       };
     default:
       return {
-        label: store.voiceSessionActive ? "End Voice" : "Start Voice",
+        label: store.voiceSessionActive ? "End Voice" : "Tap to Talk",
         hint: store.voiceSessionActive
-          ? "Keep the text thread visible while you end the voice loop."
+          ? "Keep the active thread nearby while you end the voice loop."
           : "Open the continuous voice surface from anywhere."
       };
   }

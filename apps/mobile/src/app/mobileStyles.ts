@@ -1,21 +1,22 @@
 import { StyleSheet } from "react-native";
 
 export const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f3efe7" },
-  mobileShell: { flex: 1, paddingHorizontal: 12, paddingTop: 10, gap: 10 },
+  root: { flex: 1, backgroundColor: "#f6f5f2" },
+  mobileShell: { flex: 1, paddingHorizontal: 16, paddingTop: 8, gap: 8 },
+  mobileBannerStack: { gap: 8 },
   mobileTopBar: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12,
-    backgroundColor: "rgba(255, 250, 243, 0.9)",
-    borderRadius: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    backgroundColor: "rgba(255, 250, 243, 0.84)",
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderWidth: 1,
-    borderColor: "rgba(23, 34, 37, 0.1)"
+    borderColor: "rgba(23, 34, 37, 0.08)"
   },
-  mobileIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12 },
+  mobileIdentity: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "flex-start", gap: 12 },
   mobileIdentityMark: {
     width: 42,
     height: 42,
@@ -25,23 +26,29 @@ export const styles = StyleSheet.create({
     justifyContent: "center"
   },
   mobileIdentityMarkLabel: { color: "#f8fbff", fontWeight: "800", fontSize: 22 },
-  mobileIdentityCopy: { flex: 1, minWidth: 0, gap: 2 },
-  mobileIdentityTitle: { color: "#172225", fontSize: 20, lineHeight: 22, fontWeight: "800" },
-  mobileIdentitySubtitle: { color: "#556367", fontSize: 12, lineHeight: 16 },
+  mobileIdentityCopy: { flex: 1, minWidth: 0, gap: 4 },
+  mobileIdentityEyebrow: { color: "#0f766e", fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" },
+  mobileIdentityTitle: { color: "#172225", fontSize: 22, lineHeight: 24, fontWeight: "800" },
+  mobileIdentitySubtitle: { color: "#556367", fontSize: 12, lineHeight: 17 },
   mobileQuickActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   mobileQuickAction: {
-    minWidth: 52,
-    height: 44,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    minWidth: 54,
+    height: 46,
+    borderRadius: 15,
+    paddingHorizontal: 14,
     backgroundColor: "rgba(255,255,255,0.92)",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(23, 34, 37, 0.08)"
   },
+  mobileQuickActionActive: {
+    backgroundColor: "#172225",
+    borderColor: "#172225"
+  },
   mobileQuickActionLabel: { color: "#172225", fontSize: 20, fontWeight: "800" },
   mobileQuickActionText: { color: "#172225", fontSize: 13, fontWeight: "800" },
+  mobileQuickActionTextActive: { color: "#fff8ef" },
   mobileStatusStrip: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   mobileViewport: { flex: 1, minHeight: 0 },
   mobileVoiceDock: {
@@ -133,6 +140,15 @@ export const styles = StyleSheet.create({
   mobileSheetActionRow: { gap: 10 },
   mobileSheetActionButton: { width: "100%" },
   mobileSheetHelper: { color: "#556367", fontSize: 12, lineHeight: 18 },
+  mobileSheetTaskCard: {
+    backgroundColor: "rgba(255,255,255,0.8)",
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(23, 34, 37, 0.08)"
+  },
+  mobileSheetTaskTitle: { color: "#172225", fontSize: 16, lineHeight: 20, fontWeight: "800" },
   mobileSheetDangerButton: { marginTop: 4, backgroundColor: "#fee2e2" },
   mobileDock: {
     flexDirection: "row",
@@ -174,6 +190,72 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(23, 34, 37, 0.08)"
   },
+  startHeroCard: {
+    backgroundColor: "#172225",
+    borderRadius: 24,
+    padding: 20,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(86, 211, 255, 0.18)"
+  },
+  startHeroBadgeRow: { gap: 8 },
+  startHeroEyebrow: { color: "#99f6e4", textTransform: "uppercase", letterSpacing: 1.2, fontWeight: "800", fontSize: 11 },
+  startHeroStatus: { color: "#9ab6d3", fontSize: 12, lineHeight: 18 },
+  startHeroTitle: { color: "#ffffff", fontSize: 34, lineHeight: 36, fontWeight: "800" },
+  startHeroBody: { color: "#cedcf0", fontSize: 15, lineHeight: 22 },
+  startTileGrid: { gap: 10 },
+  startTile: {
+    backgroundColor: "rgba(255,250,243,0.94)",
+    borderRadius: 18,
+    padding: 18,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(23, 34, 37, 0.08)"
+  },
+  startTilePrimary: {
+    backgroundColor: "#e7f7f4",
+    borderColor: "rgba(15,118,110,0.18)"
+  },
+  startTileEyebrow: { color: "#0f766e", fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" },
+  startTileTitle: { color: "#172225", fontSize: 20, lineHeight: 24, fontWeight: "800" },
+  startTileMeta: { color: "#556367", fontSize: 13, lineHeight: 19 },
+  startThreadHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 10 },
+  startThreadCopy: { flex: 1, gap: 6 },
+  startThreadTitle: { color: "#172225", fontSize: 18, lineHeight: 22, fontWeight: "800" },
+  startThreadAction: { flex: 1 },
+  startRecentItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 10,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(23,34,37,0.08)"
+  },
+  startRecentCopy: { flex: 1, gap: 4 },
+  startRecentTitle: { color: "#172225", fontSize: 15, lineHeight: 19, fontWeight: "800" },
+  startRecentMeta: { color: "#687c97", fontSize: 12, lineHeight: 18 },
+  homebaseHeroCard: {
+    backgroundColor: "#fff8ef",
+    borderRadius: 18,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(23,34,37,0.08)"
+  },
+  homebaseSummaryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  homebaseSummaryTile: {
+    flexGrow: 1,
+    minWidth: "46%",
+    backgroundColor: "#fffdf8",
+    borderRadius: 12,
+    padding: 14,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: "rgba(23,34,37,0.06)"
+  },
+  homebaseSummaryValue: { color: "#172225", fontSize: 20, lineHeight: 22, fontWeight: "800" },
+  homebaseSummaryLabel: { color: "#687c97", fontSize: 12, lineHeight: 16 },
   stageHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
   stageEyebrow: {
     color: "#0f766e",
@@ -402,13 +484,220 @@ export const styles = StyleSheet.create({
   navLabel: { color: "#3d526d", fontWeight: "700" },
   navLabelActive: { color: "#ffffff" },
   content: { gap: 14, paddingBottom: 28, flexGrow: 1 },
+  startContent: {
+    flexGrow: 1,
+    minHeight: "100%",
+    paddingTop: 8,
+    justifyContent: "space-between",
+    gap: 24
+  },
   screenContent: { flex: 1, gap: 14, paddingBottom: 12, minHeight: 0 },
   chatScreen: { flex: 1, minHeight: 0, gap: 8 },
   chatScrollArea: { flex: 1, minHeight: 0 },
   chatScrollContent: { gap: 10, paddingBottom: 8, flexGrow: 1 },
+  voiceScreenContent: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+    paddingTop: 8,
+    gap: 18
+  },
+  voiceSurfaceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14
+  },
+  voiceSurfaceIconButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "rgba(255,255,255,0.74)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#111827",
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4
+  },
+  voiceSurfaceIconGlyph: {
+    color: "#111111",
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: "500"
+  },
+  voiceSurfaceTitleWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "center",
+    gap: 8
+  },
+  voiceSurfaceTitle: { color: "#111111", fontSize: 30, lineHeight: 34, fontWeight: "500" },
+  voiceSurfaceTitleAccent: { color: "#6b7280", fontSize: 30, lineHeight: 34, fontWeight: "400" },
+  voiceSurfaceCenter: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 18,
+    gap: 10
+  },
+  voiceSurfaceHeadline: {
+    color: "#9ca3af",
+    fontSize: 52,
+    lineHeight: 58,
+    fontWeight: "300",
+    textAlign: "center"
+  },
+  voiceSurfaceSubhead: {
+    color: "#9aa0a8",
+    fontSize: 20,
+    lineHeight: 28,
+    fontWeight: "400",
+    textAlign: "center"
+  },
+  voiceSurfaceStatusPill: {
+    maxWidth: "88%",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 10
+  },
+  voiceSurfaceStatusPillError: {
+    backgroundColor: "rgba(254, 242, 242, 0.88)",
+    borderWidth: 1,
+    borderColor: "#fecaca"
+  },
+  voiceSurfaceStatusPillInfo: {
+    backgroundColor: "rgba(255,255,255,0.76)",
+    borderWidth: 1,
+    borderColor: "rgba(23, 34, 37, 0.06)"
+  },
+  voiceSurfaceStatusLabel: {
+    color: "#4b5563",
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: "center"
+  },
+  voicePeekPill: {
+    alignSelf: "center",
+    minWidth: 220,
+    maxWidth: "92%",
+    backgroundColor: "rgba(255,255,255,0.7)",
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 4,
+    shadowColor: "#111827",
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2
+  },
+  voicePeekTitle: { color: "#111111", fontSize: 15, lineHeight: 20, fontWeight: "700", textAlign: "center" },
+  voicePeekMeta: { color: "#7b8190", fontSize: 12, lineHeight: 18, textAlign: "center" },
+  voiceTranscriptPanel: {
+    backgroundColor: "rgba(255,255,255,0.82)",
+    borderRadius: 28,
+    padding: 16,
+    gap: 12,
+    shadowColor: "#111827",
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3
+  },
+  voiceTranscriptHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  voiceTranscriptTitle: { color: "#111111", fontSize: 16, lineHeight: 20, fontWeight: "700", flex: 1 },
+  voiceTranscriptToggle: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: "#efefec"
+  },
+  voiceTranscriptToggleLabel: { color: "#444444", fontSize: 12, fontWeight: "700" },
+  voiceToolSheet: {
+    marginTop: 8,
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 28,
+    padding: 14,
+    gap: 10,
+    shadowColor: "#111827",
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5
+  },
+  voiceSurfaceFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 4
+  },
+  startVoiceSurfaceFooter: {
+    paddingBottom: 8
+  },
+  voiceSurfaceRoundButton: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#111827",
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3
+  },
+  voiceSurfaceRoundGlyph: { color: "#111111", fontSize: 28, lineHeight: 30, fontWeight: "400" },
+  voiceSurfaceTypeButton: {
+    flex: 1,
+    minHeight: 62,
+    borderRadius: 31,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    justifyContent: "center",
+    paddingHorizontal: 26,
+    shadowColor: "#111827",
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3
+  },
+  voiceSurfaceTypeLabel: { color: "#a1a1aa", fontSize: 24, lineHeight: 28, fontWeight: "400" },
+  voiceSurfaceInlineComposer: {
+    flex: 1,
+    minHeight: 62,
+    maxHeight: 62,
+    borderRadius: 31,
+    backgroundColor: "rgba(255,255,255,0.82)",
+    paddingHorizontal: 24,
+    color: "#111111",
+    fontSize: 22,
+    lineHeight: 26,
+    shadowColor: "#111827",
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3
+  },
+  voiceSurfaceActionButton: {
+    minWidth: 132,
+    minHeight: 62,
+    borderRadius: 31,
+    backgroundColor: "#1f8cf0",
+    justifyContent: "center",
+    paddingHorizontal: 26,
+    shadowColor: "#1f8cf0",
+    shadowOpacity: 0.24,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5
+  },
+  voiceSurfaceActionLabel: { color: "#ffffff", fontSize: 24, lineHeight: 28, fontWeight: "500", textAlign: "center" },
   card: {
     backgroundColor: "rgba(255,250,243,0.94)",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 18,
     gap: 10,
     borderWidth: 1,
@@ -419,6 +708,15 @@ export const styles = StyleSheet.create({
   supportingText: { color: "#5a6d87", lineHeight: 21 },
   metric: { color: "#334b66", lineHeight: 21 },
   rootPath: { color: "#10233e", fontFamily: "monospace", backgroundColor: "#f4f8fd", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: "rgba(18, 50, 91, 0.06)" },
+  buildResumeCard: {
+    backgroundColor: "#fffdf8",
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(23,34,37,0.06)"
+  },
+  buildResumeTitle: { color: "#172225", fontSize: 17, lineHeight: 21, fontWeight: "800" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   preferenceCopy: { flex: 1, paddingRight: 14, gap: 2 },
   statusRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -489,36 +787,84 @@ export const styles = StyleSheet.create({
   chatChromeCard: { paddingVertical: 12, gap: 8 },
   chatResumeButton: { alignSelf: "flex-start", minHeight: 40, paddingVertical: 10, paddingHorizontal: 14 },
   messages: { gap: 8 },
-  voiceSessionCard: { gap: 12, paddingVertical: 14, backgroundColor: "#172225", borderColor: "rgba(232, 228, 222, 0.12)" },
+  voiceStageCard: {
+    backgroundColor: "#0c171a",
+    borderRadius: 24,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(86,211,255,0.12)"
+  },
+  voiceStageActions: { flexDirection: "row", gap: 10 },
+  voicePeekCard: {
+    backgroundColor: "rgba(255,250,243,0.94)",
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "rgba(23,34,37,0.08)"
+  },
+  voiceTaskCard: {
+    backgroundColor: "rgba(255,250,243,0.94)",
+    borderRadius: 16,
+    padding: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(23,34,37,0.08)"
+  },
+  voiceTaskEyebrow: { color: "#0f766e", fontSize: 11, fontWeight: "800", letterSpacing: 1, textTransform: "uppercase" },
+  voiceTaskTitle: { color: "#172225", fontSize: 18, lineHeight: 22, fontWeight: "800" },
+  voiceSessionCard: {
+    gap: 16,
+    paddingVertical: 18,
+    backgroundColor: "#081114",
+    borderColor: "rgba(86, 211, 255, 0.12)",
+    borderRadius: 24
+  },
   voiceSessionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   voiceSessionCopy: { flex: 1, gap: 4 },
-  voicePanelTitle: { color: "#f1f7ff", fontSize: 20, lineHeight: 24, fontWeight: "800" },
-  voicePanelSubtitle: { color: "#9ab6d3", fontSize: 12, lineHeight: 18 },
-  voiceHeroRow: { flexDirection: "row", gap: 14, alignItems: "center" },
+  voicePanelTitle: { color: "#f1f7ff", fontSize: 22, lineHeight: 26, fontWeight: "800" },
+  voicePanelSubtitle: { color: "#9ab6d3", fontSize: 13, lineHeight: 19 },
+  voiceHeroRow: { gap: 16, alignItems: "center" },
   voiceOrbShell: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 164,
+    height: 164,
+    borderRadius: 82,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.06)",
+    backgroundColor: "rgba(255,255,255,0.03)",
     borderWidth: 1,
-    borderColor: "rgba(232, 228, 222, 0.12)"
+    borderColor: "rgba(86, 211, 255, 0.16)"
+  },
+  voiceOrbPulse: {
+    position: "absolute",
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    backgroundColor: "#2fb3d2"
+  },
+  voiceOrbHalo: {
+    position: "absolute",
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 1,
+    borderColor: "rgba(86, 211, 255, 0.4)"
   },
   voiceOrbCore: {
-    width: 48,
-    height: 48,
-    borderRadius: 24
+    width: 66,
+    height: 66,
+    borderRadius: 33
   },
   voiceOrbListening: { backgroundColor: "#2fb3d2" },
   voiceOrbSpeaking: { backgroundColor: "#56d3ff" },
   voiceOrbProcessing: { backgroundColor: "#f5b14b" },
   voiceOrbMuted: { backgroundColor: "#7a8da6" },
   voiceOrbError: { backgroundColor: "#f28383" },
-  voiceHeroCopy: { flex: 1, gap: 6 },
+  voiceHeroCopy: { gap: 8, alignItems: "center" },
   voiceStateEyebrow: { color: "#9ec9f5", fontWeight: "800", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8 },
-  voiceHeroText: { color: "#eef6ff", fontSize: 15, lineHeight: 21, fontWeight: "600" },
-  voiceTagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  voiceHeroText: { color: "#eef6ff", fontSize: 18, lineHeight: 24, fontWeight: "600", textAlign: "center" },
+  voiceTagRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, justifyContent: "center" },
   voiceTag: {
     color: "#d7eaff",
     backgroundColor: "rgba(255,255,255,0.08)",
@@ -542,7 +888,7 @@ export const styles = StyleSheet.create({
   },
   voicePreviewLabel: { color: "#1b4f82", fontWeight: "800", fontSize: 12, textTransform: "uppercase", letterSpacing: 0.7 },
   voiceNotice: { color: "#f7e5b3", fontSize: 12, lineHeight: 18, fontWeight: "700" },
-  voiceMetrics: { color: "#9ab6d3", fontSize: 12, lineHeight: 18 },
+  voiceMetrics: { color: "#9ab6d3", fontSize: 12, lineHeight: 18, textAlign: "center" },
   chatComposerCard: { marginTop: 2, padding: 10, gap: 8, borderRadius: 14 },
   voiceFirstFooterCard: { marginTop: 2, paddingVertical: 12, gap: 8, borderRadius: 14 },
   insetCard: {

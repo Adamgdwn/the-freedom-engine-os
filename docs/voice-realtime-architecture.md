@@ -52,8 +52,9 @@ This keeps the current trust boundary the same: the phone still does not hold mo
 
 ### UI and observability
 
-- The chat screen now exposes a dedicated `Freedom Voice` surface with persistent phase visibility, interrupt acknowledgment, live transcript/assistant preview, audio meter, selected voice context, turn counts, interruption counts, reconnect counts, and latest round-trip timing.
-- The header voice control now starts and ends a continuous session instead of acting like a one-shot mic capture.
+- The phone now keeps voice work on a dedicated `Freedom Voice` canvas: sparse launch state, minimal header controls, a compact bottom action row, and transcript/history hidden until explicitly opened.
+- Busy or streaming voice work stays on that same canvas instead of dropping back into a panel-first composer layout.
+- The primary voice control now starts and ends a continuous session instead of acting like a one-shot mic capture.
 - The spoken-reply voice picker now surfaces accent, engine, quality, and any safe style or gender hints the device actually exposes, so voice choice no longer requires pure trial and error.
 
 ## Safety Notes

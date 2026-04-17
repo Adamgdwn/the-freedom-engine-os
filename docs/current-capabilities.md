@@ -87,8 +87,8 @@ or the boundary between modeled and fully operational capability.
 - Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
   while preserving `latest.apk` as a compatibility alias.
 - Android companion shell now emphasizes:
-  command-and-capture from the phone, desktop oversight, hidden-nav menu sheet,
-  and a persistent bottom Freedom Voice dock.
+  command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
+  and a hidden utility sheet instead of a dashboard-style shell.
 
 ## Modeled But Not Fully Operational
 

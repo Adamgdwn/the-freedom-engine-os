@@ -8,7 +8,7 @@ const mockStore = {
   refreshing: false,
   sendingMessage: false,
   realtimeConnected: true,
-  view: "chat",
+  view: "start",
   baseUrl: "http://127.0.0.1:43111",
   deviceName: "Adam's Phone",
   pairingCode: "",
@@ -61,8 +61,8 @@ const mockStore = {
     pairedDeviceCount: 1
   },
   devices: [],
-  sessions: [],
-  selectedSessionId: null,
+  sessions: [] as Array<any>,
+  selectedSessionId: null as string | null,
   messagesBySession: {},
   composer: "",
   composerInputMode: "text",
@@ -81,6 +81,7 @@ const mockStore = {
   outboundRecipientLabelDraft: "",
   outboundRecipientEmailDraft: "",
   externalDraft: null,
+  pendingExternalRequest: null,
   sendingExternalMessage: false,
   renameDraftBySession: {},
   autoSpeak: false,
@@ -149,12 +150,14 @@ jest.mock("../src/store/appStore", () => ({
 describe("refresh affordances", () => {
   beforeEach(() => {
     mockStore.refreshing = false;
-    mockStore.view = "chat";
+    mockStore.view = "start";
     mockStore.sendingMessage = false;
     mockStore.voiceAvailable = true;
     mockStore.realtimeConnected = true;
     mockStore.voiceMuted = false;
     mockStore.voiceSessionActive = false;
+    mockStore.sessions = [];
+    mockStore.selectedSessionId = null;
     mockStore.hostStatus.auth.status = "logged_in";
     mockStore.refresh.mockClear();
     mockStore.bootstrap.mockClear();
@@ -162,7 +165,7 @@ describe("refresh affordances", () => {
     mockStore.setField.mockClear();
   });
 
-  test("AppShell uses the compact chat header while staying in talk mode", async () => {
+  test("AppShell lands on the new start surface after pairing", async () => {
     let tree: ReactTestRenderer.ReactTestRenderer;
 
     await ReactTestRenderer.act(async () => {
@@ -171,11 +174,11 @@ describe("refresh affordances", () => {
 
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Talk");
+    expect(labels).toContain("Freedom");
     expect(labels).toContain("Voice");
-    expect(labels).toContain("↻");
-    expect(labels).toContain("⚙");
-    expect(labels.some((label) => label.includes("Freedom ready"))).toBe(true);
+    expect(labels).toContain("Start talking");
+    expect(labels).toContain("Type");
+    expect(labels).toContain("Talk");
     expect(mockStore.bootstrap).toHaveBeenCalled();
   });
 
@@ -184,7 +187,7 @@ describe("refresh affordances", () => {
     expect(refreshScrollInteractionProps.alwaysBounceVertical).toBe(true);
   });
 
-  test("host view keeps navigation and primary actions visible in the expanded shell", async () => {
+  test("host view stays secondary and keeps operational controls available", async () => {
     mockStore.view = "host";
 
     let tree: ReactTestRenderer.ReactTestRenderer;
@@ -195,15 +198,14 @@ describe("refresh affordances", () => {
 
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Overview");
-    expect(labels).toContain("Build");
-    expect(labels).toContain("Talk");
-    expect(labels).toContain("Start Voice");
-    expect(labels).toContain("Disconnect");
-    expect(labels).toContain("Hide Controls");
+    expect(labels).toContain("Homebase");
+    expect(labels).toContain("Mission summary");
+    expect(labels).toContain("Secondary detail stays here.");
+    expect(labels).toContain("Wake Homebase");
+    expect(labels).toContain("Trusted Devices");
   });
 
-  test("sessions view uses the compact header instead of the large host chrome", async () => {
+  test("sessions view presents the build surface with resume and launch sections", async () => {
     mockStore.view = "sessions";
 
     let tree: ReactTestRenderer.ReactTestRenderer;
@@ -215,15 +217,43 @@ describe("refresh affordances", () => {
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
     expect(labels).toContain("Build");
-    expect(labels).toContain("Voice");
-    expect(labels).toContain("↻");
-    expect(labels).toContain("⚙");
-    expect(labels.some((label) => label.includes("saved"))).toBe(true);
+    expect(labels).toContain("Resume work");
+    expect(labels).toContain("Launch build chat");
   });
 
-  test("shows a mute control while the live voice loop is active", async () => {
+  test("utility sheet exposes destinations and mute while the live voice loop is active", async () => {
     mockStore.view = "chat";
     mockStore.voiceSessionActive = true;
+    mockStore.sessions = [
+      {
+        id: "session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Active Thread",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "/tmp/workspace",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-correlation-1"
+        },
+        threadId: null,
+        status: "running",
+        activeTurnId: "turn-1",
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Continue the current operator task.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "session-1";
 
     let tree: ReactTestRenderer.ReactTestRenderer;
 
@@ -231,10 +261,16 @@ describe("refresh affordances", () => {
       tree = ReactTestRenderer.create(<AppShell />);
     });
 
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "controls-toggle" }).props.onPress();
+    });
+
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Stop");
+    expect(labels).toContain("Start");
+    expect(labels).toContain("Homebase");
     expect(labels).toContain("Mute");
+    expect(labels).toContain("Resume Thread");
   });
 });
 

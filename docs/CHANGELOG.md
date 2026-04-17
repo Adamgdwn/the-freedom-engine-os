@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-04-16 (voice footer spacing correction + Android release 0.2.20)
+
+- fixed the actual active `Talk` canvas footer spacing by separating the bottom offset used for the voice controls from the much larger reserve used for the hidden utility sheet.
+- lowered the voice control row toward the system gesture area without changing the button sizes, labels, or the sheet behavior when extra tools are shown.
+- bumped the Android release metadata to `versionCode 27` / `versionName 0.2.20` so this correction ships as a clearly newer APK.
+
+## 2026-04-16 (launch spacing trim + Android release 0.2.19)
+
+- reduced the `Start` screen bottom reserve so the launch canvas sits lower on tall phones without changing the button sizes or control row layout.
+- kept the voice controls themselves unchanged and only adjusted the safe-area padding used by the launch surface.
+- bumped the Android release metadata to `versionCode 26` / `versionName 0.2.19` so this spacing-only follow-up ships as a distinct APK.
+
+## 2026-04-16 (voice canvas follow-up + Android release 0.2.18)
+
+- kept the main phone chat surface on a true voice canvas instead of reopening the older panel-first composer stack during active work.
+- moved typed draft handling into the bottom control row so `Type` behaves more like a compact inline field and no longer expands into a large card just because draft text exists.
+- suppressed the heavy global banner stack on `Start` and `Talk`, replacing it with lighter in-surface status pills so the voice screen stays visually calmer.
+- changed the busy state affordance so the primary action becomes `Stop` while the current run is active, avoiding the stale "chat is busy" panel flow that made the redesign feel unchanged.
+- bumped the Android release metadata to `versionCode 25` / `versionName 0.2.18` so this follow-up ships as a clearly newer APK.
+
+## 2026-04-16 (mobile voice surface simplification + Android release 0.2.17)
+
+- stripped the default mobile entry and talk surfaces down to a much lighter voice-first layout
+  so the phone now behaves more like a focused conversational surface and less like a stacked dashboard
+- moved Build and Homebase farther behind the utility layer on the default phone surface to reduce chrome
+  while preserving the same underlying functionality
+- rebuilt the primary phone affordances around a cleaner voice header, larger empty-state center stage,
+  and a compact bottom action row inspired by modern voice-assistant patterns
+- bumped the Android release metadata to `versionCode 24` / `versionName 0.2.17` so this visual pass
+  publishes as a unique installable update instead of reusing the prior APK identity
+
+## 2026-04-16 (android release publishing + live install-page hardening)
+
+- added a repeatable Android publish script so the local Freedom mobile release can be copied
+  into the currently live website-backed APK directory with backups and checksum verification
+- added a one-command `npm run release:android-live` flow so building and publishing the APK
+  happen together instead of relying on a manual copy step
+- documented the exact publish target and verification path for the current live install
+  surface to reduce the chance of serving an outdated APK again
+- updated the live gateway install-page code path to expose build-specific Android filenames,
+  version metadata, and direct build-aware download URLs while keeping `latest.apk` as a
+  compatibility alias
+
+## 2026-04-16 (mobile voice-first redesign + Android release 0.2.16)
+
+- reshaped the Freedom Android companion around a calmer `Start -> Talk -> Build -> Homebase`
+  flow so the phone no longer opens like a compressed dashboard
+- made the dedicated Talk surface more voice-first by keeping the voice state dominant,
+  collapsing the active thread by default, and only expanding transcript/manual tools
+  when the user asks or the current state requires it
+- demoted status-heavy controls into Homebase and the utility sheet so wake, trusted
+  devices, outbound email, and connection detail stay available without polluting the
+  main mobile experience
+- updated the React Native UI test harness to resolve one React instance during tests and
+  refreshed the shell assertions for the new mobile navigation model
+- bumped the distributed Android build metadata to `versionCode 23` / `versionName 0.2.16`
+  so the fresh APK can be installed as a new release
+
 ## 2026-04-16 (runtime router milestone pass)
 
 - extracted the core Freedom persona into a dedicated prompt artifact and stopped treating

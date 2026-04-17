@@ -29,7 +29,8 @@
   bounded parallel task work instead of a single blocking run
 - Operator workspace refresh:
   desktop control plane is now a denser workbench and the Android shell now matches the
-  command-and-capture voice posture more closely
+  command-and-capture voice posture more closely, with `Start`, `Talk`, and the hidden
+  utility sheet replacing the older dashboard-style phone shell
 
 ## Now
 
