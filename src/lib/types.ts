@@ -397,9 +397,11 @@ export type AgentPromotionRecord = {
 
 // ─── Model routing ────────────────────────────────────────────────────────────
 
+export type RoutedProvider = 'local' | 'openai' | 'codex' | 'claude-code';
+
 export type ProviderRecommendation = {
   tier: ModelTier;
-  provider: 'local' | 'codex' | 'claude-code';
+  provider: RoutedProvider;
   reason: string;
 };
 
@@ -408,6 +410,8 @@ export type EscalationRequest = {
   taskSummary: string;
   whyLocalInsufficient: string;
   recommendation: ProviderRecommendation;
+  availableProviders: RoutedProvider[];
+  operatorSelection: RoutedProvider | null;
   expectedBenefit: string;
   costSpeedTradeoff: string;
   requestedAt: string;
@@ -418,6 +422,7 @@ export type EscalationDecision = {
   id: string;
   escalationRequestId: string;
   decision: 'approved' | 'denied';
+  selectedProvider: RoutedProvider | null;
   decidedBy: string;
   outcome: string;
   decidedAt: string;
@@ -428,7 +433,8 @@ export type ExecutionBudget = {
   taskId: string;
   maxLocalAttempts: number;
   escalationAllowed: boolean;
-  preferredProvider: 'local' | 'codex' | 'claude-code';
+  preferredProvider: RoutedProvider;
+  operatorSelectableProviders: RoutedProvider[];
   hardCap: boolean;
 };
 

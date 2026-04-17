@@ -54,6 +54,11 @@ export class DesktopHostRuntime {
     this.routerConfig.localProviderLabel,
     process.env.FREEDOM_LOCAL_MODEL_COMMAND?.trim() || null,
   );
+  private readonly openaiBridge = new CommandBridge(
+    "openai",
+    this.routerConfig.openaiProviderLabel,
+    process.env.FREEDOM_OPENAI_COMMAND?.trim() || null,
+  );
   private readonly claudeBridge = new CommandBridge(
     "claude-code",
     "Claude Code",
@@ -114,6 +119,7 @@ export class DesktopHostRuntime {
         `Pairing code: ${registration.pairingCode}`,
         `Codex auth: ${auth.detail ?? auth.status}`,
         `Local lane: ${this.localBridge.isConfigured() ? "configured" : "not configured"}`,
+        `OpenAI lane: ${this.openaiBridge.isConfigured() ? "configured" : "not configured"}`,
         `Claude lane: ${this.claudeBridge.isConfigured() ? "configured" : "not configured"}`,
         `Tailscale: ${tailscale.detail ?? "unknown"}`,
         `Suggested mobile URL: ${tailscale.suggestedUrl ?? "not available"}`,
@@ -376,6 +382,15 @@ export class DesktopHostRuntime {
       return this.claudeBridge;
     }
 
+    if (provider === "openai") {
+      if (!this.openaiBridge.isConfigured()) {
+        throw new Error(
+          `${this.routerConfig.openaiProviderLabel} routing was selected, but FREEDOM_OPENAI_COMMAND is not configured.`,
+        );
+      }
+      return this.openaiBridge;
+    }
+
     if (!this.localBridge.isConfigured()) {
       throw new Error(
         `Local day-to-day routing was selected, but FREEDOM_LOCAL_MODEL_COMMAND is not configured for ${this.routerConfig.localProviderLabel}.`,
@@ -412,7 +427,11 @@ function buildCommandPrompt(work: HostWorkMessage, routingReason: string): strin
 }
 
 function isCommandThreadId(threadId: string): boolean {
-  return threadId.startsWith("local_thread_") || threadId.startsWith("claude-code_thread_");
+  return (
+    threadId.startsWith("local_thread_") ||
+    threadId.startsWith("openai_thread_") ||
+    threadId.startsWith("claude-code_thread_")
+  );
 }
 
 function isMissingThreadError(message: string): boolean {

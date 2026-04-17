@@ -16,6 +16,8 @@ Intended routing posture:
 - desktop-host now enforces that posture for non-voice turns when `FREEDOM_LOCAL_MODEL_COMMAND`
   is configured; the local lane is a prompt-in/stdout-out command bridge rather than a
   hosted provider integration
-- large code changes and governed build execution should escalate to `Codex` only with approval
-- broad synthesis, architecture, or research-heavy work should escalate to `Claude Code` only with approval
+- when Freedom asks to escalate, the first suggested external option can be `OpenAI / ChatGPT`,
+  but the operator chooses whether to use `OpenAI / ChatGPT`, `Codex`, or `Claude Code`
+- large code changes and governed build execution may still be better fits for `Codex`
+- broad synthesis, architecture, or research-heavy work may still be better fits for `Claude Code`
 - the current live voice runtime is still `gpt-4o-realtime-preview`, so local-first is not yet full runtime reality across voice and non-voice paths

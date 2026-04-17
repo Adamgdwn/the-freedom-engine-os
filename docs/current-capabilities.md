@@ -122,6 +122,11 @@ or the boundary between modeled and fully operational capability.
 - The desktop-host runtime now applies a real routed execution policy for non-voice work:
   routine read-only operating turns can use a configured local command lane, while
   workspace-changing or build-lane work routes to the heavier provider lane.
+- Escalation is now modeled as:
+  Freedom recommends a provider, presents the operator choice set, and the operator
+  selects which external lane to use.
+- `OpenAI / ChatGPT` is now a first-class escalation option alongside `Codex` and
+  `Claude Code`.
 - Local day-to-day execution becomes truly active when `FREEDOM_LOCAL_MODEL_COMMAND`
   is configured; otherwise the host falls back to the heavier lane instead of silently
   pretending local execution exists.
@@ -130,7 +135,7 @@ or the boundary between modeled and fully operational capability.
 - Environment-level routing config now exists for the modeled router:
   `FREEDOM_LOCAL_MODELS_ENABLED`, `FREEDOM_DAY_TO_DAY_PROVIDER`,
   `FREEDOM_HEAVY_CODE_PROVIDER`, `FREEDOM_BROAD_SYNTHESIS_PROVIDER`,
-  `FREEDOM_LOCAL_MODEL_COMMAND`, `FREEDOM_CLAUDE_CODE_COMMAND`,
+  `FREEDOM_LOCAL_MODEL_COMMAND`, `FREEDOM_OPENAI_COMMAND`, `FREEDOM_CLAUDE_CODE_COMMAND`,
   `FREEDOM_VOICE_RUNTIME_PROVIDER`, and `FREEDOM_VOICE_RUNTIME_MODEL`.
 
 ### Self-Programming

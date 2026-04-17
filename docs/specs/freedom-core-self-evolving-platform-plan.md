@@ -227,15 +227,16 @@
   `Local Default`, `Escalate With Approval`, `Human-Forced Provider`.
 - Local models handle:
   first-pass planning, decomposition, prompts/runbooks, scaffold preparation, draft code changes, analysis, summarization, and low-risk self-improvement work.
-- Freedom must request permission before escalating to `Codex` or `Claude Code` when:
+- Freedom must request permission before escalating to any external/premium lane when:
   the task exceeds local quality thresholds,
   deeper repo-wide reasoning is needed,
   speed matters enough to justify paid/external horsepower,
   or a local attempt failed or stalled.
 - Escalation request must be explicit and compact:
-  why local is insufficient, which provider it recommends, expected benefit, expected cost/speed tradeoff, and whether the ask is for quality, speed, or both.
+  why local is insufficient, which provider it recommends, what operator-selectable choices are available, expected benefit, expected cost/speed tradeoff, and whether the ask is for quality, speed, or both.
 - Add provider preference logic:
-  default local -> prefer `Codex` for code-heavy implementation/runtime tasks -> prefer `Claude Code` for broader synthesis/research/planning when that is the better fit.
+  default local -> suggest `OpenAI / ChatGPT` as the first general escalation lane -> still recommend `Codex` for code-heavy implementation/runtime tasks when it is the better fit -> still recommend `Claude Code` for broader synthesis/research/planning when that is the better fit.
+- The operator, not Freedom, chooses the final external provider from the presented option set.
 - Every provider escalation and outcome must be audited so Freedom can learn when local was enough and when escalation was justified.
 
 ## Interfaces, Policies, And Runtime Contracts

@@ -5,9 +5,12 @@
 - added a shared model-router module and environment-backed routing config so the intended
   local-first policy is now computed from one place instead of being implied only by docs
   and seed prose
+- added `OpenAI / ChatGPT` as a first-class routed escalation option and changed the
+  escalation model from “one provider chosen by Freedom” to “recommended provider plus
+  operator-selectable choices and audited final selection”
 - added a real desktop-host routing path for non-voice work: routine read-only turns can
   run through a configured local command bridge, while heavier code/build work routes
-  through the Codex lane
+  through the operator-selected external lane
 - changed the host so Codex login is only required for Codex-routed work instead of
   blocking every desktop turn, and relaxed gateway availability so a configured local
   lane can still count as runnable when Codex is logged out

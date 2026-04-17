@@ -36,8 +36,8 @@ For a fast operator-facing view of what is actually live right now, use
   Capability internalization tracking — state, validation records, builder dependencies,
   safety notes, and learning history at `/learning-registry`.
 - Model Router:
-  Local-first model tier policy, escalation request queue, provider preference order,
-  and resolved decision audit trail at `/model-router`.
+  Local-first model tier policy, escalation request queue, provider recommendation,
+  operator-selectable provider choices, and resolved decision audit trail at `/model-router`.
 - Web voice layer:
   Shared React voice session context, LiveKit room session, interrupt/task data channel,
   and Python Realtime worker coordination surfaced in the Next.js operator workbench
@@ -85,8 +85,9 @@ For a fast operator-facing view of what is actually live right now, use
 9. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
 10. Desktop-host routes non-voice work through a shared model-router policy so routine
-   read-only turns can stay on a configured local command lane while heavier code/build
-   work uses the Codex bridge.
+   read-only turns can stay on a configured local command lane while escalated work can
+   use an operator-selected external lane such as `OpenAI / ChatGPT`, `Codex`, or
+   `Claude Code`.
 11. Future persistence will swap the seed layer for Supabase queries while preserving the
    same entity boundaries.
 

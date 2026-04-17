@@ -1,5 +1,6 @@
 import {
   describeModelRouterStatus,
+  getEscalationChoices,
   getModelRouterConfig,
 } from '@freedom/shared';
 import type { ExecutionBudget } from '@/lib/types';
@@ -16,6 +17,7 @@ export function getExecutionBudgetDefaults(): ExecutionBudget[] {
       maxLocalAttempts: 3,
       escalationAllowed: true,
       preferredProvider: config.dayToDayProvider,
+      operatorSelectableProviders: getEscalationChoices('day-to-day', config),
       hardCap: false,
     },
     {
@@ -24,6 +26,7 @@ export function getExecutionBudgetDefaults(): ExecutionBudget[] {
       maxLocalAttempts: 1,
       escalationAllowed: true,
       preferredProvider: config.heavyCodeProvider,
+      operatorSelectableProviders: getEscalationChoices('heavy-code', config),
       hardCap: false,
     },
     {
@@ -32,6 +35,7 @@ export function getExecutionBudgetDefaults(): ExecutionBudget[] {
       maxLocalAttempts: 1,
       escalationAllowed: true,
       preferredProvider: config.broadSynthesisProvider,
+      operatorSelectableProviders: getEscalationChoices('broad-synthesis', config),
       hardCap: false,
     },
   ];

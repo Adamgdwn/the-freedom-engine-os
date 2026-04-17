@@ -15,7 +15,7 @@
 - Learning Registry surface: capability internalization status, validation records,
   builder dependencies, safety notes, learning history
 - Model Router surface: tier policy, escalation request queue, provider preference order,
-  resolved decision audit trail
+  operator provider-choice set, and resolved decision audit trail
 - Monorepo consolidation: `codex_adam_connect` absorbed into `the-freedom-engine-os`;
   `@freedom/*` packages native to this repo; `monorepo-merge` merged to `main`
 - Android Gradle build fixed for npm workspaces; APK (68 MB) built and verified from
@@ -60,7 +60,8 @@
 
 - Learning Registry: promote seed data to live capability tracking backed by Supabase
 - Model Router: wire escalation request + decision flow so Freedom can surface live
-  approval requests in the UI
+  approval requests in the UI, recommend a provider, and stop for operator selection of
+  `OpenAI / ChatGPT`, `Codex`, or `Claude Code`
 - Workforce orchestration: add governed contracts, runtime flows, and review surfaces so
   Freedom can assign work across specialist agents and tools as a measurable agent workforce
 - Outcome Engine: connect the new outcome contracts to venture scoring, recommendation

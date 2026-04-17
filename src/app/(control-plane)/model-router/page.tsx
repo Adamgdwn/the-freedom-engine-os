@@ -10,6 +10,7 @@ const TIER_COLOR: Record<string, string> = {
 
 const PROVIDER_LABEL: Record<string, string> = {
   local: 'Local LLM',
+  openai: 'OpenAI / ChatGPT',
   codex: 'Codex',
   'claude-code': 'Claude Code',
 };
@@ -88,6 +89,9 @@ export default function ModelRouterPage() {
               <p className="mt-2 leading-6 text-[color:var(--ink-soft)]">
                 {modelRouterStatus.synthesisStatus}
               </p>
+              <p className="mt-2 leading-6 text-[color:var(--ink-soft)]">
+                {modelRouterStatus.escalationStatus}
+              </p>
             </div>
             <div className="space-y-3 text-sm">
               {[
@@ -142,10 +146,27 @@ export default function ModelRouterPage() {
                           {request.whyLocalInsufficient}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
-                          <span>{PROVIDER_LABEL[request.recommendation.provider]}</span>
+                          <span>Recommended: {PROVIDER_LABEL[request.recommendation.provider]}</span>
                           <span>•</span>
                           <span>{request.recommendation.tier.replace(/-/g, ' ')}</span>
                         </div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs uppercase tracking-[0.18em] text-[color:var(--ink-soft)]">
+                          {request.availableProviders.map((provider) => (
+                            <span
+                              key={`${request.id}-${provider}`}
+                              className={`rounded-md px-2 py-1 ${
+                                request.operatorSelection === provider
+                                  ? 'bg-[color:var(--accent)]/15 text-[color:var(--accent)]'
+                                  : 'bg-[color:var(--surface-strong)] text-[color:var(--ink-soft)]'
+                              }`}
+                            >
+                              {PROVIDER_LABEL[provider]}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-sm text-[color:var(--ink)]">
+                          Operator choice: {request.operatorSelection ? PROVIDER_LABEL[request.operatorSelection] : 'Awaiting selection'}
+                        </p>
                         <p className="mt-2 text-sm text-[color:var(--ink)]">{request.recommendation.reason}</p>
                         <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                           <div className="rounded-md bg-white/60 p-3">
@@ -182,13 +203,16 @@ export default function ModelRouterPage() {
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
-                          <span>{PROVIDER_LABEL[request.recommendation.provider]}</span>
+                          <span>Recommended: {PROVIDER_LABEL[request.recommendation.provider]}</span>
                           <span>•</span>
                           <span>{request.recommendation.tier.replace(/-/g, ' ')}</span>
                         </div>
                         {decision ? (
                           <div className="mt-3 rounded-md bg-[color:var(--surface-strong)] px-4 py-3 text-sm">
                             <p className="font-medium text-[color:var(--ink)]">Outcome</p>
+                            <p className="mt-1 leading-6 text-[color:var(--ink-soft)]">
+                              Selected provider: {decision.selectedProvider ? PROVIDER_LABEL[decision.selectedProvider] : 'No provider selected'}
+                            </p>
                             <p className="mt-1 leading-6 text-[color:var(--ink-soft)]">{decision.outcome}</p>
                             <p className="mt-2 text-xs text-[color:var(--ink-soft)]">
                               Decided by {decision.decidedBy} · {new Date(decision.decidedAt).toLocaleDateString()}
@@ -209,8 +233,9 @@ export default function ModelRouterPage() {
               <ol className="mt-3 space-y-3 text-sm">
                 {[
                   { rank: '1', label: 'Local LLM', note: 'Always first. No approval needed.' },
-                  { rank: '2', label: 'Codex', note: 'Code-heavy implementation. Requires approval.' },
-                  { rank: '3', label: 'Claude Code', note: 'Synthesis, research, broad planning. Requires approval.' },
+                  { rank: '2', label: 'OpenAI / ChatGPT', note: 'First suggested escalation option. Operator still chooses.' },
+                  { rank: '3', label: 'Codex', note: 'Code-heavy implementation when you want the stronger coding lane.' },
+                  { rank: '4', label: 'Claude Code', note: 'Synthesis, research, and broad planning when you prefer that lane.' },
                 ].map((row) => (
                   <li key={row.rank} className="flex items-start gap-4 rounded-lg border border-white/[0.08] bg-white/[0.05] p-3">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/10 text-xs font-bold text-[color:var(--ink-on-dark)]">
@@ -238,6 +263,11 @@ export default function ModelRouterPage() {
                     {row.budget ? (
                       <p className="mt-2 text-xs uppercase tracking-[0.18em] text-[color:var(--ink-soft-on-dark)]">
                         Preferred: {PROVIDER_LABEL[row.budget.preferredProvider]} • Max local attempts {row.budget.maxLocalAttempts}
+                      </p>
+                    ) : null}
+                    {row.budget ? (
+                      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-[color:var(--ink-soft-on-dark)]">
+                        Choice set: {row.budget.operatorSelectableProviders.map((provider) => PROVIDER_LABEL[provider]).join(' • ')}
                       </p>
                     ) : null}
                   </div>

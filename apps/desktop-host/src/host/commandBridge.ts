@@ -22,7 +22,7 @@ export class CommandBridge {
   private readonly activeTurns = new Map<string, ChildProcess>();
 
   constructor(
-    readonly provider: Extract<RouterProvider, "local" | "claude-code">,
+    readonly provider: Extract<RouterProvider, "local" | "openai" | "claude-code">,
     private readonly label: string,
     private readonly command: string | null,
   ) {}
