@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-04-20 (compact text control + release 0.2.45)
+
+- shrank the idle typed-entry control on the mobile voice canvas down to the same compact footprint as `Mute` and relabeled it `Text` now that the raised composer behavior is clearer
+- kept explicit new project threads in the `Build` view while leaving the default voice thread optimized for conversational continuity rather than endless project sprawl
+- published Android `0.2.45 (52)` to the live install surface
+
+## 2026-04-20 (reversible recent-thread toggle + release 0.2.44)
+
+- made the center Freedom dialogue on the mobile voice canvas act as a real toggle for recent-thread history, so the same surface that opens the transcript can also close it
+- renamed the transcript panel action from `Hide` to `Close` and added a visible center hint so the escape path is clearer during phone use
+- published Android `0.2.44 (51)` to the live install surface
+
+## 2026-04-20 (raised mobile message composer + release 0.2.43)
+
+- changed the mobile voice canvas so the footer `Message` control opens a dedicated typed-turn panel above the bottom action row instead of only swapping the footer into a subtle inline field
+- added a top-right collapse affordance to that composer and clarified the transcript preview as a `Recent thread` surface so typed input and conversation history no longer feel like the same control
+- published Android `0.2.43 (50)` to the live install surface
+
+## 2026-04-20 (android text encoder startup fix + release 0.2.42)
+
+- added an early mobile runtime `TextEncoder` and `TextDecoder` polyfill alongside the existing `DOMException` patch so Hermes no longer aborts during startup when the voice stack references text encoding globals
+- published Android `0.2.42 (49)` to the live install surface
+
+## 2026-04-20 (android voice recognizer compatibility fix + release 0.2.41)
+
+- replaced the Expo speech-recognition runtime path with the existing `@react-native-voice/voice` adapter in the mobile companion to stop the native `SpeechRecognitionOptions` registration error on startup under the current Expo/RN stack
+- kept the live voice loop behavior in place with restart handling, partial/final transcript promotion, and clearer Android recognizer readiness errors
+- published Android `0.2.41 (48)` to the live install surface
+
+## 2026-04-20 (mobile voice surface polish + release 0.2.40)
+
+- replaced the footer `+` action on the mobile voice surfaces with an explicit mute/unmute control for the live microphone lane
+- changed the inline chat composer so it expands upward when focused, giving typed side-channel turns more room without breaking the voice-first layout
+- repurposed the mobile three-dots utility sheet around first-pass email/contact capture and retrieval instead of a generic destination list
+
 ## 2026-04-20 (conversation build lane runtime + release 0.2.39)
 
 - Freedom voice runtime can now route substantial conversation-born build ideas into

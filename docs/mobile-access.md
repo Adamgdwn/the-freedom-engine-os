@@ -45,6 +45,9 @@ surface than a one-shot relay:
   without taking over the whole screen
 - sparse `Start` launch surface, dedicated `Talk` voice canvas, and a hidden utility
   sheet so the phone behaves more like a focused voice companion than a dashboard
+- compact footer actions on the `Talk` canvas with `Mute`, `Text`, live voice controls,
+  a raised typed-turn composer, and a reversible `Recent thread` history toggle in the
+  center Freedom dialogue
 
 ## What To Configure
 
@@ -89,6 +92,9 @@ template file.
 9. Ask Freedom directly to change the live voice profile if you want a different voice,
    gender presentation, accent hint, tone, pace, or warmth. Restart the voice session
    to hear a new realtime preset; the phone's local spoken-reply picker stays separate.
+10. Use the small `Text` button for side-channel typed turns inside the current voice
+    conversation, and use the `Build` view's `Launch build chat` flow when you want a
+    separate project thread rather than more continuity in the default voice thread.
 
 ## APK Download
 

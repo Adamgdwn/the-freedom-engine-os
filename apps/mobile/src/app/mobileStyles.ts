@@ -572,6 +572,13 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
     textAlign: "center"
   },
+  voiceSurfaceCenterHint: {
+    color: "#7c8593",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "600",
+    textAlign: "center"
+  },
   voiceSurfaceStatusPill: {
     maxWidth: "88%",
     borderRadius: 18,
@@ -609,6 +616,15 @@ export const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 2
+  },
+  voicePeekEyebrow: {
+    color: "#6b7280",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    textTransform: "uppercase",
+    textAlign: "center"
   },
   voicePeekTitle: { color: "#111111", fontSize: 15, lineHeight: 20, fontWeight: "700", textAlign: "center" },
   voicePeekMeta: { color: "#7b8190", fontSize: 12, lineHeight: 18, textAlign: "center" },
@@ -667,6 +683,7 @@ export const styles = StyleSheet.create({
     elevation: 3
   },
   voiceSurfaceRoundGlyph: { color: "#111111", fontSize: 28, lineHeight: 30, fontWeight: "400" },
+  voiceSurfaceRoundLabel: { color: "#111111", fontSize: 13, lineHeight: 16, fontWeight: "700", textAlign: "center" },
   voiceSurfaceTypeButton: {
     flex: 1,
     minHeight: 62,
@@ -680,22 +697,91 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 3
   },
-  voiceSurfaceTypeLabel: { color: "#a1a1aa", fontSize: 24, lineHeight: 28, fontWeight: "400" },
-  voiceSurfaceInlineComposer: {
-    flex: 1,
-    minHeight: 62,
-    maxHeight: 62,
+  voiceSurfaceTypeButtonActive: {
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(31,140,240,0.16)"
+  },
+  voiceSurfaceTypeLabel: { color: "#5f636c", fontSize: 18, lineHeight: 22, fontWeight: "600" },
+  voiceSurfaceTypeLabelActive: { color: "#10233e" },
+  voiceSurfaceCompactButton: {
+    width: 62,
+    height: 62,
     borderRadius: 31,
     backgroundColor: "rgba(255,255,255,0.82)",
-    paddingHorizontal: 24,
-    color: "#111111",
-    fontSize: 22,
-    lineHeight: 26,
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: "#111827",
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },
     elevation: 3
+  },
+  voiceSurfaceCompactButtonActive: {
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(31,140,240,0.16)"
+  },
+  voiceSurfaceCompactLabel: { color: "#111111", fontSize: 13, lineHeight: 16, fontWeight: "700", textAlign: "center" },
+  voiceSurfaceCompactLabelActive: { color: "#10233e" },
+  voiceComposerPanel: {
+    marginTop: 10,
+    marginBottom: 14,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 28,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(23,34,37,0.08)",
+    shadowColor: "#111827",
+    shadowOpacity: 0.08,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5
+  },
+  voiceComposerPanelHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12
+  },
+  voiceComposerPanelCopy: { flex: 1, gap: 2 },
+  voiceComposerPanelEyebrow: {
+    color: "#6b7280",
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+    textTransform: "uppercase"
+  },
+  voiceComposerPanelTitle: { color: "#10233e", fontSize: 21, lineHeight: 26, fontWeight: "700" },
+  voiceComposerPanelHint: { color: "#5b6170", fontSize: 14, lineHeight: 20 },
+  voiceComposerPanelCollapse: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#eef1f5",
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  voiceComposerPanelCollapseLabel: { color: "#394150", fontSize: 26, lineHeight: 28, fontWeight: "400" },
+  voiceComposerPanelInput: {
+    flex: 1,
+    minHeight: 132,
+    borderRadius: 22,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "rgba(23,34,37,0.08)",
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 16,
+    color: "#111111",
+    fontSize: 19,
+    lineHeight: 25
+  },
+  voiceComposerPanelInputActive: {
+    backgroundColor: "#ffffff",
+    borderColor: "rgba(31,140,240,0.22)"
   },
   voiceSurfaceActionButton: {
     minWidth: 132,

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Linking, Platform, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { Linking, Platform, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 import {
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
@@ -155,11 +155,15 @@ export function StartScreen(props: {
       </View>
 
       <View style={[styles.voiceSurfaceFooter, styles.startVoiceSurfaceFooter]}>
-        <Pressable style={styles.voiceSurfaceRoundButton} onPress={onOpenUtility}>
-          <Text style={styles.voiceSurfaceRoundGlyph}>+</Text>
+        <Pressable
+          style={[styles.voiceSurfaceRoundButton, !store.voiceSessionActive ? styles.disabledButton : null]}
+          onPress={() => store.toggleVoiceMute().catch((error) => console.warn(error))}
+          disabled={!store.voiceSessionActive}
+        >
+          <Text style={styles.voiceSurfaceRoundLabel}>{store.voiceMuted ? "Unmute" : "Mute"}</Text>
         </Pressable>
-        <Pressable style={styles.voiceSurfaceTypeButton} onPress={onOpenTypedChat}>
-          <Text style={styles.voiceSurfaceTypeLabel}>Type</Text>
+        <Pressable testID="start-message-button" style={styles.voiceSurfaceCompactButton} onPress={onOpenTypedChat}>
+          <Text style={styles.voiceSurfaceCompactLabel}>Text</Text>
         </Pressable>
         <Pressable style={styles.voiceSurfaceRoundButton} onPress={onStartTalk}>
           <Text style={styles.voiceSurfaceRoundGlyph}>◉</Text>
@@ -819,8 +823,13 @@ export function ChatScreen(props: {
   const [stickToBottom, setStickToBottom] = useState(true);
   const [expandExternalDraft, setExpandExternalDraft] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [composerFocused, setComposerFocused] = useState(false);
+  const [composerMinimized, setComposerMinimized] = useState(false);
+  const composerRef = useRef<TextInput | null>(null);
+  const { height: windowHeight } = useWindowDimensions();
   const showExternalDraftCard = Boolean(store.externalDraft);
-  const showInlineComposer = manualToolsVisible || hasDraftText;
+  const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
+  const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
   const shouldShowTranscript = showTranscript || showExternalDraftCard;
   const centerHeadline =
     busy || store.sendingMessage
@@ -840,8 +849,9 @@ export function ChatScreen(props: {
   const surfaceMessage = store.error ?? store.notice;
   const surfaceMessageTone = store.error ? "error" : "info";
   const primaryActionLabel = busy || store.sendingMessage ? "Stop" : store.voiceSessionActive ? "End" : "Talk";
-  const secondaryActionGlyph = showInlineComposer && hasDraftText ? "↑" : "◉";
-  const secondaryActionDisabled = showInlineComposer && hasDraftText ? !canSend : !store.voiceAvailable;
+  const secondaryActionGlyph = showComposerPanel && hasDraftText ? "↑" : "◉";
+  const secondaryActionDisabled = showComposerPanel && hasDraftText ? !canSend : !store.voiceAvailable;
+  const manualMessageLabel = hasDraftText && !showComposerPanel ? "Draft" : "Message";
 
   useEffect(() => {
     if (!stickToBottom || !shouldShowTranscript) {
@@ -867,6 +877,23 @@ export function ChatScreen(props: {
       setShowTranscript(true);
     }
   }, [showExternalDraftCard]);
+
+  useEffect(() => {
+    if (manualToolsVisible) {
+      setComposerMinimized(false);
+    }
+  }, [manualToolsVisible]);
+
+  useEffect(() => {
+    if (!showComposerPanel || showExternalDraftCard) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      composerRef.current?.focus();
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [showComposerPanel, showExternalDraftCard]);
 
   return (
     <View style={styles.chatScreen}>
@@ -901,11 +928,21 @@ export function ChatScreen(props: {
           </Pressable>
         </View>
 
-        <View style={styles.voiceSurfaceCenter}>
+        <Pressable
+          testID="voice-dialogue-toggle"
+          style={styles.voiceSurfaceCenter}
+          onPress={() => {
+            if (showExternalDraftCard) {
+              return;
+            }
+            setShowTranscript((value) => !value);
+          }}
+        >
           <Text style={styles.voiceSurfaceHeadline}>{centerHeadline}</Text>
           <Text style={styles.voiceSurfaceSubhead} numberOfLines={shouldShowTranscript ? 3 : 2}>
             {centerSubhead}
           </Text>
+          <Text style={styles.voiceSurfaceCenterHint}>{shouldShowTranscript ? "Tap here to close recent thread" : "Tap here to open recent thread"}</Text>
           {surfaceMessage ? (
             <View
               style={[
@@ -916,7 +953,7 @@ export function ChatScreen(props: {
               <Text style={styles.voiceSurfaceStatusLabel}>{surfaceMessage}</Text>
             </View>
           ) : null}
-        </View>
+        </Pressable>
 
         {shouldShowTranscript ? (
           <View style={styles.voiceTranscriptPanel}>
@@ -931,7 +968,7 @@ export function ChatScreen(props: {
                   setShowTranscript(false);
                 }}
               >
-                <Text style={styles.voiceTranscriptToggleLabel}>Hide</Text>
+                <Text style={styles.voiceTranscriptToggleLabel}>Close</Text>
               </Pressable>
             </View>
             <View style={styles.messages}>
@@ -964,6 +1001,7 @@ export function ChatScreen(props: {
           </View>
         ) : (
           <Pressable style={styles.voicePeekPill} onPress={() => setShowTranscript(true)}>
+            <Text style={styles.voicePeekEyebrow}>Recent thread</Text>
             <Text style={styles.voicePeekTitle}>{selectedSession?.title ?? "Ready for a new turn"}</Text>
             <Text style={styles.voicePeekMeta} numberOfLines={1}>
               {busy || store.sendingMessage
@@ -1068,37 +1106,85 @@ export function ChatScreen(props: {
         </View>
       ) : null}
 
-      <View style={[styles.voiceSurfaceFooter, { marginBottom: footerBottomPadding }]}>
-        <Pressable style={styles.voiceSurfaceRoundButton} onPress={onOpenUtility}>
-          <Text style={styles.voiceSurfaceRoundGlyph}>+</Text>
-        </Pressable>
-        {showInlineComposer ? (
+      {showComposerPanel ? (
+        <View
+          testID="voice-composer-panel"
+          style={[styles.voiceComposerPanel, { minHeight: composerPanelHeight, maxHeight: composerPanelHeight + 56 }]}
+        >
+          <View style={styles.voiceComposerPanelHeader}>
+            <View style={styles.voiceComposerPanelCopy}>
+              <Text style={styles.voiceComposerPanelEyebrow}>Typed turn</Text>
+              <Text style={styles.voiceComposerPanelTitle}>Message Freedom</Text>
+            </View>
+            <Pressable
+              testID="composer-collapse-button"
+              style={styles.voiceComposerPanelCollapse}
+              onPress={() => {
+                setComposerMinimized(true);
+                if (manualToolsVisible) {
+                  onToggleManualTools();
+                }
+                composerRef.current?.blur();
+                setComposerFocused(false);
+              }}
+            >
+              <Text style={styles.voiceComposerPanelCollapseLabel}>−</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.voiceComposerPanelHint}>
+            Type a side note or a full turn here without giving up the live voice controls below.
+          </Text>
           <TextInput
+            ref={composerRef}
             testID="voice-inline-composer"
             value={store.composer}
             onChangeText={(value) => store.setField("composer", value)}
-            placeholder="Type"
-            placeholderTextColor="#a1a1aa"
+            placeholder="Type to Freedom"
+            placeholderTextColor="#7c7f86"
             autoCapitalize="sentences"
             autoCorrect
-            returnKeyType="send"
-            style={styles.voiceSurfaceInlineComposer}
-            onSubmitEditing={() => {
-              if (canSend) {
-                store.sendMessage().catch((error) => console.warn(error));
-              }
-            }}
+            multiline
+            blurOnSubmit={false}
+            textAlignVertical="top"
+            style={[
+              styles.voiceComposerPanelInput,
+              composerFocused || hasDraftText ? styles.voiceComposerPanelInputActive : null
+            ]}
+            onFocus={() => setComposerFocused(true)}
+            onBlur={() => setComposerFocused(false)}
           />
-        ) : (
-          <Pressable style={styles.voiceSurfaceTypeButton} onPress={onToggleManualTools}>
-            <Text style={styles.voiceSurfaceTypeLabel}>Type</Text>
-          </Pressable>
-        )}
+        </View>
+      ) : null}
+
+      <View style={[styles.voiceSurfaceFooter, { marginBottom: footerBottomPadding }]}>
+        <Pressable
+          style={[styles.voiceSurfaceRoundButton, !store.voiceSessionActive ? styles.disabledButton : null]}
+          onPress={() => store.toggleVoiceMute().catch((error) => console.warn(error))}
+          disabled={!store.voiceSessionActive}
+        >
+          <Text style={styles.voiceSurfaceRoundLabel}>{store.voiceMuted ? "Unmute" : "Mute"}</Text>
+        </Pressable>
+        <Pressable
+          testID="chat-message-button"
+          style={[styles.voiceSurfaceCompactButton, showComposerPanel ? styles.voiceSurfaceCompactButtonActive : null]}
+          onPress={() => {
+            if (showComposerPanel) {
+              composerRef.current?.focus();
+              return;
+            }
+            setComposerMinimized(false);
+            onToggleManualTools();
+          }}
+        >
+          <Text style={[styles.voiceSurfaceCompactLabel, showComposerPanel ? styles.voiceSurfaceCompactLabelActive : null]}>
+            {manualMessageLabel === "Draft" ? "Draft" : "Text"}
+          </Text>
+        </Pressable>
         <Pressable
           testID="chat-secondary-action-button"
           style={[styles.voiceSurfaceRoundButton, secondaryActionDisabled ? styles.disabledButton : null]}
           onPress={() => {
-            if (showInlineComposer && hasDraftText) {
+            if (showComposerPanel && hasDraftText) {
               store.sendMessage().catch((error) => console.warn(error));
               return;
             }

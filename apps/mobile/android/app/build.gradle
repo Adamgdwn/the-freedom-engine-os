@@ -115,8 +115,8 @@ android {
         // Every distributed APK must use a unique versionCode so Android installs
         // and upgrade checks never confuse a fresh build with an older artifact.
         // Bump versionName alongside any user-visible release worth identifying.
-        versionCode 46
-        versionName "0.2.39"
+        versionCode 52
+        versionName "0.2.45"
         manifestPlaceholders = [usesCleartextTraffic: "true", firebaseMessagingAutoInitEnabled: hasGoogleServices ? "true" : "false"]
     }
     signingConfigs {

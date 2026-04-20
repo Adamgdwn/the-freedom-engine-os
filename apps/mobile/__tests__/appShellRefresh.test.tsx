@@ -163,6 +163,7 @@ describe("refresh affordances", () => {
     mockStore.voiceSessionActive = false;
     mockStore.sessions = [];
     mockStore.selectedSessionId = null;
+    mockStore.composer = "";
     mockStore.hostStatus.auth.status = "logged_in";
     mockStore.refresh.mockClear();
     mockStore.bootstrap.mockClear();
@@ -182,7 +183,7 @@ describe("refresh affordances", () => {
     expect(labels).toContain("Freedom");
     expect(labels).toContain("Voice");
     expect(labels).toContain("Start talking");
-    expect(labels).toContain("Type");
+    expect(labels).toContain("Text");
     expect(labels).toContain("Talk");
     expect(mockStore.bootstrap).toHaveBeenCalled();
   });
@@ -224,6 +225,130 @@ describe("refresh affordances", () => {
     expect(labels).toContain("Build");
     expect(labels).toContain("Resume work");
     expect(labels).toContain("Launch build chat");
+  });
+
+  test("message control opens a raised composer panel above the footer", async () => {
+    mockStore.view = "chat";
+    mockStore.sessions = [
+      {
+        id: "session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Active Thread",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "/tmp/workspace",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-correlation-1"
+        },
+        threadId: null,
+        status: "ready",
+        activeTurnId: null,
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Continue the current operator task.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "session-1";
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "chat-message-button" }).props.onPress();
+    });
+
+    const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+
+    expect(tree!.root.findByProps({ testID: "voice-composer-panel" })).toBeTruthy();
+    expect(labels).toContain("Text");
+    expect(labels).toContain("Message Freedom");
+    expect(labels).toContain("Typed turn");
+    expect(labels).toContain("−");
+  });
+
+  test("voice dialogue toggles recent thread open and closed", async () => {
+    mockStore.view = "chat";
+    mockStore.sessions = [
+      {
+        id: "session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Active Thread",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "/tmp/workspace",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-correlation-1"
+        },
+        threadId: null,
+        status: "ready",
+        activeTurnId: null,
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Continue the current operator task.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "session-1";
+    mockStore.messagesBySession = {
+      "session-1": [
+        {
+          id: "message-1",
+          sessionId: "session-1",
+          role: "assistant",
+          content: "Recent reply from Freedom.",
+          status: "completed",
+          createdAt: "2026-04-12T10:00:00.000Z",
+          updatedAt: "2026-04-12T10:00:00.000Z"
+        }
+      ]
+    };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    expect(
+      tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children))
+    ).toContain("Tap here to open recent thread");
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "voice-dialogue-toggle" }).props.onPress();
+    });
+
+    let labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Close");
+    expect(labels).toContain("Tap here to close recent thread");
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "voice-dialogue-toggle" }).props.onPress();
+    });
+
+    labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Tap here to open recent thread");
   });
 
   test("utility sheet exposes destinations and mute while the live voice loop is active", async () => {
@@ -272,8 +397,9 @@ describe("refresh affordances", () => {
 
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Start");
-    expect(labels).toContain("Homebase");
+    expect(labels).toContain("Email & Contacts");
+    expect(labels).toContain("Retrieval");
+    expect(labels).toContain("Current Thread");
     expect(labels).toContain("Mute");
     expect(labels).toContain("Auto-send voice turns");
     expect(labels).toContain("Captured turns pause for review instead of sending automatically.");

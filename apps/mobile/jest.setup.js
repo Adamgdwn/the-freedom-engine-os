@@ -20,26 +20,41 @@ jest.mock('react-native-keychain', () => ({
   resetGenericPassword: jest.fn(async () => undefined),
 }));
 
-jest.mock('expo-speech-recognition', () => {
+jest.mock('@react-native-voice/voice', () => {
   const listeners = new Map();
 
   return {
-    ExpoSpeechRecognitionModule: {
-      addListener: jest.fn((eventName, handler) => {
-        listeners.set(eventName, handler);
-        return {
-          remove: jest.fn(() => listeners.delete(eventName)),
-        };
-      }),
-      requestPermissionsAsync: jest.fn(async () => ({granted: true})),
-      isRecognitionAvailable: jest.fn(() => true),
-      getSpeechRecognitionServices: jest.fn(() => ['com.google.android.tts']),
-      getDefaultRecognitionService: jest.fn(() => ({packageName: 'com.google.android.tts'})),
-      getSupportedLocales: jest.fn(async () => ({locales: ['en-US'], installedLocales: ['en-US']})),
-      androidTriggerOfflineModelDownload: jest.fn(async () => ({status: 'opened_dialog', message: 'Opened the model download dialog.'})),
-      start: jest.fn(() => undefined),
-      stop: jest.fn(() => undefined),
-      abort: jest.fn(() => undefined),
+    __esModule: true,
+    default: {
+      __listeners: listeners,
+      removeAllListeners: jest.fn(() => listeners.clear()),
+      destroy: jest.fn(async () => undefined),
+      isAvailable: jest.fn(async () => 1),
+      getSpeechRecognitionServices: jest.fn(async () => ['com.google.android.googlequicksearchbox']),
+      start: jest.fn(async () => undefined),
+      stop: jest.fn(async () => undefined),
+      cancel: jest.fn(async () => undefined),
+      set onSpeechStart(handler) {
+        listeners.set('onSpeechStart', handler);
+      },
+      set onSpeechRecognized(handler) {
+        listeners.set('onSpeechRecognized', handler);
+      },
+      set onSpeechEnd(handler) {
+        listeners.set('onSpeechEnd', handler);
+      },
+      set onSpeechError(handler) {
+        listeners.set('onSpeechError', handler);
+      },
+      set onSpeechResults(handler) {
+        listeners.set('onSpeechResults', handler);
+      },
+      set onSpeechPartialResults(handler) {
+        listeners.set('onSpeechPartialResults', handler);
+      },
+      set onSpeechVolumeChanged(handler) {
+        listeners.set('onSpeechVolumeChanged', handler);
+      },
     },
   };
 });

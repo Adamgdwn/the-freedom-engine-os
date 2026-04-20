@@ -1,6 +1,6 @@
 # Current Capabilities
 
-Last updated: 2026-04-17
+Last updated: 2026-04-20
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -103,6 +103,13 @@ or the boundary between modeled and fully operational capability.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.
+- The `Talk` canvas now uses compact footer controls:
+  `Mute`, a small `Text` entry button, a dedicated raised typed-turn composer,
+  and a reversible `Recent thread` history toggle on the center Freedom dialogue.
+- The mobile companion now supports two distinct thread postures:
+  one continuity-first default voice thread for ongoing relationship memory and
+  day-to-day work, plus explicit new project kickoff through the `Build` view's
+  `Launch build chat` flow for separate governed build sessions.
 - The mobile utility menu now includes an `About this build` section that shows the
   installed app version, build code, and current voice runtime directly on-device for
   release verification.

@@ -171,29 +171,48 @@ export function AppShell(): React.JSX.Element {
             <View style={styles.mobileSheetHeader}>
               <Text style={styles.mobileSheetEyebrow}>{FREEDOM_RUNTIME_NAME}</Text>
               <Text style={styles.mobileSheetTitle}>{FREEDOM_PRODUCT_NAME}</Text>
-              <Text style={styles.mobileSheetSubtitle}>Voice-first operator link with build and status details behind a calmer utility layer.</Text>
+              <Text style={styles.mobileSheetSubtitle}>Capture contacts, route email, and retrieve useful work or memory without leaving the voice-first flow.</Text>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.mobileSheetScroll}>
               <View style={styles.mobileSheetSection}>
-                <Text style={styles.mobileSheetSectionTitle}>Destinations</Text>
-                {(["start", "chat", "sessions", "host"] as const).map((view) => (
+                <Text style={styles.mobileSheetSectionTitle}>Capture & retrieval</Text>
+                {[
+                  {
+                    key: "host",
+                    label: "Email & Contacts",
+                    meta: "Open trusted recipients, outbound email setup, and contact capture details."
+                  },
+                  {
+                    key: "sessions",
+                    label: "Retrieval",
+                    meta: "Open build threads, active queues, and retrieval-oriented project context."
+                  },
+                  {
+                    key: "chat",
+                    label: "Current Thread",
+                    meta: "Jump back into the active voice or typed conversation."
+                  }
+                ].map((item) => (
                   <Pressable
-                    key={view}
-                    style={[styles.mobileSheetNavButton, store.view === view ? styles.mobileSheetNavButtonActive : null]}
+                    key={item.key}
+                    style={[styles.mobileSheetNavButton, store.view === item.key ? styles.mobileSheetNavButtonActive : null]}
                     onPress={() => {
-                      handleNavPress(view);
+                      handleNavPress(item.key as "host" | "sessions" | "chat");
                       setMenuOpen(false);
                     }}
                   >
-                    <Text style={[styles.mobileSheetNavLabel, store.view === view ? styles.mobileSheetNavLabelActive : null]}>
-                      {labelForView(view)}
+                    <Text style={[styles.mobileSheetNavLabel, store.view === item.key ? styles.mobileSheetNavLabelActive : null]}>
+                      {item.label}
                     </Text>
-                    <Text style={[styles.mobileSheetNavMeta, store.view === view ? styles.mobileSheetNavMetaActive : null]}>
-                      {descriptionForView(view)}
+                    <Text style={[styles.mobileSheetNavMeta, store.view === item.key ? styles.mobileSheetNavMetaActive : null]}>
+                      {item.meta}
                     </Text>
                   </Pressable>
                 ))}
+                <Text style={styles.mobileSheetHelper}>
+                  This is the first pass. The longer-term skill here is robust contact capture, retrieval, and memory-aware follow-up from voice.
+                </Text>
               </View>
 
               <View style={styles.mobileSheetSection}>
@@ -327,32 +346,6 @@ function InfoRow({ label, value }: { label: string; value: string }): React.JSX.
       <Text style={styles.mobileSheetInfoValue}>{value}</Text>
     </View>
   );
-}
-
-function labelForView(view: "start" | "host" | "sessions" | "chat"): string {
-  switch (view) {
-    case "start":
-      return "Start";
-    case "host":
-      return "Homebase";
-    case "sessions":
-      return "Build";
-    default:
-      return "Talk";
-  }
-}
-
-function descriptionForView(view: "start" | "host" | "sessions" | "chat"): string {
-  switch (view) {
-    case "start":
-      return "Launch voice, build work, and status details from one calm entry surface.";
-    case "host":
-      return "Connection health, wake, trusted devices, and secondary operational detail.";
-    case "sessions":
-      return "Project chats and structured build requests.";
-    default:
-      return "Live voice with quick access to the active operator thread.";
-  }
 }
 
 function humanizeVoiceStatus(store: AppState): string {

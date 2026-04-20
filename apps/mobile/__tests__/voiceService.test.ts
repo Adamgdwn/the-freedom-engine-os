@@ -1,5 +1,5 @@
-import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
-import { I18nManager, Platform } from "react-native";
+import Voice from "@react-native-voice/voice";
+import { I18nManager, Platform, PermissionsAndroid } from "react-native";
 import { VoiceService } from "../src/services/voice/voiceService";
 
 describe("VoiceService", () => {
@@ -11,6 +11,7 @@ describe("VoiceService", () => {
       doLeftAndRightSwapInRTL: true,
       localeIdentifier: "en-CA"
     });
+    jest.spyOn(PermissionsAndroid, "request").mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
   });
 
   afterEach(() => {
@@ -18,7 +19,7 @@ describe("VoiceService", () => {
     jest.restoreAllMocks();
   });
 
-  test("stops recognition before forcing an abort fallback", async () => {
+  test("stops recognition before forcing a cancel fallback", async () => {
     const service = new VoiceService();
 
     await service.startStreamingSession({
@@ -28,24 +29,26 @@ describe("VoiceService", () => {
 
     service.stopStreamingSession();
 
-    expect(ExpoSpeechRecognitionModule.stop).toHaveBeenCalledTimes(1);
-    expect(ExpoSpeechRecognitionModule.abort).not.toHaveBeenCalled();
+    expect(Voice.stop).toHaveBeenCalledTimes(1);
+    expect(Voice.cancel).not.toHaveBeenCalled();
 
     jest.advanceTimersByTime(150);
+    await flushAsyncWork();
 
-    expect(ExpoSpeechRecognitionModule.abort).toHaveBeenCalledTimes(1);
+    expect(Voice.cancel).toHaveBeenCalledTimes(1);
   });
 
-  test("still forces a native recognizer stop even if JS state thinks the session is idle", () => {
+  test("still forces a native recognizer stop even if JS state thinks the session is idle", async () => {
     const service = new VoiceService();
 
     service.stopStreamingSession();
 
-    expect(ExpoSpeechRecognitionModule.stop).toHaveBeenCalledTimes(1);
+    expect(Voice.stop).toHaveBeenCalledTimes(1);
 
     jest.advanceTimersByTime(150);
+    await flushAsyncWork();
 
-    expect(ExpoSpeechRecognitionModule.abort).toHaveBeenCalledTimes(1);
+    expect(Voice.cancel).toHaveBeenCalledTimes(1);
   });
 
   test("restarts recognition after an unexpected end and preserves the captured transcript", async () => {
@@ -58,16 +61,15 @@ describe("VoiceService", () => {
       onReconnect,
       onError: jest.fn()
     });
-    (ExpoSpeechRecognitionModule.start as jest.Mock).mockClear();
-    (ExpoSpeechRecognitionModule.stop as jest.Mock).mockClear();
-    (ExpoSpeechRecognitionModule.abort as jest.Mock).mockClear();
+    (Voice.start as jest.Mock).mockClear();
+    (Voice.stop as jest.Mock).mockClear();
+    (Voice.cancel as jest.Mock).mockClear();
 
-    const resultListener = getListener("result");
-    const endListener = getListener("end");
+    const partialListener = getListener("onSpeechPartialResults");
+    const endListener = getListener("onSpeechEnd");
 
-    resultListener({
-      results: [{ transcript: "resume after the pause" }],
-      isFinal: false
+    partialListener({
+      value: ["resume after the pause"]
     });
     endListener();
 
@@ -77,12 +79,12 @@ describe("VoiceService", () => {
     await Promise.resolve();
 
     expect(onFinalTranscript).toHaveBeenCalledWith("resume after the pause");
-    expect(ExpoSpeechRecognitionModule.stop).not.toHaveBeenCalled();
-    expect(ExpoSpeechRecognitionModule.abort).not.toHaveBeenCalled();
-    expect(ExpoSpeechRecognitionModule.start).toHaveBeenCalledTimes(1);
+    expect(Voice.stop).not.toHaveBeenCalled();
+    expect(Voice.cancel).not.toHaveBeenCalled();
+    expect(Voice.start).toHaveBeenCalledTimes(1);
   });
 
-  test("commits the latest transcript when Android ends the recognizer without a final flag", async () => {
+  test("commits the latest transcript when Android ends the recognizer without a final result event", async () => {
     const service = new VoiceService();
     const onFinalTranscript = jest.fn();
     const onReconnect = jest.fn();
@@ -92,14 +94,13 @@ describe("VoiceService", () => {
       onReconnect,
       onError: jest.fn()
     });
-    (ExpoSpeechRecognitionModule.start as jest.Mock).mockClear();
+    (Voice.start as jest.Mock).mockClear();
 
-    const resultListener = getListener("result");
-    const endListener = getListener("end");
+    const partialListener = getListener("onSpeechPartialResults");
+    const endListener = getListener("onSpeechEnd");
 
-    resultListener({
-      results: [{ transcript: "Hey freedom can you give me a quick voice check please" }],
-      isFinal: false
+    partialListener({
+      value: ["Hey freedom can you give me a quick voice check please"]
     });
     endListener();
 
@@ -109,10 +110,10 @@ describe("VoiceService", () => {
     jest.advanceTimersByTime(120);
     await Promise.resolve();
 
-    expect(ExpoSpeechRecognitionModule.start).toHaveBeenCalledTimes(1);
+    expect(Voice.start).toHaveBeenCalledTimes(1);
   });
 
-  test("prefers a working Android recognizer when the device default is the TTS package", async () => {
+  test("starts recognition with the device locale and manual permission handling on Android", async () => {
     const service = new VoiceService();
     const originalPlatformOs = Platform.OS;
     Object.defineProperty(Platform, "OS", {
@@ -120,28 +121,22 @@ describe("VoiceService", () => {
       value: "android"
     });
 
-    (ExpoSpeechRecognitionModule.getSpeechRecognitionServices as jest.Mock).mockReturnValue([
+    (Voice.getSpeechRecognitionServices as jest.Mock).mockResolvedValue([
       "com.google.android.as",
       "com.google.android.tts"
     ]);
-    (ExpoSpeechRecognitionModule.getDefaultRecognitionService as jest.Mock).mockReturnValue({
-      packageName: "com.google.android.tts"
-    });
-    (ExpoSpeechRecognitionModule.getSupportedLocales as jest.Mock).mockResolvedValue({
-      installedLocales: ["en-CA", "en-US"]
-    });
 
     await service.startStreamingSession({
       onError: jest.fn()
     });
     await flushAsyncWork();
 
-    expect(ExpoSpeechRecognitionModule.start).toHaveBeenCalledWith(
+    expect(PermissionsAndroid.request).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
+    expect(Voice.start).toHaveBeenCalledWith(
+      "en-CA",
       expect.objectContaining({
-        androidRecognitionServicePackage: "com.google.android.as",
-        continuous: false,
-        lang: "en-CA",
-        requiresOnDeviceRecognition: true
+        REQUEST_PERMISSIONS_AUTO: false,
+        EXTRA_PARTIAL_RESULTS: true
       })
     );
 
@@ -151,7 +146,7 @@ describe("VoiceService", () => {
     });
   });
 
-  test("falls back to another real recognizer when the on-device locale model is missing", async () => {
+  test("surfaces a clear error when Android only exposes the TTS package", async () => {
     const service = new VoiceService();
     const originalPlatformOs = Platform.OS;
     Object.defineProperty(Platform, "OS", {
@@ -159,82 +154,20 @@ describe("VoiceService", () => {
       value: "android"
     });
 
-    (ExpoSpeechRecognitionModule.getSpeechRecognitionServices as jest.Mock).mockReturnValue([
-      "com.google.android.as",
-      "com.google.android.googlequicksearchbox",
-      "com.google.android.tts"
-    ]);
-    (ExpoSpeechRecognitionModule.getDefaultRecognitionService as jest.Mock).mockReturnValue({
-      packageName: "com.google.android.googlequicksearchbox"
-    });
-    (ExpoSpeechRecognitionModule.getSupportedLocales as jest.Mock).mockResolvedValue({
-      installedLocales: []
-    });
+    (Voice.isAvailable as jest.Mock).mockResolvedValue(0);
+    (Voice.getSpeechRecognitionServices as jest.Mock).mockResolvedValue(["com.google.android.tts"]);
 
-    await service.startStreamingSession({
-      onError: jest.fn()
-    });
-    await flushAsyncWork();
-
-    expect(ExpoSpeechRecognitionModule.start).toHaveBeenCalledWith(
-      expect.objectContaining({
-        androidRecognitionServicePackage: "com.google.android.googlequicksearchbox",
-        continuous: false
+    await expect(
+      service.startStreamingSession({
+        onError: jest.fn()
       })
-    );
-    expect(ExpoSpeechRecognitionModule.start).toHaveBeenCalledWith(
-      expect.not.objectContaining({
-        requiresOnDeviceRecognition: true
-      })
-    );
+    ).rejects.toThrow("Speech recognition is not available in this build.");
 
     Object.defineProperty(Platform, "OS", {
       configurable: true,
       value: originalPlatformOs
     });
-  });
-
-  test("opens the Android speech-model download flow when only the missing on-device locale is available", async () => {
-    const service = new VoiceService();
-    const onError = jest.fn();
-    const originalPlatformOs = Platform.OS;
-    Object.defineProperty(Platform, "OS", {
-      configurable: true,
-      value: "android"
-    });
-
-    (ExpoSpeechRecognitionModule.getSpeechRecognitionServices as jest.Mock).mockReturnValue([
-      "com.google.android.as",
-      "com.google.android.tts"
-    ]);
-    (ExpoSpeechRecognitionModule.getDefaultRecognitionService as jest.Mock).mockReturnValue({
-      packageName: "com.google.android.tts"
-    });
-    (ExpoSpeechRecognitionModule.getSupportedLocales as jest.Mock).mockResolvedValue({
-      installedLocales: []
-    });
-    (ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload as jest.Mock).mockResolvedValue({
-      status: "opened_dialog",
-      message: "Opened the model download dialog."
-    });
-
-    await service.startStreamingSession({
-      onError
-    });
-    await flushAsyncWork();
-
-    expect(ExpoSpeechRecognitionModule.start).not.toHaveBeenCalled();
-    expect(ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload).toHaveBeenCalledWith(
-      expect.objectContaining({
-        locale: expect.any(String)
-      })
-    );
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining("Approve the download prompt"));
-
-    Object.defineProperty(Platform, "OS", {
-      configurable: true,
-      value: originalPlatformOs
-    });
+    (Voice.isAvailable as jest.Mock).mockResolvedValue(1);
   });
 
   test("does not reconnect after a fatal recognition error ends the session", async () => {
@@ -246,34 +179,36 @@ describe("VoiceService", () => {
       onError,
       onReconnect
     });
-    (ExpoSpeechRecognitionModule.start as jest.Mock).mockClear();
+    (Voice.start as jest.Mock).mockClear();
 
-    const errorListener = getListener("error");
-    const endListener = getListener("end");
+    const errorListener = getListener("onSpeechError");
+    const endListener = getListener("onSpeechEnd");
 
     errorListener({
-      error: "language-not-supported",
-      message: "Requested language is supported, but not yet downloaded."
+      error: {
+        code: "4",
+        message: "4/error from server"
+      }
     });
     endListener();
 
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onReconnect).not.toHaveBeenCalled();
-    expect(ExpoSpeechRecognitionModule.start).not.toHaveBeenCalled();
+    expect(Voice.start).not.toHaveBeenCalled();
   });
 });
 
-function getListener(eventName: string): (payload?: unknown) => void {
-  const call = (ExpoSpeechRecognitionModule.addListener as jest.Mock).mock.calls.find(([name]) => name === eventName);
-  if (!call) {
-    throw new Error(`Expected a listener for ${eventName}`);
+function getListener(eventName: string): (event?: unknown) => void {
+  const listeners = (Voice as unknown as { __listeners: Map<string, (event?: unknown) => void> }).__listeners;
+  const listener = listeners.get(eventName);
+  if (!listener) {
+    throw new Error(`Missing listener for ${eventName}`);
   }
 
-  return call[1] as (payload?: unknown) => void;
+  return listener;
 }
 
-async function flushAsyncWork(turns = 6): Promise<void> {
-  for (let index = 0; index < turns; index += 1) {
-    await Promise.resolve();
-  }
+async function flushAsyncWork(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
 }

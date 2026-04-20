@@ -107,6 +107,24 @@ that ties business outcomes back to freedom outcomes.
   The phone's `Spoken Reply Voice` setting still only controls the local TTS fallback.
 - The Android companion now shows the live conversation-originated build lane so
   approval-needed work stays visible without leaving the voice-first surface.
+- The mobile voice footer now uses the left action for live mute/unmute instead of a
+  generic `+`, and the `Message` control opens a dedicated typed-turn panel above the
+  footer with a collapse affordance so text entry is visibly separate from the voice
+  controls.
+- The compact conversation preview on the voice canvas is now explicitly a `Recent
+  thread` surface. Treat it as the transcript/history peek, not the typed-entry area.
+- The center Freedom dialogue on the voice canvas is also the reversible history
+  toggle: tap it once to open `Recent thread`, and tap it again to close it.
+- The idle typed-entry control on that same footer is intentionally compact now: look
+  for the small `Text` button beside `Mute`, then use the `Build` view's `Launch build
+  chat` flow when you want a truly separate new work thread.
+- The three-dots utility sheet is now oriented toward email/contact capture and
+  retrieval. Treat it as the first pass toward a more robust contact-memory skill.
+- Android speech recognition now runs through the React Native voice adapter instead
+  of the incompatible Expo speech-recognition module, which removes the startup native
+  module error seen on the current Expo 56 / RN 0.84 stack.
+- The Android companion also installs `TextEncoder` / `TextDecoder` polyfills at
+  startup so Hermes-compatible builds do not abort before the voice runtime is ready.
 - The intended operating direction is a mostly autonomous business partner:
   Freedom should identify what deserves a real build session, develop the business and
   technical case, execute approved Pop!_OS work, and report clearly on what changed,

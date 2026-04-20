@@ -3,6 +3,7 @@
  */
 
 import './src/runtime/installDomExceptionPolyfill';
+import './src/runtime/installTextEncodingPolyfill';
 import { AppRegistry } from 'react-native';
 import { registerGlobals } from '@livekit/react-native';
 import App from './App';
