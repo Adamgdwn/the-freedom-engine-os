@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import {
   createOutboundRecipientRequestSchema,
   createSessionRequestSchema,
+  createVoiceRuntimeSessionRequestSchema,
   hostAssistantDeltaRequestSchema,
   hostCompleteTurnRequestSchema,
   hostFailTurnRequestSchema,
@@ -18,6 +19,7 @@ import {
   renameDeviceRequestSchema,
   sendExternalMessageRequestSchema,
   sendTestNotificationRequestSchema,
+  updateHostVoiceProfileRequestSchema,
   updateNotificationPrefsRequestSchema,
   updateSessionRequestSchema
 } from "@freedom/shared";
@@ -113,21 +115,41 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const method = req.method ?? "GET";
+    const isReadOnlyHead = method === "HEAD";
+    const requestMethod = isReadOnlyHead ? "GET" : method;
 
-    if (method === "GET" && url.pathname === "/") {
+    if (requestMethod === "GET" && url.pathname === "/") {
       const overview = await store.getOverview();
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end();
+        return;
+      }
       sendHtml(res, 200, renderDesktopPage(await buildInstallPageModel(req, overview)));
       return;
     }
 
-    if (method === "GET" && url.pathname === "/install") {
+    if (requestMethod === "GET" && url.pathname === "/install") {
       const overview = await store.getOverview();
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end();
+        return;
+      }
       sendHtml(res, 200, renderInstallPage(await buildInstallPageModel(req, overview)));
       return;
     }
 
-    if (method === "GET" && url.pathname === "/install/qr.svg") {
+    if (requestMethod === "GET" && url.pathname === "/install/qr.svg") {
       const overview = await store.getOverview();
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "image/svg+xml; charset=utf-8");
+        res.end();
+        return;
+      }
       sendSvg(res, 200, await renderInstallQrSvg(req, overview));
       return;
     }
@@ -165,12 +187,18 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (method === "GET" && url.pathname === "/healthz") {
+    if (requestMethod === "GET" && url.pathname === "/healthz") {
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json; charset=utf-8");
+        res.end();
+        return;
+      }
       sendJson(res, 200, { ok: true });
       return;
     }
 
-    if (method === "GET" && (url.pathname === "/downloads/android/latest.apk" || /^\/downloads\/android\/[^/]+\.apk$/.test(url.pathname))) {
+    if (requestMethod === "GET" && (url.pathname === "/downloads/android/latest.apk" || /^\/downloads\/android\/[^/]+\.apk$/.test(url.pathname))) {
       const artifact = await findAndroidArtifact();
       if (!artifact) {
         sendJson(res, 404, { error: "Android APK not found on this desktop yet." });
@@ -193,6 +221,10 @@ const server = createServer(async (req, res) => {
       res.setHeader("surrogate-control", "no-store");
       res.setHeader("etag", `"${artifact.buildId}"`);
       res.setHeader("last-modified", new Date(artifact.builtAt).toUTCString());
+      if (isReadOnlyHead) {
+        res.end();
+        return;
+      }
       createReadStream(artifact.filePath).pipe(res);
       return;
     }
@@ -214,8 +246,57 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/host/voice-profile") {
+      sendJson(res, 200, await store.getVoiceProfile(readBearer(req)));
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/host/build-lane") {
+      sendJson(res, 200, await store.getBuildLaneSummary(readBearer(req)));
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/host/voice-runtime-bootstrap") {
+      const roomName = url.searchParams.get("roomName")?.trim();
+      if (!roomName) {
+        throw new Error("roomName is required.");
+      }
+      sendJson(res, 200, await store.getVoiceRuntimeBootstrap(readBearer(req), roomName));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/host/voice-profile") {
+      const parsed = updateHostVoiceProfileRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.updateVoiceProfile(readBearer(req), parsed));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/host/voice-runtime-transcript") {
+      const parsed = await readJson<{
+        roomName?: unknown;
+        messageId?: unknown;
+        role?: unknown;
+        text?: unknown;
+      }>(req);
+      const roomName = typeof parsed.roomName === "string" ? parsed.roomName.trim() : "";
+      const messageId = typeof parsed.messageId === "string" ? parsed.messageId.trim() : "";
+      const role = parsed.role === "user" || parsed.role === "assistant" ? parsed.role : null;
+      const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
+      if (!roomName || !messageId || !role || !text) {
+        throw new Error("roomName, messageId, role, and text are required.");
+      }
+      sendJson(res, 200, await store.appendVoiceRuntimeTranscript(readBearer(req), { roomName, messageId, role, text }));
+      return;
+    }
+
     if (method === "POST" && url.pathname === "/realtime/ticket") {
       sendJson(res, 200, await store.createRealtimeTicket(readBearer(req)));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/voice/runtime/session") {
+      const parsed = createVoiceRuntimeSessionRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.createVoiceRuntimeSession(readBearer(req), parsed));
       return;
     }
 
@@ -226,7 +307,16 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === "GET" && url.pathname === "/host/work") {
-      sendJson(res, 200, await store.getNextWork(readBearer(req)));
+      const waitMs = Number(url.searchParams.get("waitMs") ?? "0");
+      const acceptQueued = url.searchParams.get("acceptQueued");
+      sendJson(
+        res,
+        200,
+        await store.getNextWork(readBearer(req), {
+          waitMs: Number.isFinite(waitMs) ? waitMs : 0,
+          acceptQueued: acceptQueued === null ? true : acceptQueued !== "0",
+        }),
+      );
       return;
     }
 

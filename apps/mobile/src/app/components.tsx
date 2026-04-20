@@ -117,6 +117,37 @@ export function VoiceSessionPanel(props: {
           : props.phase === "muted" || props.phase === "review"
             ? styles.voiceOrbMuted
             : styles.voiceOrbListening;
+  const pulse = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: props.active ? 1400 : 2200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: props.active ? 1400 : 2200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true
+        })
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [props.active, pulse]);
+
+  const pulseScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.88, 1.08]
+  });
+  const pulseOpacity = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.18, 0.42]
+  });
 
   return (
     <View style={[styles.card, styles.voiceSessionCard]}>
@@ -129,6 +160,8 @@ export function VoiceSessionPanel(props: {
       </View>
       <View style={styles.voiceHeroRow}>
         <View style={styles.voiceOrbShell}>
+          <Animated.View style={[styles.voiceOrbPulse, { transform: [{ scale: pulseScale }], opacity: pulseOpacity }]} />
+          <View style={styles.voiceOrbHalo} />
           <View style={[styles.voiceOrbCore, orbToneStyle]} />
         </View>
         <View style={styles.voiceHeroCopy}>

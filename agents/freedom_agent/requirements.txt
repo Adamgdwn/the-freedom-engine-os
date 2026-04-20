@@ -1,3 +1,5 @@
-# Pinned to a known-stable range. livekit-agents 0.12.x+ supports AgentSession API.
-livekit-agents[openai]>=0.12,<1.0
+# AgentSession + OpenAI Realtime are documented on the LiveKit Agents 1.x line.
+livekit-agents[openai]>=1.4,<2.0
+livekit-plugins-openai>=1.4,<2.0
+av>=14,<18
 python-dotenv>=1.0

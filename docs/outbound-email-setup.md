@@ -2,7 +2,7 @@
 
 ## Recommended Sender Path
 
-Use Resend for outbound delivery and keep Google mailbox credentials out of Adam Connect.
+Use Resend for outbound delivery and keep Google mailbox credentials out of the Freedom desktop runtime.
 
 For `freedom@agoperations.ca`, verify `agoperations.ca` in Resend, then send from:
 
@@ -22,7 +22,7 @@ OUTBOUND_EMAIL_FROM=freedom@agoperations.ca
 OUTBOUND_EMAIL_REPLY_TO=freedom@agoperations.ca
 ```
 
-Do not put a Google mailbox password in the repo or in Adam Connect config.
+Do not put a Google mailbox password in the repo or in Freedom desktop runtime config.
 
 ## Resend Setup
 
@@ -47,7 +47,7 @@ Do not put a Google mailbox password in the repo or in Adam Connect config.
 2. Open `Host -> External Reports`.
 3. Add one or more trusted recipient email addresses.
 4. In chat, open a completed assistant reply.
-5. Tap `Email this reply`, or ask for the email naturally in voice and confirm when Adam Connect prepares the draft.
+5. Tap `Email this reply`, or ask for the email naturally in voice and confirm when Freedom prepares the draft.
 6. Choose the recipient, edit subject/intro, and send.
 
 ## Validation

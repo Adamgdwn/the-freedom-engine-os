@@ -1,8 +1,17 @@
 import { create } from "zustand";
-import { buildProjectStarterPrompt } from "@freedom/shared";
+import { Platform } from "react-native";
+import {
+  buildProjectStarterPrompt,
+  getAssistantVoiceCatalogEntry,
+  normalizeAssistantVoicePresetId,
+  type AssistantVoicePresetId,
+  type VoiceRuntimeMode,
+  type VoiceSessionBinding
+} from "@freedom/shared";
 import type {
   ChatMessage,
   ChatSession,
+  ConversationBuildLaneSummary,
   HostStatus,
   InputMode,
   NotificationEvent,
@@ -19,6 +28,7 @@ import { clearSettings, loadSettings, saveSettings, type StoredSettings } from "
 import { clearDeviceToken, loadDeviceToken, saveDeviceToken } from "../services/storage/tokenStorage";
 import { FcmService } from "../services/notifications/fcmService";
 import { AssistantSpeechRuntime } from "../services/voice/assistantSpeechRuntime";
+import { RealtimeVoiceService } from "../services/voice/realtimeVoiceService";
 import { TtsService, type TtsVoiceOption } from "../services/voice/ttsService";
 import { VoiceService } from "../services/voice/voiceService";
 import { WakeRelayClient } from "../services/wake/wakeRelayClient";
@@ -27,6 +37,7 @@ import {
   DEFAULT_BASE_URL,
   VOICE_BACKCHANNEL_MAX_WORDS,
   VOICE_INTERRUPT_MIN_CHARS,
+  VOICE_RUNTIME_MODE,
   VOICE_SESSION_ENABLED,
   VOICE_TTS_MIN_CHARS
 } from "../generated/runtimeConfig";
@@ -58,7 +69,7 @@ import {
   shouldInterruptAssistant
 } from "../services/voice/voiceSessionMachine";
 
-type View = "host" | "sessions" | "chat";
+type View = "start" | "host" | "sessions" | "chat";
 type EditableField =
   | "baseUrl"
   | "deviceName"
@@ -118,6 +129,7 @@ export interface AppState {
   token: string | null;
   currentDeviceId: string | null;
   hostStatus: HostStatus | null;
+  buildLaneSummary: ConversationBuildLaneSummary | null;
   devices: PairedDevice[];
   sessions: ChatSession[];
   selectedSessionId: string | null;
@@ -144,11 +156,15 @@ export interface AppState {
   renameDraftBySession: Record<string, string>;
   autoSpeak: boolean;
   autoSendVoice: boolean;
+  voiceAutoSendPreferenceTouched: boolean;
   voiceAvailable: boolean;
+  voiceRuntimeMode: VoiceRuntimeMode;
+  voiceRuntimeBinding: VoiceSessionBinding | null;
   pushAvailable: boolean;
   pushSyncing: boolean;
   listening: boolean;
   voiceSessionActive: boolean;
+  voiceTargetSessionId: string | null;
   voiceMuted: boolean;
   voiceSessionPhase: VoiceSessionPhase;
   liveTranscript: string;
@@ -188,6 +204,7 @@ export interface AppState {
   toggleVoiceMute(): Promise<void>;
   setResponseStyle(style: ResponseStyle): Promise<void>;
   selectAssistantVoice(voiceId: string | null): Promise<void>;
+  selectFreedomVoicePreset(voiceId: AssistantVoicePresetId): Promise<void>;
   setRenameDraft(sessionId: string, value: string): void;
   setField<K extends EditableField>(field: K, value: AppState[K]): void;
   setView(view: View): void;
@@ -195,6 +212,7 @@ export interface AppState {
 
 const api = new ApiClient();
 const voice = new VoiceService();
+const realtimeVoice = new RealtimeVoiceService();
 const fcm = new FcmService();
 const tts = new TtsService();
 const assistantSpeech = new AssistantSpeechRuntime(tts);
@@ -202,12 +220,25 @@ const wakeRelay = new WakeRelayClient();
 let socket: WebSocket | null = null;
 let unsubscribePushTokenRefresh: (() => void) | null = null;
 let voiceInterruptRequested = false;
-// Pause recognition during assistant playback so Freedom does not hear its own TTS.
-// Barge-in still works by stopping playback and resuming recognition for the user.
-const SHOULD_PAUSE_RECOGNITION_DURING_TTS = true;
-const VOICE_CONTINUATION_GRACE_MS = 1400;
+let backendInterruptTurnId: string | null = null;
+// Keep recognition live during spoken replies so barge-in can fire while Freedom is
+// talking. Assistant echo filtering handles the self-hear suppression instead.
+const SHOULD_PAUSE_RECOGNITION_DURING_TTS = Platform.OS === "android";
+const VOICE_CONTINUATION_GRACE_MS = 450;
 let pendingVoiceTranscript: string | null = null;
 let pendingVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
+
+function prefersRealtimePrimaryVoice(): boolean {
+  return VOICE_RUNTIME_MODE === "realtime_primary";
+}
+
+function usesRealtimeVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voiceSessionActive">): boolean {
+  return state.voiceSessionActive && state.voiceRuntimeMode === "realtime_primary";
+}
+
+function usesDeviceVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voiceSessionActive">): boolean {
+  return state.voiceSessionActive && state.voiceRuntimeMode === "device_fallback";
+}
 
 const defaultVoiceTelemetry = (): VoiceTelemetry => ({
   turnsStarted: 0,
@@ -257,6 +288,7 @@ function normalizeStoredSettings(settings: Partial<StoredSettings> & Pick<Stored
     currentDeviceId: settings.currentDeviceId ?? null,
     autoSpeak: settings.autoSpeak,
     autoSendVoice: settings.autoSendVoice,
+    voiceAutoSendPreferenceTouched: settings.voiceAutoSendPreferenceTouched ?? false,
     responseStyle: settings.responseStyle ?? "natural",
     assistantVoiceId: settings.assistantVoiceId ?? null,
     wakeControl: settings.wakeControl ?? null
@@ -270,6 +302,7 @@ function buildStoredSettings(state: AppState, overrides: Partial<StoredSettings>
     currentDeviceId: overrides.currentDeviceId ?? state.currentDeviceId,
     autoSpeak: overrides.autoSpeak ?? state.autoSpeak,
     autoSendVoice: overrides.autoSendVoice ?? state.autoSendVoice,
+    voiceAutoSendPreferenceTouched: overrides.voiceAutoSendPreferenceTouched ?? state.voiceAutoSendPreferenceTouched,
     responseStyle: overrides.responseStyle ?? state.responseStyle,
     assistantVoiceId: overrides.assistantVoiceId ?? state.selectedAssistantVoiceId,
     wakeControl: overrides.wakeControl ?? state.wakeControl
@@ -300,13 +333,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   refreshing: false,
   sendingMessage: false,
   realtimeConnected: false,
-  view: "host",
+  view: "start",
   baseUrl: DEFAULT_BASE_URL,
   deviceName: "Adam's Phone",
   pairingCode: "",
   token: null,
   currentDeviceId: null,
   hostStatus: null,
+  buildLaneSummary: null,
   devices: [],
   sessions: [],
   selectedSessionId: null,
@@ -333,11 +367,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   renameDraftBySession: {},
   autoSpeak: false,
   autoSendVoice: true,
+  voiceAutoSendPreferenceTouched: false,
   voiceAvailable: false,
+  voiceRuntimeMode: VOICE_RUNTIME_MODE,
+  voiceRuntimeBinding: null,
   pushAvailable: false,
   pushSyncing: false,
   listening: false,
   voiceSessionActive: false,
+  voiceTargetSessionId: null,
   voiceMuted: false,
   voiceSessionPhase: "idle",
   liveTranscript: "",
@@ -349,6 +387,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   error: null,
   async bootstrap() {
     voice.stopStreamingSession();
+    void realtimeVoice.stopSession();
     assistantSpeech.configure({
       onBeforeSpeak: () => {
         pauseVoiceLoopForAssistant(get, set);
@@ -372,6 +411,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           if (state.voiceSessionPhase === "assistant-speaking" || state.voiceSessionPhase === "muted") {
             return {
               listening: SHOULD_PAUSE_RECOGNITION_DURING_TTS ? false : state.listening,
+              voiceAssistantDraft: speaking ? state.voiceAssistantDraft : null,
               voiceSessionPhase: state.voiceMuted ? "muted" : state.error ? "error" : "listening"
             };
           }
@@ -386,6 +426,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       onSpeechError: (message) => {
         set((state) => ({
           notice: message,
+          voiceAssistantDraft: null,
           listening: SHOULD_PAUSE_RECOGNITION_DURING_TTS ? false : state.listening,
           voiceSessionPhase: state.voiceSessionActive ? (state.voiceMuted ? "muted" : "listening") : state.voiceSessionPhase
         }));
@@ -395,10 +436,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     });
 
-    const [settings, token, voiceAvailable] = await Promise.all([
+    const [settings, token, deviceVoiceAvailable, realtimeVoiceAvailable] = await Promise.all([
       settleWithin(loadSettings(), 1200, null),
       settleWithin(loadDeviceToken(), 1200, null),
-      settleWithin(voice.isAvailable(), 1200, false)
+      settleWithin(voice.isAvailable(), 1200, false),
+      settleWithin(realtimeVoice.isAvailable(), 1200, false)
     ]);
 
     const assistantVoiceState = await settleWithin(
@@ -417,6 +459,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           currentDeviceId: settings.currentDeviceId ?? null,
           autoSpeak: settings.autoSpeak,
           autoSendVoice: settings.autoSendVoice,
+          voiceAutoSendPreferenceTouched: settings.voiceAutoSendPreferenceTouched ?? false,
           responseStyle: settings.responseStyle,
           assistantVoiceId: null,
           wakeControl: settings.wakeControl ?? null
@@ -424,19 +467,46 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     }
 
+    const shouldMigrateLegacyVoiceAutoSend = settings?.autoSendVoice === false && settings.voiceAutoSendPreferenceTouched !== true;
+    const resolvedAutoSendVoice = shouldMigrateLegacyVoiceAutoSend ? true : (settings?.autoSendVoice ?? true);
+
+    if (settings && shouldMigrateLegacyVoiceAutoSend) {
+      await saveSettings({
+        ...normalizeStoredSettings({
+          ...settings,
+          autoSendVoice: true,
+          voiceAutoSendPreferenceTouched: false
+        })
+      });
+    }
+
+    const resolvedVoiceRuntimeMode: VoiceRuntimeMode =
+      prefersRealtimePrimaryVoice() && realtimeVoiceAvailable
+        ? "realtime_primary"
+        : deviceVoiceAvailable
+          ? "device_fallback"
+          : realtimeVoiceAvailable
+            ? "realtime_primary"
+            : prefersRealtimePrimaryVoice()
+              ? "realtime_primary"
+              : "device_fallback";
+
     set({
       baseUrl: settings?.baseUrl ?? DEFAULT_BASE_URL,
       deviceName: settings?.deviceName ?? "Adam's Phone",
       currentDeviceId: settings?.currentDeviceId ?? null,
       autoSpeak: settings?.autoSpeak ?? false,
-      autoSendVoice: settings?.autoSendVoice ?? true,
+      autoSendVoice: resolvedAutoSendVoice,
+      voiceAutoSendPreferenceTouched: settings?.voiceAutoSendPreferenceTouched ?? false,
       responseStyle: settings?.responseStyle ?? "natural",
       assistantVoices: assistantVoiceState.assistantVoices,
       selectedAssistantVoiceId: assistantVoiceState.selectedAssistantVoiceId,
       wakeControl: settings?.wakeControl ?? null,
       outboundRecipients: [],
       token,
-      voiceAvailable,
+      voiceAvailable: realtimeVoiceAvailable || deviceVoiceAvailable,
+      voiceRuntimeMode: resolvedVoiceRuntimeMode,
+      voiceRuntimeBinding: null,
       pushAvailable: fcm.isAvailable(),
       realtimeConnected: false,
       notice: token ? "Restoring the saved desktop link." : null,
@@ -493,11 +563,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeSessionCount: 0,
           pairedDeviceCount: 1
         },
+        buildLaneSummary: null,
         pairingCode: "",
         newSessionRootPath: paired.host.approvedRoots[0] ?? "",
         realtimeConnected: false,
         notice: `${FREEDOM_PRODUCT_NAME} is paired. Your primary chat will be ready for quick turns.`,
-        view: "host"
+        view: "start"
       });
       syncPushTokenRefresh(baseUrl, paired.deviceToken, get, set);
       connectSocket(baseUrl, paired.deviceToken, set, get);
@@ -514,6 +585,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     clearPendingVoiceTranscript();
     disconnectSocket();
     voice.stopStreamingSession();
+    void realtimeVoice.stopSession();
     assistantSpeech.reset();
     tts.stop();
     unsubscribePushTokenRefresh?.();
@@ -525,6 +597,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       token: null,
       currentDeviceId: null,
       hostStatus: null,
+      buildLaneSummary: null,
       devices: [],
       sessions: [],
       selectedSessionId: null,
@@ -551,8 +624,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       renameDraftBySession: {},
       autoSpeak: false,
       autoSendVoice: true,
+      voiceAutoSendPreferenceTouched: false,
       listening: false,
+      voiceRuntimeMode: prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
+      voiceRuntimeBinding: null,
       voiceSessionActive: false,
+      voiceTargetSessionId: null,
       voiceMuted: false,
       voiceSessionPhase: "idle",
       liveTranscript: "",
@@ -565,7 +642,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       sendingMessage: false,
       realtimeConnected: false,
       error: null,
-      view: "host"
+        view: "start"
     });
     voiceInterruptRequested = false;
   },
@@ -574,8 +651,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
     set({ refreshing: true });
     try {
-      const [hostStatus, sessions, devices, outboundRecipients] = await Promise.all([
+      const previousView = get().view;
+      const [hostStatus, buildLaneSummary, sessions, devices, outboundRecipients] = await Promise.all([
         api.getHostStatus(token, baseUrl),
+        api.getBuildLaneSummary(token, baseUrl),
         api.listSessions(token, baseUrl),
         api.listDevices(token, baseUrl),
         api.listOutboundRecipients(token, baseUrl)
@@ -597,6 +676,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       set({
         hostStatus,
+        buildLaneSummary,
         wakeControl: hostStatus.wakeControl,
         devices,
         outboundRecipients,
@@ -614,6 +694,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (nextSelected) {
         await get().selectSession(nextSelected);
+        if (previousView === "start") {
+          set({ view: "start" });
+        }
       } else if (hostStatus.host.approvedRoots[0]) {
         const operatorSession = await ensureOperatorSession(get, set, {
           token,
@@ -622,6 +705,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
         if (operatorSession) {
           await get().selectSession(operatorSession.id);
+          if (previousView === "start") {
+            set({ view: "start" });
+          }
         }
       }
 
@@ -653,6 +739,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       const token = requireValue(get().token, "Pair this phone with the desktop first.");
       const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
       const messages = await api.listMessages(token, baseUrl, sessionId);
+      const pinnedVoiceTitle =
+        get().voiceSessionActive && get().voiceTargetSessionId && get().voiceTargetSessionId !== sessionId
+          ? get().sessions.find((item) => item.id === get().voiceTargetSessionId)?.title ?? null
+          : null;
       set((state) => ({
         selectedSessionId: sessionId,
         messagesBySession: {
@@ -660,7 +750,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           [sessionId]: messages
         },
         view: "chat",
-        notice: null,
+        notice: pinnedVoiceTitle ? `Voice loop stays attached to ${pinnedVoiceTitle} until you stop it.` : null,
         error: null
       }));
     } catch (error) {
@@ -776,6 +866,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           selectedSessionId: nextSelectedSessionId,
           messagesBySession: nextMessagesBySession,
           renameDraftBySession: nextRenameDrafts,
+          voiceTargetSessionId: state.voiceTargetSessionId === sessionId ? null : state.voiceTargetSessionId,
           view: nextSelectedSessionId ? state.view : "sessions",
           notice: null,
           error: null
@@ -809,7 +900,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const token = requireValue(get().token, "Pair this phone with the desktop first.");
       const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
 
-      let sessionId = get().selectedSessionId;
+      const isVoiceTurn = get().composerInputMode === "voice" || get().composerInputMode === "voice_polished";
+      let sessionId = isVoiceTurn ? get().voiceTargetSessionId ?? get().selectedSessionId : get().selectedSessionId;
       if (!sessionId) {
         const operatorSession = await ensureOperatorSession(get, set, {
           token,
@@ -826,7 +918,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       const wasBusy = isSessionBusy(targetSession);
 
       set({ sendingMessage: true, error: null });
-      const isVoiceTurn = get().composerInputMode === "voice";
       const parsedExternalRequest = parseExternalSendRequest(text, get().outboundRecipients);
       const message = await api.postMessage(token, baseUrl, resolvedSessionId, {
         text,
@@ -839,6 +930,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         composer: "",
         composerInputMode: "text",
         sendingMessage: false,
+        voiceTargetSessionId:
+          state.voiceSessionActive && isVoiceTurn ? resolvedSessionId : state.voiceTargetSessionId,
         notice:
           wasBusy && isVoiceTurn
             ? `${FREEDOM_RUNTIME_NAME} captured your interrupt and routed it without blocking the session.`
@@ -897,7 +990,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const token = get().token;
       const baseUrl = get().baseUrl;
-      const targetSession = findManualStopTargetSession(get().selectedSessionId, get().sessions);
+      const targetSession = findManualStopTargetSession(get().voiceTargetSessionId ?? get().selectedSessionId, get().sessions);
 
       if (!token || !baseUrl || !targetSession) {
         if (shouldStopVoiceLoop) {
@@ -1033,8 +1126,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   async toggleAutoSendVoice() {
     const next = !get().autoSendVoice;
-    await persistSettings(get, { autoSendVoice: next });
-    set({ autoSendVoice: next });
+    await persistSettings(get, { autoSendVoice: next, voiceAutoSendPreferenceTouched: true });
+    set({
+      autoSendVoice: next,
+      voiceAutoSendPreferenceTouched: true,
+      notice: next
+        ? "Voice auto-send is on. Low-risk spoken turns will send after capture."
+        : "Voice auto-send is off. Captured turns stay in review until you send them.",
+      error: null
+    });
   },
   async testAssistantVoice() {
     if (get().voiceSessionActive) {
@@ -1273,7 +1373,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         listening: false,
         voiceSessionActive: false,
+        voiceTargetSessionId: null,
         voiceMuted: false,
+        voiceRuntimeBinding: null,
         voiceSessionPhase: "error",
         notice: null,
         error: "Realtime voice sessions are disabled in this build."
@@ -1285,15 +1387,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         listening: false,
         voiceSessionActive: false,
+        voiceTargetSessionId: null,
         voiceMuted: false,
+        voiceRuntimeBinding: null,
         voiceSessionPhase: "error",
         notice: null,
-        error: "Voice input is not available on this phone yet. Install or enable the device speech recognition service and try again."
+        error: "Voice input is not available on this phone yet."
       });
       return;
     }
 
     if (get().voiceSessionActive) {
+      if (get().voiceSessionPhase === "assistant-speaking") {
+        await requestImmediateVoiceInterrupt(get, set);
+        return;
+      }
+
       stopActiveVoiceLoop(set, {
         notice: null,
         error: null
@@ -1301,18 +1410,47 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    let targetSessionId: string;
+    try {
+      targetSessionId = await resolveVoiceTargetSessionId(get, set);
+    } catch (error) {
+      await handleStoreError(error, set, get, "Open or start a chat before starting the voice loop.");
+      return;
+    }
+
     set({
-        notice: `Voice loop starting. Speak naturally and ${FREEDOM_RUNTIME_NAME} will keep listening between turns.`,
-        error: null,
-        voiceSessionActive: true,
-        voiceMuted: false,
-        listening: true,
-        voiceSessionPhase: "connecting",
+      notice: prefersRealtimePrimaryVoice()
+        ? `Realtime voice starting. ${FREEDOM_RUNTIME_NAME} is switching this phone onto the primary LiveKit voice path.`
+        : `Voice loop starting. Speak naturally and ${FREEDOM_RUNTIME_NAME} will keep listening between turns.`,
+      error: null,
+      voiceSessionActive: true,
+      voiceTargetSessionId: targetSessionId,
+      voiceMuted: false,
+      listening: true,
+      voiceRuntimeMode: prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
+      voiceRuntimeBinding: null,
+      voiceSessionPhase: "connecting",
       liveTranscript: "",
       voiceAudioLevel: -2,
       voiceAssistantDraft: null
     });
     voiceInterruptRequested = false;
+
+    if (prefersRealtimePrimaryVoice()) {
+      try {
+        await startRealtimeVoiceSession(get, set, targetSessionId);
+        return;
+      } catch {
+        set({
+          notice: "Realtime voice could not start cleanly, so this build is falling back to the older device voice path for now.",
+          error: null,
+          voiceRuntimeMode: "device_fallback",
+          voiceRuntimeBinding: null,
+          voiceSessionPhase: "connecting",
+          listening: true
+        });
+      }
+    }
 
     if (!(await tts.prepare())) {
       set({
@@ -1342,7 +1480,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         error: null,
         voiceSessionPhase: "connecting"
       });
-      await startVoiceLoopRecognition(get, set);
+      if (usesRealtimeVoicePath(get())) {
+        await realtimeVoice.setMuted(false);
+        set({ listening: true, voiceSessionPhase: "listening" });
+      } else {
+        await startVoiceLoopRecognition(get, set);
+      }
       if (pendingVoiceTranscript) {
         schedulePendingVoiceCommit(get, set);
       }
@@ -1350,7 +1493,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     clearPendingVoiceCommitTimer();
-    voice.stopStreamingSession();
+    if (usesRealtimeVoicePath(state)) {
+      await realtimeVoice.setMuted(true);
+    } else {
+      voice.stopStreamingSession();
+    }
     set({
       voiceMuted: true,
       listening: false,
@@ -1384,6 +1531,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         : `Spoken reply voice reset to automatic. ${FREEDOM_RUNTIME_NAME} will use the phone's default English voice.`,
       error: null
     });
+  },
+  async selectFreedomVoicePreset(voiceId) {
+    try {
+      const token = requireValue(get().token, "Pair this phone with the desktop first.");
+      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+      const targetVoice = normalizeAssistantVoicePresetId(voiceId);
+      const updated = await api.updateVoiceProfile(token, baseUrl, {
+        targetVoice,
+        notes: null
+      });
+      const entry = getAssistantVoiceCatalogEntry(updated.targetVoice);
+      set((state) => ({
+        hostStatus: state.hostStatus
+          ? {
+              ...state.hostStatus,
+              voiceProfile: updated
+            }
+          : state.hostStatus,
+        notice: `${entry.label} is set as Freedom's live voice. Start a fresh Talk session to hear it clearly.`,
+        error: null
+      }));
+    } catch (error) {
+      await handleStoreError(error, set, get, "Could not update Freedom's live voice.");
+    }
   },
   setRenameDraft(sessionId, value) {
     set((state) => ({
@@ -1481,6 +1652,7 @@ function buildVoiceSessionCallbacks(
       if (!voiceInterruptRequested && isVoiceAssistantActive(get) && shouldInterruptAssistant(merged, VOICE_INTERRUPT_MIN_CHARS, VOICE_BACKCHANNEL_MAX_WORDS)) {
         voiceInterruptRequested = true;
         assistantSpeech.stop();
+        void requestImmediateVoiceInterrupt(get, set).catch(() => undefined);
         set((state) => ({
           voiceSessionPhase: "interrupted",
           notice: "Interrupt heard. Freedom stopped speaking and is capturing your next turn now.",
@@ -1550,6 +1722,7 @@ function buildVoiceSessionCallbacks(
       set({
         listening: false,
         voiceSessionActive: false,
+        voiceTargetSessionId: null,
         voiceMuted: false,
         voiceSessionPhase: "error",
         liveTranscript: "",
@@ -1560,6 +1733,146 @@ function buildVoiceSessionCallbacks(
       voiceInterruptRequested = false;
     }
   };
+}
+
+function createVoiceSessionId(): string {
+  return `voice-mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function buildRealtimeVoiceCallbacks(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Parameters<RealtimeVoiceService["startSession"]>[1] {
+  return {
+    onConnected: (binding) => {
+      set({
+        listening: !get().voiceMuted,
+        voiceRuntimeMode: binding.runtimeMode,
+        voiceRuntimeBinding: binding,
+        voiceSessionPhase: get().voiceMuted ? "muted" : "listening",
+        liveTranscript: "",
+        voiceAudioLevel: -2,
+        notice: `Realtime voice is live. ${binding.assistantName} is now speaking over the primary LiveKit voice runtime.`,
+        error: null,
+        view: "chat"
+      });
+    },
+    onDisconnected: (expected) => {
+      if (expected) {
+        return;
+      }
+
+      set((state) => ({
+        listening: false,
+        voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
+        voiceTelemetry: {
+          ...state.voiceTelemetry,
+          reconnects: state.voiceTelemetry.reconnects + 1
+        },
+        error: "Realtime voice disconnected. Trying to recover the room connection."
+      }));
+    },
+    onReconnecting: () => {
+      set((state) => ({
+        listening: false,
+        voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
+        voiceTelemetry: {
+          ...state.voiceTelemetry,
+          reconnects: state.voiceTelemetry.reconnects + 1
+        }
+      }));
+    },
+    onReconnected: () => {
+      set((state) => ({
+        listening: !state.voiceMuted,
+        voiceSessionPhase: state.voiceMuted ? "muted" : "listening",
+        error: null
+      }));
+    },
+    onStateChange: (state) => {
+      set((current) => ({
+        listening: current.voiceMuted ? false : true,
+        voiceSessionPhase:
+          state === "speaking"
+            ? "assistant-speaking"
+            : state === "processing"
+              ? "processing"
+              : current.voiceMuted
+                ? "muted"
+                : "listening",
+        voiceAssistantDraft: state === "listening" ? null : current.voiceAssistantDraft
+      }));
+
+      if (state === "listening") {
+        voiceInterruptRequested = false;
+      }
+    },
+    onTranscript: ({ text, source, final }) => {
+      const normalized = normalizeVoiceTranscript(text);
+      if (!normalized) {
+        return;
+      }
+
+      if (source === "assistant") {
+        set((state) => ({
+          liveTranscript: state.liveTranscript,
+          voiceAssistantDraft: normalized,
+          voiceSessionPhase: state.voiceMuted ? "muted" : "assistant-speaking",
+          voiceTelemetry:
+            final && state.voiceTelemetry.lastHeardAt
+              ? {
+                  ...state.voiceTelemetry,
+                  turnsCompleted: state.voiceTelemetry.turnsCompleted + 1,
+                  lastRoundTripMs: Date.now() - new Date(state.voiceTelemetry.lastHeardAt).getTime()
+                }
+              : state.voiceTelemetry
+        }));
+        return;
+      }
+
+      set((state) => ({
+        liveTranscript: normalized,
+        voiceAssistantDraft: state.voiceAssistantDraft,
+        voiceSessionPhase: state.voiceMuted ? "muted" : final ? "processing" : "user-speaking",
+        voiceTelemetry: {
+          ...state.voiceTelemetry,
+          lastHeardAt: new Date().toISOString(),
+          turnsStarted: final ? state.voiceTelemetry.turnsStarted + 1 : state.voiceTelemetry.turnsStarted
+        }
+      }));
+    },
+    onError: (message) => {
+      set({
+        listening: false,
+        voiceSessionActive: false,
+        voiceTargetSessionId: null,
+        voiceMuted: false,
+        voiceRuntimeBinding: null,
+        voiceSessionPhase: "error",
+        liveTranscript: "",
+        voiceAudioLevel: -2,
+        notice: null,
+        error: message
+      });
+      voiceInterruptRequested = false;
+    }
+  };
+}
+
+async function startRealtimeVoiceSession(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  targetSessionId: string
+): Promise<void> {
+  const token = requireValue(get().token, "Pair this phone with the desktop first.");
+  const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+  const runtime = await api.createVoiceRuntimeSession(token, baseUrl, {
+    voiceSessionId: createVoiceSessionId(),
+    chatSessionId: targetSessionId,
+    assistantName: FREEDOM_PRODUCT_NAME
+  });
+
+  await realtimeVoice.startSession(runtime, buildRealtimeVoiceCallbacks(get, set));
 }
 
 async function startVoiceLoopRecognition(
@@ -1583,7 +1896,9 @@ async function startVoiceLoopRecognition(
     set({
       listening: false,
       voiceSessionActive: false,
+      voiceTargetSessionId: null,
       voiceMuted: false,
+      voiceRuntimeBinding: null,
       voiceSessionPhase: "error",
       notice: null,
       error: error instanceof Error ? error.message : "Voice recognition could not start."
@@ -1598,11 +1913,14 @@ function stopActiveVoiceLoop(
 ): void {
   clearPendingVoiceTranscript();
   voice.stopStreamingSession();
+  void realtimeVoice.stopSession();
   assistantSpeech.stop();
   set({
     listening: false,
     voiceSessionActive: false,
+    voiceTargetSessionId: null,
     voiceMuted: false,
+    voiceRuntimeBinding: null,
     voiceSessionPhase: "idle",
     liveTranscript: "",
     voiceAudioLevel: -2,
@@ -1611,6 +1929,7 @@ function stopActiveVoiceLoop(
     error: overrides?.error ?? null
   });
   voiceInterruptRequested = false;
+  backendInterruptTurnId = null;
 }
 
 function settingsWakeControl(get: () => AppState): WakeControl {
@@ -1773,10 +2092,35 @@ async function commitPendingVoiceTranscript(
       composerInputMode: "voice_polished",
       listening: false,
       voiceSessionActive: false,
+      voiceTargetSessionId: state.voiceTargetSessionId,
       voiceSessionPhase: "review",
       liveTranscript: "",
       voiceAudioLevel: -2,
       notice: "Review the captured transcript before sending. Voice loop paused for this turn.",
+      error: null,
+      view: "chat",
+      voiceTelemetry: {
+        ...state.voiceTelemetry,
+        lastHeardAt: new Date().toISOString()
+      }
+    }));
+    voiceInterruptRequested = false;
+    return;
+  }
+
+  if (!get().autoSendVoice) {
+    voice.stopStreamingSession();
+    assistantSpeech.stop();
+    set((state) => ({
+      composer: transcript,
+      composerInputMode: "voice",
+      listening: false,
+      voiceSessionActive: false,
+      voiceTargetSessionId: state.voiceTargetSessionId,
+      voiceSessionPhase: "review",
+      liveTranscript: "",
+      voiceAudioLevel: -2,
+      notice: "Voice captured. Auto-send is off, so this turn is waiting for review before sending.",
       error: null,
       view: "chat",
       voiceTelemetry: {
@@ -1975,6 +2319,8 @@ function applyStreamEvent(
   }
 
   if (payload.type === "session_upsert") {
+    const voiceTargetSessionId = get().voiceTargetSessionId;
+    const isVoiceTargetSession = voiceTargetSessionId !== null && payload.session.id === voiceTargetSessionId;
     set((state) => ({
       sessions: sortSessionsForDisplay([payload.session, ...state.sessions.filter((item) => item.id !== payload.session.id)]),
       renameDraftBySession: {
@@ -1982,22 +2328,28 @@ function applyStreamEvent(
         [payload.session.id]: payload.session.title
       },
       voiceSessionPhase:
-        state.voiceSessionActive && !isSessionBusy(payload.session) && state.voiceSessionPhase !== "review"
+        state.voiceSessionActive && isVoiceTargetSession && !isSessionBusy(payload.session) && state.voiceSessionPhase !== "review"
           ? state.voiceSessionPhase === "assistant-speaking"
             ? state.voiceSessionPhase
             : "listening"
           : state.voiceSessionPhase
     }));
-    if (!isSessionBusy(payload.session)) {
+    if (isVoiceTargetSession && payload.session.activeTurnId !== backendInterruptTurnId) {
+      backendInterruptTurnId = null;
+    }
+    if (isVoiceTargetSession && !isSessionBusy(payload.session)) {
       voiceInterruptRequested = false;
+      backendInterruptTurnId = null;
       maybeAutoSendVoiceResult(get, set).catch(() => undefined);
     }
     return;
   }
 
   const currentState = get();
+  const isSelectedSession = currentState.selectedSessionId === payload.sessionId;
+  const isVoiceTargetSession = currentState.voiceTargetSessionId === payload.sessionId;
   const pendingExternalRequest =
-    currentState.pendingExternalRequest?.sessionId === payload.sessionId ? currentState.pendingExternalRequest : null;
+    isVoiceTargetSession && currentState.pendingExternalRequest?.sessionId === payload.sessionId ? currentState.pendingExternalRequest : null;
   const preparedExternalDraft =
     payload.message.role === "assistant" &&
     payload.message.status === "completed" &&
@@ -2022,7 +2374,11 @@ function applyStreamEvent(
       pendingExternalRequest
         ? preparedExternalDraft
         : state.externalDraft;
-    const shouldVoiceSpeak = payload.message.role === "assistant" && (state.autoSpeak || state.voiceSessionActive) && tts.isAvailable();
+    const voiceSessionUsesDeviceSpeech = usesDeviceVoicePath(state) && isVoiceTargetSession;
+    const shouldVoiceSpeak =
+      payload.message.role === "assistant" &&
+      tts.isAvailable() &&
+      ((state.autoSpeak && isSelectedSession) || voiceSessionUsesDeviceSpeech);
     const speechQueued =
       shouldVoiceSpeak &&
       assistantSpeech.ingest(payload.message.id, payload.message.content, payload.message.status, VOICE_TTS_MIN_CHARS);
@@ -2030,6 +2386,7 @@ function applyStreamEvent(
       payload.message.role === "assistant" &&
       payload.message.status === "completed" &&
       state.voiceSessionActive &&
+      isVoiceTargetSession &&
       state.voiceTelemetry.lastHeardAt
         ? {
             ...state.voiceTelemetry,
@@ -2046,9 +2403,10 @@ function applyStreamEvent(
       externalDraft: resolvedExternalDraft,
       pendingExternalRequest:
         payload.message.role === "assistant" && payload.message.status !== "streaming" && pendingExternalRequest ? null : state.pendingExternalRequest,
-      voiceAssistantDraft: payload.message.role === "assistant" ? payload.message.content : state.voiceAssistantDraft,
+      voiceAssistantDraft:
+        payload.message.role === "assistant" && isVoiceTargetSession && voiceSessionUsesDeviceSpeech ? payload.message.content : state.voiceAssistantDraft,
       voiceSessionPhase:
-        state.voiceSessionActive && payload.message.role === "assistant"
+        voiceSessionUsesDeviceSpeech && payload.message.role === "assistant"
           ? speechQueued
             ? "assistant-speaking"
             : payload.message.status === "streaming"
@@ -2071,7 +2429,7 @@ function applyStreamEvent(
     };
   });
 
-  if (preparedExternalDraft && pendingExternalRequest && get().voiceSessionActive) {
+  if (preparedExternalDraft && pendingExternalRequest && get().voiceSessionActive && get().voiceTargetSessionId === payload.sessionId) {
     assistantSpeech.queuePrompt(buildExternalDraftConfirmationPrompt(pendingExternalRequest, preparedExternalDraft));
   }
 }
@@ -2145,10 +2503,77 @@ async function maybeAutoSendVoiceResult(
   }
 }
 
+async function resolveVoiceTargetSessionId(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<string> {
+  const existing = get().voiceTargetSessionId ?? get().selectedSessionId;
+  if (existing) {
+    return existing;
+  }
+
+  const token = requireValue(get().token, "Pair this phone with the desktop first.");
+  const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+  const operatorSession = await ensureOperatorSession(get, set, {
+    token,
+    baseUrl,
+    hostStatus: get().hostStatus
+  });
+  const sessionId = operatorSession?.id ?? pickPreferredSessionId(null, get().sessions);
+  return requireValue(sessionId, "Open or start a chat before starting the voice loop.");
+}
+
+async function requestImmediateVoiceInterrupt(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  if (usesRealtimeVoicePath(get())) {
+    try {
+      await realtimeVoice.interrupt();
+      set((state) => ({
+        voiceSessionPhase: state.voiceMuted ? "muted" : "interrupted",
+        notice: "Interrupt sent. Freedom should stop the current reply and hand the turn back to you.",
+        error: null,
+        voiceTelemetry: {
+          ...state.voiceTelemetry,
+          interruptions: state.voiceTelemetry.interruptions + 1
+        }
+      }));
+    } catch (error) {
+      set((state) => ({
+        error: state.error ?? (error instanceof Error ? error.message : "Could not interrupt the realtime reply.")
+      }));
+    }
+    return;
+  }
+
+  const token = get().token;
+  const baseUrl = get().baseUrl;
+  const sessionId = get().voiceTargetSessionId;
+  if (!token || !baseUrl || !sessionId) {
+    return;
+  }
+
+  const session = get().sessions.find((item) => item.id === sessionId) ?? null;
+  const activeTurnId = session?.activeTurnId ?? null;
+  if (!session || !isSessionBusy(session) || !activeTurnId || backendInterruptTurnId === activeTurnId) {
+    return;
+  }
+
+  backendInterruptTurnId = activeTurnId;
+  try {
+    await api.stopSession(token, baseUrl, session.id);
+  } catch (error) {
+    backendInterruptTurnId = null;
+    set((state) => ({
+      error: state.error ?? (error instanceof Error ? error.message : "Could not stop the current run quickly enough.")
+    }));
+  }
+}
+
 function isVoiceAssistantActive(get: () => AppState): boolean {
   const state = get();
-  const targetSession = findManualStopTargetSession(state.selectedSessionId, state.sessions);
-  return Boolean(state.voiceAssistantDraft || state.voiceSessionPhase === "assistant-speaking" || isSessionBusy(targetSession));
+  return Boolean(assistantSpeech.isActive() || state.voiceSessionPhase === "assistant-speaking");
 }
 
 async function handleStoreError(
@@ -2179,6 +2604,7 @@ async function enterRepairMode(
   clearPendingVoiceTranscript();
   disconnectSocket();
   voice.stopStreamingSession();
+  void realtimeVoice.stopSession();
   assistantSpeech.reset();
   tts.stop();
   unsubscribePushTokenRefresh?.();
@@ -2187,6 +2613,7 @@ async function enterRepairMode(
   set({
     token: null,
     hostStatus: null,
+    buildLaneSummary: null,
     sessions: [],
     selectedSessionId: null,
     messagesBySession: {},
@@ -2203,7 +2630,10 @@ async function enterRepairMode(
     sendingMessage: false,
     realtimeConnected: false,
     listening: false,
+    voiceRuntimeMode: prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
+    voiceRuntimeBinding: null,
     voiceSessionActive: false,
+    voiceTargetSessionId: null,
     voiceSessionPhase: "idle",
     liveTranscript: "",
     voiceAudioLevel: -2,
@@ -2214,9 +2644,10 @@ async function enterRepairMode(
     pendingExternalRequest: null,
     notice: "Saved desktop settings were kept so you can repair this link quickly.",
     error: message,
-    view: "host"
+    view: "start"
   });
   voiceInterruptRequested = false;
+  backendInterruptTurnId = null;
 }
 
 function syncPushTokenRefresh(

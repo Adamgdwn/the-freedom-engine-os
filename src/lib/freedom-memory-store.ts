@@ -5,6 +5,11 @@ import type { FreedomMemorySnapshot, FreedomMemoryUpdateRequest } from '@/lib/fr
 import type { SelfProgrammingRequest } from '@/lib/voice-learning';
 import type { VoiceLearningSignal } from '@/lib/voice-learning';
 import type { VoiceTask } from '@/lib/voice-tasks';
+import {
+  parseProgrammingRequestReason,
+  serializeProgrammingRequestReason,
+  type ConversationBuildLaneDraft,
+} from '@freedom/shared';
 import { createSupabaseAdminClient, isSupabaseAdminConfigured } from '@/lib/supabase-admin';
 
 type TaskRow = {
@@ -80,13 +85,42 @@ function mapLearningSignal(row: LearningSignalRow): VoiceLearningSignal {
 }
 
 function mapProgrammingRequest(row: ProgrammingRequestRow): SelfProgrammingRequest {
+  const parsedReason = parseProgrammingRequestReason(row.reason, {
+    id: row.id,
+    title: row.capability,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
   return {
     id:         row.id,
     capability: row.capability,
-    reason:     row.reason,
+    reason:     parsedReason.summary,
+    buildLane:  parsedReason.buildLane,
     status:     row.status,
     createdAt:  toEpoch(row.created_at),
     updatedAt:  toEpoch(row.updated_at),
+  };
+}
+
+function toBuildLaneDraft(request: SelfProgrammingRequest): ConversationBuildLaneDraft | null {
+  if (!request.buildLane) {
+    return null;
+  }
+
+  return {
+    objective: request.buildLane.objective,
+    businessCase: request.buildLane.businessCase,
+    operator: request.buildLane.operator,
+    approvalState: request.buildLane.approvalState,
+    autonomyEnvelope: request.buildLane.autonomyEnvelope,
+    executionSurface: request.buildLane.executionSurface,
+    reportingPath: request.buildLane.reportingPath,
+    nextCheckpoint: request.buildLane.nextCheckpoint,
+    requestedBy: request.buildLane.requestedBy,
+    requestedFrom: request.buildLane.requestedFrom,
+    pricingModel: request.buildLane.pricingModel,
+    scalePotential: request.buildLane.scalePotential,
+    hostId: request.buildLane.hostId,
   };
 }
 
@@ -324,7 +358,7 @@ export async function persistFreedomMemoryUpdate(request: FreedomMemoryUpdateReq
     const { error } = await client.from('freedom_programming_requests').upsert({
       id:         request.update.request.id,
       capability: request.update.request.capability,
-      reason:     request.update.request.reason,
+      reason:     serializeProgrammingRequestReason(request.update.request.reason, toBuildLaneDraft(request.update.request)),
       status:     request.update.request.status,
       created_at: toIso(request.update.request.createdAt),
       updated_at: toIso(request.update.request.updatedAt),

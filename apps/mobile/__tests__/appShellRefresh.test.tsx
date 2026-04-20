@@ -2,13 +2,14 @@ import React from "react";
 import ReactTestRenderer from "react-test-renderer";
 import { AppShell } from "../src/app/AppShell";
 import { refreshScrollInteractionProps } from "../src/app/screens";
+import type { AppState } from "../src/store/appStore";
 
 const mockStore = {
   booting: false,
   refreshing: false,
   sendingMessage: false,
   realtimeConnected: true,
-  view: "chat",
+  view: "start",
   baseUrl: "http://127.0.0.1:43111",
   deviceName: "Adam's Phone",
   pairingCode: "",
@@ -54,6 +55,15 @@ const mockStore = {
       replyToAddress: null,
       recipientCount: 0
     },
+    voiceProfile: {
+      targetVoice: "marin",
+      gender: "feminine",
+      accent: null,
+      tone: "warm",
+      warmth: "high",
+      pace: "steady",
+      notes: null
+    },
     availability: "ready",
     repairState: "healthy",
     runState: "ready",
@@ -61,8 +71,8 @@ const mockStore = {
     pairedDeviceCount: 1
   },
   devices: [],
-  sessions: [],
-  selectedSessionId: null,
+  sessions: [] as AppState["sessions"],
+  selectedSessionId: null as string | null,
   messagesBySession: {},
   composer: "",
   composerInputMode: "text",
@@ -81,15 +91,20 @@ const mockStore = {
   outboundRecipientLabelDraft: "",
   outboundRecipientEmailDraft: "",
   externalDraft: null,
+  pendingExternalRequest: null,
   sendingExternalMessage: false,
   renameDraftBySession: {},
   autoSpeak: false,
-  autoSendVoice: true,
+  autoSendVoice: false,
+  voiceAutoSendPreferenceTouched: false,
   voiceAvailable: true,
+  voiceRuntimeMode: "realtime_primary",
+  voiceRuntimeBinding: null,
   pushAvailable: false,
   pushSyncing: false,
   listening: false,
   voiceSessionActive: false,
+  voiceTargetSessionId: null,
   voiceMuted: false,
   voiceSessionPhase: "idle",
   liveTranscript: "",
@@ -137,6 +152,7 @@ const mockStore = {
   toggleVoiceMute: jest.fn(async () => undefined),
   setResponseStyle: jest.fn(async () => undefined),
   selectAssistantVoice: jest.fn(async () => undefined),
+  selectFreedomVoicePreset: jest.fn(async () => undefined),
   setRenameDraft: jest.fn(),
   setField: jest.fn(),
   setView: jest.fn()
@@ -149,12 +165,15 @@ jest.mock("../src/store/appStore", () => ({
 describe("refresh affordances", () => {
   beforeEach(() => {
     mockStore.refreshing = false;
-    mockStore.view = "chat";
+    mockStore.view = "start";
     mockStore.sendingMessage = false;
     mockStore.voiceAvailable = true;
     mockStore.realtimeConnected = true;
     mockStore.voiceMuted = false;
     mockStore.voiceSessionActive = false;
+    mockStore.sessions = [];
+    mockStore.selectedSessionId = null;
+    mockStore.composer = "";
     mockStore.hostStatus.auth.status = "logged_in";
     mockStore.refresh.mockClear();
     mockStore.bootstrap.mockClear();
@@ -162,7 +181,7 @@ describe("refresh affordances", () => {
     mockStore.setField.mockClear();
   });
 
-  test("AppShell uses the compact chat header while staying in talk mode", async () => {
+  test("AppShell lands on the new start surface after pairing", async () => {
     let tree: ReactTestRenderer.ReactTestRenderer;
 
     await ReactTestRenderer.act(async () => {
@@ -171,11 +190,11 @@ describe("refresh affordances", () => {
 
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Talk");
+    expect(labels).toContain("Freedom");
     expect(labels).toContain("Voice");
-    expect(labels).toContain("↻");
-    expect(labels).toContain("⚙");
-    expect(labels.some((label) => label.includes("Freedom ready"))).toBe(true);
+    expect(labels).toContain("Start talking");
+    expect(labels).toContain("Text");
+    expect(labels).toContain("Talk");
     expect(mockStore.bootstrap).toHaveBeenCalled();
   });
 
@@ -184,7 +203,7 @@ describe("refresh affordances", () => {
     expect(refreshScrollInteractionProps.alwaysBounceVertical).toBe(true);
   });
 
-  test("host view keeps navigation and primary actions visible in the expanded shell", async () => {
+  test("host view stays secondary and keeps operational controls available", async () => {
     mockStore.view = "host";
 
     let tree: ReactTestRenderer.ReactTestRenderer;
@@ -195,15 +214,14 @@ describe("refresh affordances", () => {
 
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Overview");
-    expect(labels).toContain("Build");
-    expect(labels).toContain("Talk");
-    expect(labels).toContain("Start Voice");
-    expect(labels).toContain("Disconnect");
-    expect(labels).toContain("Hide Controls");
+    expect(labels).toContain("Homebase");
+    expect(labels).toContain("Mission summary");
+    expect(labels).toContain("Secondary detail stays here.");
+    expect(labels).toContain("Wake Homebase");
+    expect(labels).toContain("Trusted Devices");
   });
 
-  test("sessions view uses the compact header instead of the large host chrome", async () => {
+  test("sessions view presents the build surface with resume and launch sections", async () => {
     mockStore.view = "sessions";
 
     let tree: ReactTestRenderer.ReactTestRenderer;
@@ -215,15 +233,42 @@ describe("refresh affordances", () => {
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
     expect(labels).toContain("Build");
-    expect(labels).toContain("Voice");
-    expect(labels).toContain("↻");
-    expect(labels).toContain("⚙");
-    expect(labels.some((label) => label.includes("saved"))).toBe(true);
+    expect(labels).toContain("Resume work");
+    expect(labels).toContain("Launch build chat");
   });
 
-  test("shows a mute control while the live voice loop is active", async () => {
+  test("message control opens a raised composer panel above the footer", async () => {
     mockStore.view = "chat";
-    mockStore.voiceSessionActive = true;
+    mockStore.sessions = [
+      {
+        id: "session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Active Thread",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "/tmp/workspace",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-correlation-1"
+        },
+        threadId: null,
+        status: "ready",
+        activeTurnId: null,
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Continue the current operator task.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "session-1";
 
     let tree: ReactTestRenderer.ReactTestRenderer;
 
@@ -231,10 +276,200 @@ describe("refresh affordances", () => {
       tree = ReactTestRenderer.create(<AppShell />);
     });
 
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "chat-message-button" }).props.onPress();
+    });
+
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Stop");
+    expect(tree!.root.findByProps({ testID: "voice-composer-panel" })).toBeTruthy();
+    expect(labels).toContain("Text");
+    expect(labels).toContain("Message Freedom");
+    expect(labels).toContain("Typed turn");
+    expect(labels).toContain("−");
+  });
+
+  test("recent thread card toggles transcript open and closed", async () => {
+    mockStore.view = "chat";
+    mockStore.sessions = [
+      {
+        id: "session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Active Thread",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "/tmp/workspace",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-correlation-1"
+        },
+        threadId: null,
+        status: "ready",
+        activeTurnId: null,
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Continue the current operator task.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "session-1";
+    mockStore.messagesBySession = {
+      "session-1": [
+        {
+          id: "message-1",
+          sessionId: "session-1",
+          role: "assistant",
+          content: "Recent reply from Freedom.",
+          status: "completed",
+          createdAt: "2026-04-12T10:00:00.000Z",
+          updatedAt: "2026-04-12T10:00:00.000Z"
+        }
+      ]
+    };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    let labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Recent thread");
+    expect(labels).toContain("Open");
+    expect(labels).not.toContain("Tap here to open recent thread");
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "voice-thread-peek" }).props.onPress();
+    });
+
+    labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Collapse");
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "voice-thread-collapse-button" }).props.onPress();
+    });
+
+    labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Recent thread");
+    expect(labels).toContain("Open");
+  });
+
+  test("actions sheet exposes capabilities and mute while the live voice loop is active", async () => {
+    mockStore.view = "chat";
+    mockStore.voiceSessionActive = true;
+    mockStore.buildLaneSummary = {
+      configured: true,
+      pendingCount: 1,
+      approvedCount: 0,
+      blockedCount: 0,
+      items: [
+        {
+          id: "lane-1",
+          title: "Electrical contractor app",
+          summary: "Capture the business case and kickoff path.",
+          approvalState: "pending_operator",
+          executionSurface: "pop_os",
+          reportingPath: "morning_check_in",
+          nextCheckpoint: "Review with Adam"
+        }
+      ]
+    };
+    mockStore.sessions = [
+      {
+        id: "session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Active Thread",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "/tmp/workspace",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-correlation-1"
+        },
+        threadId: null,
+        status: "running",
+        activeTurnId: "turn-1",
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Continue the current operator task.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "session-1";
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "controls-toggle" }).props.onPress();
+    });
+
+    const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+
+    expect(labels).toContain("Email & Contacts");
+    expect(labels).toContain("Retrieval");
+    expect(labels).toContain("Current Thread");
     expect(labels).toContain("Mute");
+    expect(labels).toContain("From Conversations To Build");
+    expect(labels).toContain("Resume Thread");
+  });
+
+  test("settings sheet exposes voice choices and system adjustments", async () => {
+    mockStore.view = "chat";
+    mockStore.autoSpeak = true;
+    mockStore.autoSendVoice = false;
+    mockStore.hostStatus.voiceProfile = {
+      targetVoice: "marin",
+      gender: "feminine",
+      accent: null,
+      tone: "warm",
+      warmth: "high",
+      pace: "steady",
+      notes: null
+    };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "settings-toggle" }).props.onPress();
+    });
+
+    const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+
+    expect(labels).toContain("Freedom voice");
+    expect(labels).toContain("Realtime Freedom voice");
+    expect(labels).toContain("Marin • feminine • warm • warmer");
+    expect(labels).toContain("Live");
+    expect(labels).toContain("Auto-read replies");
+    expect(labels).toContain("Auto-send voice turns");
+    expect(labels).toContain("Phone fallback voice");
+    expect(labels).toContain("Open Homebase Voice Settings");
+    expect(labels).toContain("System adjustments");
+    expect(labels).toContain("Open Homebase");
+    expect(labels).toContain("About this build");
   });
 });
 

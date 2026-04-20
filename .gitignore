@@ -22,7 +22,9 @@ apps/mobile/src/generated/
 **/.local-data/
 !apps/desktop-host/.local-data/
 !apps/desktop-host/.local-data/desktop/
+apps/desktop-host/.local-data/desktop/*
 !apps/desktop-host/.local-data/desktop/host-state.example.json
 !apps/gateway/.local-data/
 !apps/gateway/.local-data/gateway/
+apps/gateway/.local-data/gateway/*
 !apps/gateway/.local-data/gateway/state.example.json

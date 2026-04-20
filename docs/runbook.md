@@ -15,12 +15,20 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   inspect evidence freshness, blocked approvals, and score-weight drift.
 - Workflow or execution state looks wrong:
   review the seed data or future persistence source before changing priorities.
-- Phone access fails through Adam Connect:
+- Phone access fails through Freedom Desktop:
   verify Codex login, Tailscale reachability, and that Freedom Engine's repo root is
   present in `DESKTOP_APPROVED_ROOTS`.
+- Premium mobile voice connects but does not answer:
+  verify repo-root `.env` contains the LiveKit and OpenAI keys, confirm only one
+  `python agent.py dev` worker is running, and reinstall the latest Android build so
+  the speech-service selection fix is on-device.
 - Freedom memory looks missing or stale:
   verify `SUPABASE_SERVICE_ROLE_KEY`, confirm the latest memory migration is applied, and
   restore from the latest local backup if needed.
+- Conversation ideas are piling up but not turning into real implementation:
+  review `docs/roadmap.md` under `From Conversations To Be Done On Pop!_OS`, make sure
+  each serious item has an approval state and next checkpoint, and move vague ideas back
+  into business framing before opening a build session.
 
 ## Dependencies
 
@@ -29,7 +37,7 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Supabase migration files for future database setup
 - Supabase service-role access for durable Freedom memory persistence and restore
 - GitHub workflow access for future code-control integration
-- Adam Connect for paired mobile access to the local workstation
+- Freedom desktop-host and gateway for paired mobile access to the local workstation
 
 ## Recovery
 
@@ -43,7 +51,16 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 5. If the issue is architectural, document the change in `docs/architecture.md` and add
    or update an ADR before re-releasing.
 6. If phone access breaks, fall back to direct desktop use of the web app and recover the
-   Adam Connect host separately.
+   Freedom desktop-host and gateway separately.
+7. If premium mobile voice still stalls after reconnecting, stop stale LiveKit workers,
+   restart one clean worker from `agents/freedom_agent`, and start a fresh room from the
+   phone instead of reusing an already-stuck session.
+8. If Freedom has been left to work between sessions, require a morning report that states:
+   what moved in the Pop!_OS build lane,
+   what was done autonomously,
+   what approvals were assumed or used,
+   what remains blocked,
+   and the next recommended decision.
 
 ## Escalation
 
@@ -51,3 +68,6 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   Adam Goodwin for priority changes, policy decisions, and external commitments
 - Technical lead:
   hybrid session for architecture, validation, and deployment readiness
+- Build-lane governance:
+  use `docs/conversation-build-lane.md` for the required intake, approval, and reporting
+  path when conversation-driven work becomes a real Pop!_OS programming session

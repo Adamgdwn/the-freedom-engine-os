@@ -1,5 +1,408 @@
 # Changelog
 
+## 2026-04-20 (realtime conversation continuity fix)
+
+- fixed the premium mobile realtime voice lane so new voice sessions now bootstrap from
+  the recent thread instead of acting like each reconnect starts with no conversational context
+- added transcript persistence for realtime user and assistant turns into the gateway's
+  threaded session history, so Freedom can actually carry forward recent conversation
+  instead of only retaining separate task/learning memory channels
+
+## 2026-04-20 (realtime voice choices cleanup + release 0.2.50)
+
+- replaced the misleading mobile settings voice list with Freedom's real live realtime
+  voice presets, so the quick picker now shows Marin and the other actual voice options
+  instead of odd phone TTS voices that do not match live conversation
+- moved the device-only spoken-reply fallback voices back behind Homebase, where they
+  stay available for backup playback without competing with the primary Freedom voice lane
+- published Android `0.2.50 (57)` to the live install surface
+
+## 2026-04-20 (remove stray chat back control + release 0.2.49)
+
+- removed the leftover back-arrow control from the mobile voice chat header so the talk
+  surface now matches the clean start header layout again: hamburger on the left, title
+  centered, three dots on the right
+- published Android `0.2.49 (56)` to the live install surface
+
+## 2026-04-20 (voice worker env precedence fix)
+
+- changed the Python LiveKit/OpenAI voice worker to prefer repo-root `.env` values over
+  stale shell-exported secrets, so local restarts use the same `OPENAI_API_KEY` as the
+  paired desktop runtime instead of silently picking up an older invalid key from `.bashrc`
+
+## 2026-04-20 (split mobile actions from settings + release 0.2.48)
+
+- removed the `From Conversations To Build` card from the main start voice surface so
+  the talk-first canvas stays visually lighter
+- moved that governed build-lane queue into the pull-down utility sheet, where Freedom
+  can surface it intentionally when a thread should graduate into real build work
+- split the mobile header menus so the three-line pull-down now holds actions and
+  capabilities, while the three dots hold genuine settings like voice choices, reply
+  behavior, build/runtime details, and system adjustments
+- published Android `0.2.48 (55)` to the live install surface
+
+## 2026-04-20 (transcript collapse visibility + settings scroll fix + release 0.2.47)
+
+- moved the `Recent thread` transcript into its own bounded scroll area on the mobile
+  voice canvas so long histories no longer push the `Collapse` action offscreen
+- changed the utility/settings sheet to use a separate backdrop overlay and inner
+  scroll view, which improves scroll reliability on Android when the sheet is long
+- published Android `0.2.47 (54)` to the live install surface
+
+## 2026-04-20 (single recent-thread control + release 0.2.46)
+
+- removed the duplicate recent-thread trigger from the center `Freedom` stage on the
+  mobile voice canvas so the lower `Recent thread` card is now the only transcript entry point
+- changed the transcript close affordance to `Collapse` and kept that action inside the
+  opened thread panel so the history surface has one obvious escape path
+- published Android `0.2.46 (53)` to the live install surface
+
+## 2026-04-20 (Perplexity default search runtime)
+
+- added a live runtime-status tool so Freedom can report the published mobile build,
+  live Freedom voice profile, desktop voice runtime provider/model, and web-search readiness in conversation
+- added Perplexity-backed `search_web` and `check_weather` tools to the LiveKit/OpenAI
+  voice worker so current public lookups no longer fall back to "no web search access"
+- updated the runtime policy, env template, and capability docs so Perplexity is the
+  default configured search lane whenever `PERPLEXITY_API_KEY` is present in repo-root `.env`
+
+## 2026-04-20 (compact text control + release 0.2.45)
+
+- shrank the idle typed-entry control on the mobile voice canvas down to the same compact footprint as `Mute` and relabeled it `Text` now that the raised composer behavior is clearer
+- kept explicit new project threads in the `Build` view while leaving the default voice thread optimized for conversational continuity rather than endless project sprawl
+- published Android `0.2.45 (52)` to the live install surface
+
+## 2026-04-20 (reversible recent-thread toggle + release 0.2.44)
+
+- made the center Freedom dialogue on the mobile voice canvas act as a real toggle for recent-thread history, so the same surface that opens the transcript can also close it
+- renamed the transcript panel action from `Hide` to `Close` and added a visible center hint so the escape path is clearer during phone use
+- published Android `0.2.44 (51)` to the live install surface
+
+## 2026-04-20 (raised mobile message composer + release 0.2.43)
+
+- changed the mobile voice canvas so the footer `Message` control opens a dedicated typed-turn panel above the bottom action row instead of only swapping the footer into a subtle inline field
+- added a top-right collapse affordance to that composer and clarified the transcript preview as a `Recent thread` surface so typed input and conversation history no longer feel like the same control
+- published Android `0.2.43 (50)` to the live install surface
+
+## 2026-04-20 (android text encoder startup fix + release 0.2.42)
+
+- added an early mobile runtime `TextEncoder` and `TextDecoder` polyfill alongside the existing `DOMException` patch so Hermes no longer aborts during startup when the voice stack references text encoding globals
+- published Android `0.2.42 (49)` to the live install surface
+
+## 2026-04-20 (android voice recognizer compatibility fix + release 0.2.41)
+
+- replaced the Expo speech-recognition runtime path with the existing `@react-native-voice/voice` adapter in the mobile companion to stop the native `SpeechRecognitionOptions` registration error on startup under the current Expo/RN stack
+- kept the live voice loop behavior in place with restart handling, partial/final transcript promotion, and clearer Android recognizer readiness errors
+- published Android `0.2.41 (48)` to the live install surface
+
+## 2026-04-20 (mobile voice surface polish + release 0.2.40)
+
+- replaced the footer `+` action on the mobile voice surfaces with an explicit mute/unmute control for the live microphone lane
+- changed the inline chat composer so it expands upward when focused, giving typed side-channel turns more room without breaking the voice-first layout
+- repurposed the mobile three-dots utility sheet around first-pass email/contact capture and retrieval instead of a generic destination list
+
+## 2026-04-20 (conversation build lane runtime + release 0.2.39)
+
+- Freedom voice runtime can now route substantial conversation-born build ideas into
+  governed `freedom_programming_requests` records with structured Pop!_OS build-lane
+  metadata instead of leaving the process documentation-only
+- the desktop agent-control surface now prefers live build-lane records over seeded
+  mock requests, so queued work reflects what conversation actually created
+- the Android companion now reads and displays the live `From Conversations To Build`
+  queue so approval-needed work remains visible from the voice-first surface
+- gateway and shared contracts now expose a live build-lane summary endpoint, and the
+  voice worker prompt/tooling now explicitly distinguishes loose ideas from governed
+  build-session candidates
+
+## 2026-04-19 (conversation-to-build governance lane)
+
+- added a dedicated `From Conversations To Be Done On Pop!_OS` section to the roadmap
+  so serious ideas from the app conversation surface have an explicit path into real
+  desktop build sessions
+- added `docs/conversation-build-lane.md` to define the intended operating loop:
+  conversation intake, business framing, approval posture, Pop!_OS execution, and
+  report-back expectations for a mostly autonomous business-partner posture
+- updated architecture, manual, runbook, current-capabilities, risk, and tool-access
+  docs so Freedom's programming direction now emphasizes governed execution, external
+  connector posture, and executive-level business-case thinking rather than generic
+  voice-assistant behavior
+
+## 2026-04-19 (conversational voice profile + release 0.2.38)
+
+- added a host-level realtime voice profile so Freedom can save conversational requests
+  for voice, gender presentation, accent hints, tone, warmth, and pace instead of
+  relying on one global env voice
+- wired the LiveKit/OpenAI voice agent to review and update that profile through tools,
+  and to load the saved preset plus delivery hints at the start of a new voice session
+- surfaced the live Freedom voice profile in the Android companion so it is clear that
+  the realtime voice is separate from the phone&apos;s local `Spoken Reply Voice` fallback
+- bumped Android release metadata to `versionCode 45` / `versionName 0.2.38`
+
+## 2026-04-19 (runtime cleanup hardening + release 0.2.37)
+
+- tightened gateway voice-session minting so mobile realtime voice can only bind to a
+  chat session owned by the paired device instead of trusting any arbitrary session id
+- hardened the mobile realtime room service against stale disconnect and data callbacks
+  from old LiveKit rooms, which reduces wrong-session state flips after reconnects or
+  rapid restarts
+- taught the gateway install and Android download routes to answer normal `HEAD`
+  probes cleanly, so health checks and release verification no longer misread the live
+  install surface as missing when the browser path is actually healthy
+- configured the voice worker to delete its LiveKit room on close and removed the live
+  host/device state JSON files from source control so the repo keeps only the sanitized
+  bootstrap examples under `.local-data`
+- bumped the Android release metadata to `versionCode 44` / `versionName 0.2.37` so this
+  cleanup pass ships as a distinct installable build
+
+## 2026-04-19 (mobile voice runtime recovery + release 0.2.36)
+
+- fixed the Android fallback recognizer picker so the phone no longer treats the
+  Google text-to-speech package as a valid speech-recognition service, which was
+  leaving some installs stuck on silent or non-starting voice capture
+- configured the LiveKit OpenAI Realtime worker to enable explicit input transcription,
+  semantic turn detection, and supported realtime voice normalization so spoken mobile
+  turns promote into real assistant responses instead of hanging after the room connects
+- scrubbed `.env.example` back to template placeholders and aligned its voice defaults
+  with the live runtime: repo-root `.env` for real secrets, `gpt-realtime-mini`, and
+  `marin`
+- bumped the Android release metadata to `versionCode 43` / `versionName 0.2.36` so this
+  voice-recovery pass ships as a distinct installable build
+
+## 2026-04-19 (android startup DOMException fix + release 0.2.35)
+
+- added a mobile startup `DOMException` polyfill before app bootstrap so the Android
+  companion no longer aborts during bundle load on devices where Hermes does not expose
+  that web global by default
+- kept the fix at the earliest mobile entrypoint so runtime libraries that assume a web-like
+  `DOMException` can initialize without crashing the app before the React error boundary mounts
+- bumped the Android release metadata to `versionCode 42` / `versionName 0.2.35` so this
+  startup-fix pass ships as a distinct installable build
+
+## 2026-04-17 (mobile realtime voice runtime slice + Android release 0.2.34)
+
+- added a first shared mobile realtime voice path so the Android companion can request a
+  LiveKit voice session from the paired gateway and connect directly to the existing
+  OpenAI Realtime agent instead of always forcing voice through device STT, gateway text,
+  desktop execution, and device TTS
+- added gateway-side LiveKit token minting for authenticated paired devices through
+  `POST /voice/runtime/session`, using explicit mobile voice-session ids and the shared
+  voice-runtime binding contract
+- added a dedicated mobile `RealtimeVoiceService`, LiveKit React Native bootstrap, and
+  runtime metadata in the utility sheet so the APK can prefer the premium voice path and
+  degrade back to the older device STT/TTS loop only when realtime credentials are not
+  configured on the desktop
+- bumped the Android release metadata to `versionCode 41` / `versionName 0.2.34` so this
+  realtime-mobile migration ships as a distinct installable build
+
+## 2026-04-17 (android interrupt gating fix + release 0.2.33)
+
+- tightened Android voice barge-in detection so speech is only treated as an interrupt
+  while Freedom is actually speaking, instead of while a stale assistant draft exists or
+  the backend session is merely still busy
+- clear the mobile assistant-draft state when spoken playback ends or errors so a normal
+  follow-up turn is not misclassified as another barge-in
+- bumped the Android release metadata to `versionCode 40` / `versionName 0.2.33` so this
+  interrupt-fix pass ships as a distinct installable build
+
+## 2026-04-17 (Codex-first day-to-day routing default)
+
+- changed the shared model-router default so day-to-day operating work now prefers
+  `Codex` instead of the old local-first default posture
+- changed the example environment config to `FREEDOM_DAY_TO_DAY_PROVIDER=codex` so new
+  setups match the intended premium conversational behavior out of the box
+- updated the capability reference, control-plane router copy, and platform spec so the
+  documented policy now matches the shipped runtime default: `Codex` first, local as an
+  explicit optional cheaper lane
+
+## 2026-04-17 (reference-driven voice migration groundwork)
+
+- added a shared voice-runtime contract in `packages/shared/src/contracts/voiceRuntime.ts`
+  so web, mobile, gateway, and desktop can converge on one session/control model instead
+  of continuing to grow separate ad hoc voice state
+- added `docs/specs/reference-voice-migration-plan.md` to pin the migration to proven
+  OpenAI Realtime, LiveKit, and realtime-agent patterns rather than further heuristic tuning
+- corrected the capability reference to say the web realtime lane is the only primary-grade
+  voice path today and that the current mobile device STT/TTS loop should be treated as a
+  degraded path while the realtime mobile migration is underway
+
+## 2026-04-17 (android voice latency and self-interrupt tuning + release 0.2.32)
+
+- changed Android voice sessions to pause recognition while Freedom is speaking so the
+  phone stops hearing Freedom's own spoken reply and interrupting itself
+- reduced the mobile voice turn commit grace from 1400ms to 450ms so captured turns move
+  into send/reply faster after the user stops speaking
+- reduced Android speech end-silence thresholds and lowered the streaming TTS chunk
+  threshold so replies begin sooner instead of waiting for longer pauses and longer text
+- bumped the Android release metadata to `versionCode 39` / `versionName 0.2.32` so this
+  latency and self-barge tuning ships as a distinct installable build
+
+## 2026-04-17 (android single-turn capture fallback + release 0.2.31)
+
+- changed Android live voice capture to stop using the continuous segmented recognizer mode
+  and instead run one utterance at a time with immediate reconnect, because the segmented
+  path was still producing dead turns and empty-result loops on the plugged-in phone
+- added runtime logging around recognizer start, speech results, and end-of-turn transcript
+  promotion so the live device logs now show whether a spoken turn reached partial result,
+  final result, or end-of-session promotion
+- bumped the Android release metadata to `versionCode 38` / `versionName 0.2.31` so this
+  capture-stability fallback ships as a distinct installable build
+
+## 2026-04-17 (android utterance commit repair + release 0.2.30)
+
+- fixed Android live voice so a spoken turn is still committed when the recognizer ends
+  without marking the last transcript as `isFinal`, which was leaving complete utterances
+  stranded in the partial path and making the voice surface look hung after capture
+- added a regression test covering the recognizer-end path that now promotes the latest
+  transcript into a final turn before the listening loop reconnects
+- bumped the Android release metadata to `versionCode 37` / `versionName 0.2.30` so this
+  voice-turn commit fix ships as a distinct installable build
+
+## 2026-04-17 (mobile voice auto-send recovery + release 0.2.29)
+
+- fixed the mobile voice capture flow so turns that are captured while auto-send is off
+  no longer stall in a misleading `processing` state; they now pause into explicit review
+  with a clear notice that the turn is waiting for manual send
+- added a safe settings migration for legacy installs that inherited the brief
+  `autoSendVoice=false` default, so Freedom restores auto-send unless the user explicitly
+  chose to turn it off
+- surfaced the current `Auto-send voice turns` state directly inside the mobile utility
+  sheet so the phone can show and change that behavior without sending the user hunting
+  through Homebase settings
+- bumped the Android release metadata to `versionCode 36` / `versionName 0.2.29` so this
+  stuck-turn recovery ships as a distinct installable build
+
+## 2026-04-17 (android on-device locale pin + release 0.2.28)
+
+- changed Android live voice to explicitly request the installed device locale when using
+  the on-device `com.google.android.as` recognizer instead of leaving the locale implicit
+- enabled `requiresOnDeviceRecognition` for that on-device recognizer path so phones that
+  already have the matching model installed do not fall back into the stale
+  `language-not-supported` failure despite reporting the locale as available
+- bumped the Android release metadata to `versionCode 35` / `versionName 0.2.28` so this
+  recognizer-start fix ships as a distinct installable build
+
+## 2026-04-17 (mobile about/build metadata + Android release 0.2.27)
+
+- added an `About this build` section to the mobile utility menu so the phone can show
+  the installed app version and Android build code directly in the UI
+- wired the displayed version metadata through the generated mobile runtime config so the
+  build number shown in-app tracks the APK release metadata instead of a hand-maintained label
+- bumped the Android release metadata to `versionCode 34` / `versionName 0.2.27` so this
+  operator-facing verification improvement ships as a distinct installable build
+
+## 2026-04-17 (android speech recognizer repair + voice send default)
+
+- stopped trusting Android's raw `voice_recognition_service` default when it points at
+  `com.google.android.tts`, because that configuration was reproducing empty transcripts
+  on the plugged-in test phone even though speech capture started and ended normally
+- changed the mobile recognizer chooser to prefer a real speech recognizer such as
+  `com.google.android.as` before falling back to the TTS-backed package
+- stopped forcing `en-US` for Android speech recognition and now let Android use the
+  device-default recognizer language, which avoids the flashed "language not yet
+  downloaded" failure on the plugged-in `en-CA` phone
+- stopped the voice loop from immediately auto-retrying after fatal STT errors so the
+  error state stays visible instead of flashing past in a restart loop
+- taught the Android recognizer chooser to check whether `com.google.android.as` actually
+  has the current locale model installed before selecting it, and to fall back to the
+  remaining recognizer service instead of repeatedly choosing a known-bad path
+- when the phone only exposes the missing on-device model plus the TTS-backed recognizer,
+  the app now opens Android's offline speech-model download flow and tells the user to
+  approve it instead of dead-ending on the flashed locale-pack error banner
+- restored mobile voice auto-send as the default behavior while keeping risky or unusually
+  long spoken turns on the existing review path instead of silently running them
+- added a mobile regression test that covers the broken `com.google.android.tts` default
+  recognition-service case, the missing-locale-model fallback, the offline-model-download
+  prompt path, and the fatal-STT-error reconnect loop so these failures are less likely
+  to ship again
+
+## 2026-04-17 (voice runtime hardening + latency pass)
+
+- changed the live voice default to `gpt-realtime-mini` and aligned the shared router,
+  Python worker, and capability metadata around that cheaper realtime baseline
+- replaced the old shared-room browser token flow with short-lived, explicit web voice
+  session ids so LiveKit rooms are no longer minted anonymously into one common room
+- pinned mobile live voice loops to one chat session at a time so switching chats no
+  longer silently reroutes speech capture or spoken replies across sessions
+- changed mobile barge-in to request a backend stop as soon as an interrupt is detected
+  instead of waiting for transcript commit to begin cancelling the current run
+- switched desktop-host work pickup from a fixed one-second polling loop to gateway
+  long-polling so new work and interrupts reach the desktop faster when idle
+- changed gateway assistant streaming to defer state-file persistence instead of writing
+  the full JSON store on every delta token
+- turned mobile voice auto-send off by default and expanded spoken-turn review gating for
+  riskier file, outbound, deployment, and system-action phrases
+- refreshed the current-capabilities reference and mobile settings copy so the docs now
+  describe the shipped voice behavior more honestly
+- bumped the Android release metadata to `versionCode 29` / `versionName 0.2.22` so this
+  runtime hardening pass ships as a distinct installable build
+
+## 2026-04-16 (mobile voice selector refinement + Android release 0.2.21)
+
+- replaced the mobile spoken-reply picker with a curated shortlist and clearer human-tone
+  indicators so warmer, less robotic voices are easier to spot
+- updated automatic spoken-reply selection to prefer richer English voices instead of
+  defaulting to the first locale match
+- bumped the Android release metadata to `versionCode 28` / `versionName 0.2.21` so this
+  selector update ships as a distinct installable APK
+
+## 2026-04-16 (voice footer spacing correction + Android release 0.2.20)
+
+- fixed the actual active `Talk` canvas footer spacing by separating the bottom offset used for the voice controls from the much larger reserve used for the hidden utility sheet.
+- lowered the voice control row toward the system gesture area without changing the button sizes, labels, or the sheet behavior when extra tools are shown.
+- bumped the Android release metadata to `versionCode 27` / `versionName 0.2.20` so this correction ships as a clearly newer APK.
+
+## 2026-04-16 (launch spacing trim + Android release 0.2.19)
+
+- reduced the `Start` screen bottom reserve so the launch canvas sits lower on tall phones without changing the button sizes or control row layout.
+- kept the voice controls themselves unchanged and only adjusted the safe-area padding used by the launch surface.
+- bumped the Android release metadata to `versionCode 26` / `versionName 0.2.19` so this spacing-only follow-up ships as a distinct APK.
+
+## 2026-04-16 (voice canvas follow-up + Android release 0.2.18)
+
+- kept the main phone chat surface on a true voice canvas instead of reopening the older panel-first composer stack during active work.
+- moved typed draft handling into the bottom control row so `Type` behaves more like a compact inline field and no longer expands into a large card just because draft text exists.
+- suppressed the heavy global banner stack on `Start` and `Talk`, replacing it with lighter in-surface status pills so the voice screen stays visually calmer.
+- changed the busy state affordance so the primary action becomes `Stop` while the current run is active, avoiding the stale "chat is busy" panel flow that made the redesign feel unchanged.
+- bumped the Android release metadata to `versionCode 25` / `versionName 0.2.18` so this follow-up ships as a clearly newer APK.
+
+## 2026-04-16 (mobile voice surface simplification + Android release 0.2.17)
+
+- stripped the default mobile entry and talk surfaces down to a much lighter voice-first layout
+  so the phone now behaves more like a focused conversational surface and less like a stacked dashboard
+- moved Build and Homebase farther behind the utility layer on the default phone surface to reduce chrome
+  while preserving the same underlying functionality
+- rebuilt the primary phone affordances around a cleaner voice header, larger empty-state center stage,
+  and a compact bottom action row inspired by modern voice-assistant patterns
+- bumped the Android release metadata to `versionCode 24` / `versionName 0.2.17` so this visual pass
+  publishes as a unique installable update instead of reusing the prior APK identity
+
+## 2026-04-16 (android release publishing + live install-page hardening)
+
+- added a repeatable Android publish script so the local Freedom mobile release can be copied
+  into the currently live website-backed APK directory with backups and checksum verification
+- added a one-command `npm run release:android-live` flow so building and publishing the APK
+  happen together instead of relying on a manual copy step
+- documented the exact publish target and verification path for the current live install
+  surface to reduce the chance of serving an outdated APK again
+- updated the live gateway install-page code path to expose build-specific Android filenames,
+  version metadata, and direct build-aware download URLs while keeping `latest.apk` as a
+  compatibility alias
+
+## 2026-04-16 (mobile voice-first redesign + Android release 0.2.16)
+
+- reshaped the Freedom Android companion around a calmer `Start -> Talk -> Build -> Homebase`
+  flow so the phone no longer opens like a compressed dashboard
+- made the dedicated Talk surface more voice-first by keeping the voice state dominant,
+  collapsing the active thread by default, and only expanding transcript/manual tools
+  when the user asks or the current state requires it
+- demoted status-heavy controls into Homebase and the utility sheet so wake, trusted
+  devices, outbound email, and connection detail stay available without polluting the
+  main mobile experience
+- updated the React Native UI test harness to resolve one React instance during tests and
+  refreshed the shell assertions for the new mobile navigation model
+- bumped the distributed Android build metadata to `versionCode 23` / `versionName 0.2.16`
+  so the fresh APK can be installed as a new release
+
 ## 2026-04-16 (runtime router milestone pass)
 
 - extracted the core Freedom persona into a dedicated prompt artifact and stopped treating
@@ -45,6 +448,18 @@
   and Claude Code for broad synthesis after approval
 - clarified in the capability reference that this routing posture is modeled in the control
   plane, while the live voice runtime still uses paid OpenAI Realtime today
+
+## 2026-04-16 (mobile voice interrupt + tts routing fix)
+
+- kept the mobile speech recognizer live during assistant playback so spoken barge-in can
+  interrupt replies instead of waiting for TTS to finish
+- fixed mobile spoken-reply voice routing so an explicit voice selection can pull TTS back
+  onto the matching backend after a fallback instead of silently drifting to the last
+  successful engine
+- replaced the mobile spoken-reply picker with a curated shortlist and clearer human-tone
+  indicators so warmer, less robotic voices are easier to spot
+- updated automatic spoken-reply selection to prefer richer English voices instead of
+  defaulting to the first locale match
 
 ## 2026-04-16 (knowledge-governance pass)
 

@@ -1,13 +1,19 @@
 import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { createId, generatePairingCode, nowIso } from "@freedom/core";
+import { AccessToken } from "livekit-server-sdk";
 import type {
   AuditEvent,
+  AssistantVoiceProfile,
   ChatMessage,
   ChatSession,
+  ConversationBuildLaneItem,
+  ConversationBuildLaneSummary,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
+  CreateVoiceRuntimeSessionRequest,
   GatewayOverview,
   HostAssistantDeltaRequest,
   HostAvailability,
@@ -40,16 +46,23 @@ import type {
   StreamEvent,
   TaskItem,
   TailscaleStatus,
+  UpdateHostVoiceProfileRequest,
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest,
+  VoiceRuntimeSessionResponse,
   WakeControl
 } from "@freedom/shared";
 import {
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
+  getAssistantVoiceCatalogEntry,
   getModelRouterConfig,
   hasRunnableLocalDayToDay,
-  isPrimaryFreedomSessionTitle
+  isBuildLaneApprovalApproved,
+  isBuildLaneApprovalPending,
+  isPrimaryFreedomSessionTitle,
+  parseProgrammingRequestReason,
+  normalizeAssistantVoicePresetId
 } from "@freedom/shared";
 import { createEmailProvider, renderOutboundEmail, resolveOutboundEmailStatus } from "./outboundEmail.js";
 import { resolveWakeControl } from "./wakeControl.js";
@@ -58,6 +71,7 @@ interface HostRecord extends RegisteredHost {
   auth: HostAuthState;
   tailscale: TailscaleStatus;
   hostToken: string;
+  voiceProfile: AssistantVoiceProfile | null;
 }
 
 interface DeviceRecord extends PairedDevice {
@@ -75,12 +89,24 @@ interface TaskRecord extends TaskItem {
 
 type OutboundRecipientRecord = OutboundRecipient;
 
+interface VoiceRuntimeSessionRecord {
+  roomName: string;
+  hostId: string;
+  deviceId: string;
+  chatSessionId: string;
+  voiceSessionId: string;
+  participantIdentity: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 interface GatewayState {
   hosts: HostRecord[];
   devices: DeviceRecord[];
   sessions: SessionRecord[];
   tasks: TaskRecord[];
   messages: ChatMessage[];
+  voiceRuntimeSessions: VoiceRuntimeSessionRecord[];
   outboundRecipients: OutboundRecipientRecord[];
   auditEvents: AuditEvent[];
 }
@@ -89,6 +115,15 @@ interface DesktopShellState {
   overview: GatewayOverview;
   desktopSession: ChatSession | null;
   desktopMessages: ChatMessage[];
+}
+
+interface ProgrammingRequestMemoryRow {
+  id: string;
+  capability: string;
+  reason: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 type Principal =
@@ -133,6 +168,8 @@ const INTERRUPT_RECLAIM_MS = 5_000;
 const STALE_STOP_RECOVERY_MS = 20_000;
 const STALE_QUEUE_CLAIM_MS = 15_000;
 const MAX_PARALLEL_SESSION_TASKS = 2;
+const DEFERRED_WRITE_MS = 200;
+const MAX_WORK_WAIT_MS = 20_000;
 
 const defaultState = (): GatewayState => ({
   hosts: [],
@@ -140,6 +177,7 @@ const defaultState = (): GatewayState => ({
   sessions: [],
   tasks: [],
   messages: [],
+  voiceRuntimeSessions: [],
   outboundRecipients: [],
   auditEvents: []
 });
@@ -150,6 +188,9 @@ export class GatewayStore {
   private readonly events = new EventEmitter();
   private state: GatewayState | null = null;
   private readonly realtimeTickets = new Map<string, RealtimeTicketRecord>();
+  private readonly workWaiters = new Map<string, Set<() => void>>();
+  private pendingWriteTimer: NodeJS.Timeout | null = null;
+  private flushInFlight: Promise<void> | null = null;
 
   constructor(private readonly dataDir: string) {
     this.dataFile = path.join(dataDir, "state.json");
@@ -183,7 +224,8 @@ export class GatewayStore {
         isOnline: true,
         auth: defaultAuthState,
         tailscale: defaultTailscaleStatus,
-        hostToken: createId("hosttoken")
+        hostToken: createId("hosttoken"),
+        voiceProfile: null
       };
       state.hosts.push(host);
     } else {
@@ -193,6 +235,7 @@ export class GatewayStore {
       host.lastSeenAt = issuedAt;
       host.isOnline = true;
       host.hostToken = createId("hosttoken");
+      host.voiceProfile = host.voiceProfile ?? null;
     }
 
     this.addAuditEvent(state, {
@@ -286,6 +329,63 @@ export class GatewayStore {
     return principal.host.id;
   }
 
+  async getVoiceProfile(token: string): Promise<AssistantVoiceProfile> {
+    const principal = await this.requireHost(token);
+    return resolveHostVoiceProfile(principal.host);
+  }
+
+  async getBuildLaneSummary(token: string): Promise<ConversationBuildLaneSummary> {
+    const principal = await this.requirePrincipal(token);
+    return loadConversationBuildLaneSummary(principal.host.id);
+  }
+
+  async updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<AssistantVoiceProfile> {
+    const principal = await this.requireHost(token);
+    const state = await this.readState();
+    const host = state.hosts.find((item) => item.id === principal.host.id);
+    if (!host) {
+      throw new Error("Host not found.");
+    }
+
+    if (input.resetToDefault) {
+      host.voiceProfile = null;
+      this.addAuditEvent(state, {
+        hostId: host.id,
+        deviceId: null,
+        sessionId: null,
+        type: "voice_profile_reset",
+        detail: null
+      });
+    } else {
+      const baseline = resolveHostVoiceProfile(host);
+      const targetVoice = normalizeAssistantVoicePresetId(input.targetVoice ?? baseline.targetVoice);
+      const catalog = getAssistantVoiceCatalogEntry(targetVoice);
+      host.voiceProfile = {
+        targetVoice,
+        displayName: catalog.label,
+        gender: input.gender ?? baseline.gender,
+        accent: normalizeOptionalPreference(input.accent, baseline.accent),
+        tone: normalizeOptionalPreference(input.tone, baseline.tone),
+        warmth: input.warmth ?? baseline.warmth,
+        pace: input.pace ?? baseline.pace,
+        notes: normalizeOptionalPreference(input.notes, baseline.notes),
+        source: "conversation",
+        updatedAt: nowIso()
+      };
+      this.addAuditEvent(state, {
+        hostId: host.id,
+        deviceId: null,
+        sessionId: null,
+        type: "voice_profile_updated",
+        detail: summarizeHostVoiceProfile(host.voiceProfile)
+      });
+    }
+
+    await this.writeState(state);
+    this.emitHostStatus(host);
+    return resolveHostVoiceProfile(host);
+  }
+
   async createRealtimeTicket(token: string): Promise<RealtimeTicketResponse> {
     const principal = await this.requirePrincipal(token);
     const ticket = createId("realtime");
@@ -295,6 +395,168 @@ export class GatewayStore {
       expiresAt
     });
     return { ticket, expiresAt };
+  }
+
+  async createVoiceRuntimeSession(
+    token: string,
+    input: CreateVoiceRuntimeSessionRequest,
+  ): Promise<VoiceRuntimeSessionResponse> {
+    const principal = await this.requireDevice(token);
+    const apiKey = process.env.LIVEKIT_API_KEY?.trim();
+    const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
+    const wsUrl = process.env.LIVEKIT_URL?.trim();
+
+    if (!apiKey || !apiSecret || !wsUrl) {
+      throw new Error("Realtime voice is not configured on this desktop yet.");
+    }
+
+    const voiceSessionId = input.voiceSessionId.trim().toLowerCase();
+    if (!/^voice-mobile-[a-z0-9-]{8,}$/.test(voiceSessionId)) {
+      throw new Error("Voice session id is invalid.");
+    }
+
+    const chatSession = await this.requireSessionForDevice(input.chatSessionId.trim(), principal.device.id);
+    const state = await this.readState();
+    const roomName = `${principal.host.id}-${voiceSessionId}`;
+    const participantIdentity = `voice-mobile-${randomUUID()}`;
+    const expiresAt = new Date(Date.now() + 120_000).toISOString();
+    const router = getModelRouterConfig();
+    const accessToken = new AccessToken(apiKey, apiSecret, {
+      ttl: "2m",
+      identity: participantIdentity,
+    });
+
+    accessToken.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+    });
+
+    state.voiceRuntimeSessions = [
+      ...state.voiceRuntimeSessions.filter((item) => item.roomName !== roomName && new Date(item.expiresAt).getTime() > Date.now() - 300_000),
+      {
+        roomName,
+        hostId: principal.host.id,
+        deviceId: principal.device.id,
+        chatSessionId: chatSession.id,
+        voiceSessionId,
+        participantIdentity,
+        createdAt: nowIso(),
+        expiresAt,
+      },
+    ];
+    await this.writeState(state);
+
+    return {
+      token: await accessToken.toJwt(),
+      wsUrl,
+      roomName,
+      participantIdentity,
+      expiresAt,
+      binding: {
+        voiceSessionId,
+        chatSessionId: chatSession.id,
+        assistantName: input.assistantName?.trim() || FREEDOM_PRODUCT_NAME,
+        model: router.voiceRuntimeModel,
+        runtimeMode: "realtime_primary",
+        transport: "livekit_webrtc",
+        roomName,
+        participantIdentity,
+        degraded: false,
+      },
+    };
+  }
+
+  async getVoiceRuntimeBootstrap(token: string, roomName: string): Promise<{
+    roomName: string;
+    chatSessionId: string;
+    sessionTitle: string;
+    recentMessages: Array<{ id: string; role: "user" | "assistant"; content: string; createdAt: string }>;
+  }> {
+    const principal = await this.requireHost(token);
+    const state = await this.readState();
+    const binding = state.voiceRuntimeSessions.find((item) => item.roomName === roomName && item.hostId === principal.host.id);
+    if (!binding) {
+      throw new Error("Voice runtime session not found.");
+    }
+
+    const session = this.requireSessionForHostState(state, binding.chatSessionId, principal.host.id);
+    const recentMessages = state.messages
+      .filter(
+        (item) =>
+          item.sessionId === session.id &&
+          (item.role === "user" || item.role === "assistant") &&
+          item.status === "completed" &&
+          item.content.trim()
+      )
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .slice(-10)
+      .map((item): { id: string; role: "user" | "assistant"; content: string; createdAt: string } => ({
+        id: item.id,
+        role: item.role === "user" ? "user" : "assistant",
+        content: item.content.trim(),
+        createdAt: item.createdAt,
+      }));
+
+    return {
+      roomName,
+      chatSessionId: session.id,
+      sessionTitle: session.title,
+      recentMessages,
+    };
+  }
+
+  async appendVoiceRuntimeTranscript(
+    token: string,
+    input: {
+      roomName: string;
+      messageId: string;
+      role: "user" | "assistant";
+      text: string;
+    }
+  ): Promise<ChatMessage> {
+    const principal = await this.requireHost(token);
+    const state = await this.readState();
+    const binding = state.voiceRuntimeSessions.find((item) => item.roomName === input.roomName && item.hostId === principal.host.id);
+    if (!binding) {
+      throw new Error("Voice runtime session not found.");
+    }
+
+    const session = this.requireSessionForHostState(state, binding.chatSessionId, principal.host.id);
+    const normalizedText = input.text.trim();
+    if (!normalizedText) {
+      throw new Error("Transcript text is required.");
+    }
+
+    const existing = state.messages.find((item) => item.id === input.messageId && item.sessionId === session.id);
+    if (existing) {
+      return existing;
+    }
+
+    const message: ChatMessage = {
+      id: input.messageId,
+      sessionId: session.id,
+      role: input.role,
+      content: normalizedText,
+      status: "completed",
+      errorMessage: null,
+      inputMode: "voice",
+      responseStyle: null,
+      transcriptPolished: input.role === "user",
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    state.messages.push(message);
+    session.lastPreview = truncatePreview(normalizedText);
+    session.lastActivityAt = message.updatedAt;
+    session.updatedAt = message.updatedAt;
+
+    await this.writeState(state, { defer: true });
+    this.emitMessage(principal.host.id, message);
+    this.emitSession(session);
+    return message;
   }
 
   async consumeRealtimeTicket(ticket: string): Promise<string> {
@@ -842,80 +1104,105 @@ export class GatewayStore {
     return toPublicSession(targetSession);
   }
 
-  async getNextWork(token: string): Promise<HostWorkItem | null> {
+  async getNextWork(
+    token: string,
+    options?: {
+      waitMs?: number;
+      acceptQueued?: boolean;
+    },
+  ): Promise<HostWorkItem | null> {
     const principal = await this.requireHost(token);
-    const state = await this.readState();
-    const interruptTask = state.tasks.find((task) => {
-      if (!task.turnId || !task.stopRequested || !isTaskRunning(task)) {
-        return false;
+    const tryReadWork = async (): Promise<HostWorkItem | null> => {
+      const state = await this.readState();
+      const interruptTask = state.tasks.find((task) => {
+        if (!task.turnId || !task.stopRequested || !isTaskRunning(task)) {
+          return false;
+        }
+        const session = state.sessions.find((item) => item.id === task.sessionId);
+        return Boolean(
+          session &&
+            session.hostId === principal.host.id &&
+            (!task.interruptClaimedAt || isInterruptClaimStale(task.interruptClaimedAt))
+        );
+      });
+      if (interruptTask) {
+        interruptTask.interruptClaimedAt = nowIso();
+        const interruptSession = this.requireSessionForHostState(state, interruptTask.sessionId, principal.host.id);
+        syncSessionFromTasks(state, interruptSession);
+        await this.writeState(state);
+        return {
+          type: "interrupt",
+          session: toPublicSession(interruptSession),
+          task: toPublicTask(interruptTask),
+          turnId: interruptTask.turnId ?? ""
+        };
       }
-      const session = state.sessions.find((item) => item.id === task.sessionId);
-      return Boolean(
-        session &&
-          session.hostId === principal.host.id &&
-          (!task.interruptClaimedAt || isInterruptClaimStale(task.interruptClaimedAt))
-      );
-    });
-    if (interruptTask) {
-      interruptTask.interruptClaimedAt = nowIso();
-      const interruptSession = this.requireSessionForHostState(state, interruptTask.sessionId, principal.host.id);
-      syncSessionFromTasks(state, interruptSession);
-      await this.writeState(state);
-      return {
-        type: "interrupt",
-        session: toPublicSession(interruptSession),
-        task: toPublicTask(interruptTask),
-        turnId: interruptTask.turnId ?? ""
-      };
-    }
 
-    const runningTasks = state.tasks.filter((task) => {
-      if (!isTaskRunning(task)) {
-        return false;
+      if (options?.acceptQueued === false) {
+        return null;
       }
-      const session = state.sessions.find((item) => item.id === task.sessionId);
-      return Boolean(session && session.hostId === principal.host.id);
-    });
 
-    const queuedTask = state.tasks.find((task) => {
-      if (task.status !== "queued" || task.claimedAt) {
-        return false;
-      }
-      const session = state.sessions.find((item) => item.id === task.sessionId);
-      if (!session || session.hostId !== principal.host.id) {
-        return false;
-      }
-      const relatedRunningTasks = runningTasks.filter((item) => item.resourceKey === task.resourceKey);
-      const sessionRunningTasks = runningTasks.filter((item) => item.sessionId === task.sessionId);
-      return (
-        sessionRunningTasks.length < MAX_PARALLEL_SESSION_TASKS &&
-        canRunTaskInParallel(task, relatedRunningTasks)
-      );
-    });
-    if (!queuedTask) {
-      return null;
-    }
+      const runningTasks = state.tasks.filter((task) => {
+        if (!isTaskRunning(task)) {
+          return false;
+        }
+        const session = state.sessions.find((item) => item.id === task.sessionId);
+        return Boolean(session && session.hostId === principal.host.id);
+      });
 
-    const message = state.messages.find((item) => item.id === queuedTask.userMessageId && item.sessionId === queuedTask.sessionId);
-    const queuedSession = this.requireSessionForHostState(state, queuedTask.sessionId, principal.host.id);
-    if (!message) {
-      markQueuedTaskCancelled(state, queuedTask, "Dropped because the linked user message no longer exists.");
+      const queuedTask = state.tasks.find((task) => {
+        if (task.status !== "queued" || task.claimedAt) {
+          return false;
+        }
+        const session = state.sessions.find((item) => item.id === task.sessionId);
+        if (!session || session.hostId !== principal.host.id) {
+          return false;
+        }
+        const relatedRunningTasks = runningTasks.filter((item) => item.resourceKey === task.resourceKey);
+        const sessionRunningTasks = runningTasks.filter((item) => item.sessionId === task.sessionId);
+        return (
+          sessionRunningTasks.length < MAX_PARALLEL_SESSION_TASKS &&
+          canRunTaskInParallel(task, relatedRunningTasks)
+        );
+      });
+      if (!queuedTask) {
+        return null;
+      }
+
+      const message = state.messages.find((item) => item.id === queuedTask.userMessageId && item.sessionId === queuedTask.sessionId);
+      const queuedSession = this.requireSessionForHostState(state, queuedTask.sessionId, principal.host.id);
+      if (!message) {
+        markQueuedTaskCancelled(state, queuedTask, "Dropped because the linked user message no longer exists.");
+        syncSessionFromTasks(state, queuedSession);
+        await this.writeState(state);
+        this.emitSession(queuedSession);
+        return null;
+      }
+
+      queuedTask.claimedAt = nowIso();
+      queuedTask.updatedAt = queuedTask.claimedAt;
       syncSessionFromTasks(state, queuedSession);
       await this.writeState(state);
-      this.emitSession(queuedSession);
+      return {
+        type: "message",
+        session: toPublicSession(queuedSession),
+        message,
+        task: toPublicTask(queuedTask)
+      };
+    };
+
+    const immediate = await tryReadWork();
+    if (immediate) {
+      return immediate;
+    }
+
+    const waitMs = Math.max(0, Math.min(MAX_WORK_WAIT_MS, options?.waitMs ?? 0));
+    if (!waitMs) {
       return null;
     }
 
-    queuedTask.claimedAt = nowIso();
-    queuedTask.updatedAt = queuedTask.claimedAt;
-    syncSessionFromTasks(state, queuedSession);
-    await this.writeState(state);
-    return {
-      type: "message",
-      session: toPublicSession(queuedSession),
-      message,
-      task: toPublicTask(queuedTask)
-    };
+    await this.waitForWork(principal.host.id, waitMs);
+    return tryReadWork();
   }
 
   async startTurn(token: string, input: HostStartTurnRequest): Promise<ChatSession> {
@@ -994,7 +1281,7 @@ export class GatewayStore {
       task.updatedAt = assistantMessage.updatedAt;
     }
 
-    await this.writeState(state);
+    await this.writeState(state, { defer: true });
     this.emitMessage(principal.host.id, assistantMessage);
     return assistantMessage;
   }
@@ -1534,6 +1821,7 @@ export class GatewayStore {
       auth: host.auth,
       tailscale: host.tailscale,
       wakeControl: buildWakeControl(process.env, host),
+      voiceProfile: resolveHostVoiceProfile(host),
       outboundEmail: resolveOutboundEmailStatus(process.env, recipientCount),
       availability: deriveHostAvailability(host),
       repairState: deriveRepairState(host),
@@ -1545,6 +1833,7 @@ export class GatewayStore {
 
   private emitHostStatus(host: HostRecord): void {
     void this.buildHostStatus(host.id).then((hostStatus) => {
+      this.notifyWorkAvailable(host.id);
       this.events.emit("broadcast", {
         hostId: host.id,
         event: {
@@ -1556,6 +1845,7 @@ export class GatewayStore {
   }
 
   private emitSession(session: SessionRecord): void {
+    this.notifyWorkAvailable(session.hostId);
     this.events.emit("broadcast", {
       hostId: session.hostId,
       event: {
@@ -1566,6 +1856,7 @@ export class GatewayStore {
   }
 
   private emitMessage(hostId: string, message: ChatMessage): void {
+    this.notifyWorkAvailable(hostId);
     this.events.emit("broadcast", {
       hostId,
       event: {
@@ -1721,10 +2012,91 @@ export class GatewayStore {
     }
   }
 
-  private async writeState(state: GatewayState): Promise<void> {
+  private async writeState(state: GatewayState, options?: { defer?: boolean }): Promise<void> {
     this.state = state;
-    await mkdir(this.dataDir, { recursive: true });
-    await writeFile(this.dataFile, JSON.stringify(state, null, 2), "utf8");
+    if (options?.defer) {
+      this.scheduleDeferredWrite();
+      return;
+    }
+    await this.flushPendingWrite();
+  }
+
+  private scheduleDeferredWrite(): void {
+    if (this.pendingWriteTimer) {
+      clearTimeout(this.pendingWriteTimer);
+    }
+    this.pendingWriteTimer = setTimeout(() => {
+      this.pendingWriteTimer = null;
+      void this.flushPendingWrite();
+    }, DEFERRED_WRITE_MS);
+  }
+
+  private async flushPendingWrite(): Promise<void> {
+    if (this.pendingWriteTimer) {
+      clearTimeout(this.pendingWriteTimer);
+      this.pendingWriteTimer = null;
+    }
+
+    const state = this.state;
+    if (!state) {
+      return;
+    }
+
+    if (this.flushInFlight) {
+      await this.flushInFlight;
+      if (this.state !== state) {
+        await this.flushPendingWrite();
+      }
+      return;
+    }
+
+    this.flushInFlight = (async () => {
+      await mkdir(this.dataDir, { recursive: true });
+      await writeFile(this.dataFile, JSON.stringify(state, null, 2), "utf8");
+    })();
+
+    try {
+      await this.flushInFlight;
+    } finally {
+      this.flushInFlight = null;
+    }
+
+    if (this.state !== state) {
+      await this.flushPendingWrite();
+    }
+  }
+
+  private waitForWork(hostId: string, timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      const waiters = this.workWaiters.get(hostId) ?? new Set<() => void>();
+      let timer: NodeJS.Timeout | null = null;
+      const finish = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        waiters.delete(finish);
+        if (!waiters.size) {
+          this.workWaiters.delete(hostId);
+        }
+        resolve();
+      };
+
+      waiters.add(finish);
+      this.workWaiters.set(hostId, waiters);
+      timer = setTimeout(finish, timeoutMs);
+    });
+  }
+
+  private notifyWorkAvailable(hostId: string): void {
+    const waiters = this.workWaiters.get(hostId);
+    if (!waiters?.size) {
+      return;
+    }
+    this.workWaiters.delete(hostId);
+    for (const waiter of waiters) {
+      waiter();
+    }
   }
 
   private recoverSiblingSessions(state: GatewayState, host: HostRecord, device: DeviceRecord): void {
@@ -1878,6 +2250,77 @@ function toPublicSession(session: SessionRecord): ChatSession {
   };
 }
 
+function buildDefaultHostVoiceProfile(host: HostRecord): AssistantVoiceProfile {
+  const entry = getAssistantVoiceCatalogEntry(process.env.NEXT_PUBLIC_VOICE_ID);
+  return {
+    targetVoice: entry.id,
+    displayName: entry.label,
+    gender: entry.gender,
+    accent: null,
+    tone: entry.summary,
+    warmth: entry.warmth,
+    pace: entry.pace,
+    notes: null,
+    source: "default",
+    updatedAt: host.createdAt
+  };
+}
+
+function normalizeStoredVoiceProfile(profile: Partial<AssistantVoiceProfile> | null): AssistantVoiceProfile | null {
+  if (!profile) {
+    return null;
+  }
+
+  const entry = getAssistantVoiceCatalogEntry(profile.targetVoice);
+  return {
+    targetVoice: entry.id,
+    displayName: profile.displayName?.trim() || entry.label,
+    gender: profile.gender ?? entry.gender,
+    accent: normalizeOptionalPreference(profile.accent, null),
+    tone: normalizeOptionalPreference(profile.tone, entry.summary),
+    warmth: profile.warmth ?? entry.warmth,
+    pace: profile.pace ?? entry.pace,
+    notes: normalizeOptionalPreference(profile.notes, null),
+    source: profile.source === "conversation" || profile.source === "manual" ? profile.source : "default",
+    updatedAt: profile.updatedAt ?? nowIso()
+  };
+}
+
+function resolveHostVoiceProfile(host: HostRecord): AssistantVoiceProfile {
+  return normalizeStoredVoiceProfile(host.voiceProfile) ?? buildDefaultHostVoiceProfile(host);
+}
+
+function normalizeOptionalPreference(value: string | null | undefined, fallback: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  if (value === undefined) {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function summarizeHostVoiceProfile(profile: AssistantVoiceProfile): string {
+  const details = [profile.displayName];
+  if (profile.gender !== "unspecified") {
+    details.push(profile.gender);
+  }
+  if (profile.accent) {
+    details.push(profile.accent);
+  }
+  if (profile.tone) {
+    details.push(profile.tone);
+  }
+  if (profile.warmth !== "medium") {
+    details.push(profile.warmth);
+  }
+  if (profile.pace !== "steady") {
+    details.push(profile.pace);
+  }
+  return details.join(" | ");
+}
+
 function getLatestHostRecord(state: GatewayState): HostRecord | null {
   return [...state.hosts].sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt))[0] ?? null;
 }
@@ -1907,6 +2350,67 @@ function sameRoots(left: string[], right: string[]): boolean {
   const leftSorted = [...left].sort();
   const rightSorted = [...right].sort();
   return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
+async function loadConversationBuildLaneSummary(hostId: string): Promise<ConversationBuildLaneSummary> {
+  const rows = await fetchProgrammingRequestRows(40);
+  const items = rows
+    .map((row) =>
+      parseProgrammingRequestReason(row.reason, {
+        id: row.id,
+        title: row.capability,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }).buildLane
+    )
+    .filter((item): item is ConversationBuildLaneItem => Boolean(item))
+    .filter((item) => !item.hostId || item.hostId === hostId)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+  return {
+    configured: isProgrammingMemoryConfigured(),
+    items,
+    pendingCount: items.filter((item) => isBuildLaneApprovalPending(item.approvalState)).length,
+    approvedCount: items.filter((item) => isBuildLaneApprovalApproved(item.approvalState)).length,
+    blockedCount: items.filter((item) => item.approvalState === "blocked").length
+  };
+}
+
+async function fetchProgrammingRequestRows(limit: number): Promise<ProgrammingRequestMemoryRow[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_programming_requests", supabaseUrl);
+  url.searchParams.set("select", "id,capability,reason,status,created_at,updated_at");
+  url.searchParams.set("order", "updated_at.desc");
+  url.searchParams.set("limit", String(limit));
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`
+      }
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? (parsed as ProgrammingRequestMemoryRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isProgrammingMemoryConfigured(): boolean {
+  return Boolean(
+    (process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim()) &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  );
 }
 
 function truncatePreview(value: string, maxLength = 140): string {
@@ -1992,6 +2496,7 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
       return {
         ...record,
         auth: record.auth ?? defaultAuthState,
+        voiceProfile: normalizeStoredVoiceProfile(record.voiceProfile ?? null),
         tailscale: {
           ...defaultTailscaleStatus,
           ...(record.tailscale ?? {})
@@ -2072,6 +2577,16 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
         transcriptPolished: record.transcriptPolished ?? null
       } as ChatMessage;
     }),
+    voiceRuntimeSessions: ((input as Partial<GatewayState>).voiceRuntimeSessions ?? []).map((record) => ({
+      roomName: record.roomName ?? "",
+      hostId: record.hostId ?? "",
+      deviceId: record.deviceId ?? "",
+      chatSessionId: record.chatSessionId ?? "",
+      voiceSessionId: record.voiceSessionId ?? "",
+      participantIdentity: record.participantIdentity ?? "",
+      createdAt: record.createdAt ?? now,
+      expiresAt: record.expiresAt ?? now,
+    })),
     outboundRecipients: (input.outboundRecipients ?? []).map((recipient) => {
       const record = recipient as Partial<OutboundRecipientRecord>;
       return {

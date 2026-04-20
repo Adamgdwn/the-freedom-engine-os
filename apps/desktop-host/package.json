@@ -9,18 +9,18 @@
   },
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:adamConnect.showHostStatus",
-    "onCommand:adamConnect.copyPairingCode"
+    "onCommand:freedomDesktop.showHostStatus",
+    "onCommand:freedomDesktop.copyPairingCode"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "adamConnect.showHostStatus",
-        "title": "Adam Connect: Show Host Status"
+        "command": "freedomDesktop.showHostStatus",
+        "title": "Freedom Desktop: Show Host Status"
       },
       {
-        "command": "adamConnect.copyPairingCode",
-        "title": "Adam Connect: Copy Pairing Code"
+        "command": "freedomDesktop.copyPairingCode",
+        "title": "Freedom Desktop: Copy Pairing Code"
       }
     ]
   },

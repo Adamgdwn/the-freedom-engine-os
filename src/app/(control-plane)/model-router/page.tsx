@@ -31,7 +31,7 @@ export default function ModelRouterPage() {
     {
       label: 'Day-to-day operating work',
       budget: snapshot.executionBudgets.find((budget) => budget.taskId === 'daily-ops-review'),
-      note: 'Routine planning, analysis, summaries, and low-risk self-improvement should stay local first.',
+      note: 'Routine planning, analysis, summaries, and conversation should prefer Codex first, with local kept as an optional cheaper lane.',
     },
     {
       label: 'Large code changes / builds',
@@ -53,7 +53,7 @@ export default function ModelRouterPage() {
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <span>PENDING {pending.length}</span>
             <span>RESOLVED {resolved.length}</span>
-            <span>LOCAL FIRST POLICY ACTIVE</span>
+            <span>CODEX FIRST POLICY ACTIVE</span>
             <span>APPROVAL TRACE REQUIRED</span>
           </div>
         </div>

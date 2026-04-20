@@ -62,7 +62,7 @@ npm run start --workspace @freedom/wake-relay
 3. Confirm `Host -> Wake Homebase` appears.
 4. Put the workstation to sleep.
 5. Tap `Wake Homebase` on the phone.
-6. Confirm the workstation heartbeat returns and Adam Connect reconnects.
+6. Confirm the workstation heartbeat returns and Freedom Desktop reconnects.
 
 ## Notes
 

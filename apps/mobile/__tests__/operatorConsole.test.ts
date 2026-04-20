@@ -54,8 +54,9 @@ describe("operatorConsole helpers", () => {
   });
 
   test("requiresVoiceReview flags risky or long transcripts", () => {
-    expect(requiresVoiceReview("delete that file for me")).toBe(false);
+    expect(requiresVoiceReview("delete that file for me")).toBe(true);
     expect(requiresVoiceReview("sudo rm -rf /tmp/test")).toBe(true);
+    expect(requiresVoiceReview("send that email to Adam")).toBe(true);
     expect(requiresVoiceReview("a".repeat(261))).toBe(true);
     expect(requiresVoiceReview("tell me the repo status")).toBe(false);
   });

@@ -20,24 +20,41 @@ jest.mock('react-native-keychain', () => ({
   resetGenericPassword: jest.fn(async () => undefined),
 }));
 
-jest.mock('expo-speech-recognition', () => {
+jest.mock('@react-native-voice/voice', () => {
   const listeners = new Map();
 
   return {
-    ExpoSpeechRecognitionModule: {
-      addListener: jest.fn((eventName, handler) => {
-        listeners.set(eventName, handler);
-        return {
-          remove: jest.fn(() => listeners.delete(eventName)),
-        };
-      }),
-      requestPermissionsAsync: jest.fn(async () => ({granted: true})),
-      isRecognitionAvailable: jest.fn(() => true),
-      getSpeechRecognitionServices: jest.fn(() => ['com.google.android.tts']),
-      getDefaultRecognitionService: jest.fn(() => ({packageName: 'com.google.android.tts'})),
-      start: jest.fn(() => undefined),
-      stop: jest.fn(() => undefined),
-      abort: jest.fn(() => undefined),
+    __esModule: true,
+    default: {
+      __listeners: listeners,
+      removeAllListeners: jest.fn(() => listeners.clear()),
+      destroy: jest.fn(async () => undefined),
+      isAvailable: jest.fn(async () => 1),
+      getSpeechRecognitionServices: jest.fn(async () => ['com.google.android.googlequicksearchbox']),
+      start: jest.fn(async () => undefined),
+      stop: jest.fn(async () => undefined),
+      cancel: jest.fn(async () => undefined),
+      set onSpeechStart(handler) {
+        listeners.set('onSpeechStart', handler);
+      },
+      set onSpeechRecognized(handler) {
+        listeners.set('onSpeechRecognized', handler);
+      },
+      set onSpeechEnd(handler) {
+        listeners.set('onSpeechEnd', handler);
+      },
+      set onSpeechError(handler) {
+        listeners.set('onSpeechError', handler);
+      },
+      set onSpeechResults(handler) {
+        listeners.set('onSpeechResults', handler);
+      },
+      set onSpeechPartialResults(handler) {
+        listeners.set('onSpeechPartialResults', handler);
+      },
+      set onSpeechVolumeChanged(handler) {
+        listeners.set('onSpeechVolumeChanged', handler);
+      },
     },
   };
 });
@@ -106,3 +123,58 @@ jest.mock('react-native-permissions', () => ({
     Object.fromEntries(permissions.map(permission => [permission, 'granted'])),
   ),
 }));
+
+jest.mock('@livekit/react-native', () => ({
+  registerGlobals: jest.fn(),
+  AudioSession: {
+    configureAudio: jest.fn(async () => undefined),
+    startAudioSession: jest.fn(async () => undefined),
+    stopAudioSession: jest.fn(async () => undefined),
+  },
+  AndroidAudioTypePresets: {
+    communication: {
+      manageAudioFocus: true,
+      audioMode: 'inCommunication',
+      audioFocusMode: 'gain',
+      audioStreamType: 'voiceCall',
+      audioAttributesUsageType: 'voiceCommunication',
+      audioAttributesContentType: 'speech',
+    },
+  },
+}));
+
+jest.mock('livekit-client', () => {
+  class MockRoom {
+    constructor() {
+      this.handlers = new Map();
+      this.localParticipant = {
+        setMicrophoneEnabled: jest.fn(async () => undefined),
+        publishData: jest.fn(async () => undefined),
+      };
+    }
+
+    on(event, handler) {
+      this.handlers.set(event, handler);
+      return this;
+    }
+
+    prepareConnection = jest.fn(async () => undefined);
+    connect = jest.fn(async () => undefined);
+    disconnect = jest.fn(() => {
+      const handler = this.handlers.get('disconnected');
+      if (handler) {
+        handler();
+      }
+    });
+  }
+
+  return {
+    Room: MockRoom,
+    RoomEvent: {
+      Reconnecting: 'reconnecting',
+      Reconnected: 'reconnected',
+      Disconnected: 'disconnected',
+      DataReceived: 'dataReceived',
+    },
+  };
+});

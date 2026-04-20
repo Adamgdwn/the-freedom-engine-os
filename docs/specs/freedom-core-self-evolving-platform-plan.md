@@ -239,6 +239,121 @@
 - The operator, not Freedom, chooses the final external provider from the presented option set.
 - Every provider escalation and outcome must be audited so Freedom can learn when local was enough and when escalation was justified.
 
+## Voice Runtime And Tooling Direction
+
+- Freedom should run one primary voice stack across web and mobile.
+- Voice is not premium if web uses one turn-taking model and mobile uses a different STT/TTS/chat bridge.
+- The current repo posture is now converging:
+  web already uses `LiveKit + OpenAI Realtime`,
+  mobile now prefers the same `LiveKit + OpenAI Realtime` path,
+  and device speech recognition plus device TTS remain only as the degraded fallback lane.
+- The current shared default voice model value is `gpt-realtime-mini`.
+
+### Product Decision
+
+- Primary live voice runtime:
+  `LiveKit Cloud` for transport, session management, room events, interruption handling, and observability
+  plus `OpenAI Realtime` as the main conversational model.
+- Default live voice model:
+  `gpt-realtime-mini`.
+- Premium live voice upgrade lane:
+  `GPT-realtime-1.5` only when the operator explicitly wants the best voice quality for a session and accepts the higher cost.
+- Heavy reasoning, coding, planning, and background execution should not stay inside the expensive live voice lane longer than necessary.
+- Freedom should use voice to capture intent, clarify, confirm, and maintain turn-taking, then hand execution to:
+  local models first,
+  or approved higher-power desktop lanes when needed.
+- Mobile device STT/TTS should remain only as an explicit fallback path for degraded operation, not the default experience.
+- If the realtime lane is unavailable, Freedom should fail visibly into a lower-confidence fallback mode such as push-to-talk plus transcript confirmation.
+- Freedom should not silently downgrade from premium realtime behavior into a chat-like voice emulation path.
+
+### Tool Choice Policy
+
+- Keep `LiveKit` as the media/session backbone because it is already in the repo, fits web and mobile, and gives a better path to interruption quality, debugging, and multi-surface session continuity than the current ad hoc split.
+- Keep `OpenAI Realtime` as the primary live conversational brain because the product target is a ChatGPT-Voice-class experience, not a stitched pipeline first.
+- Make `gpt-realtime-mini` the standard default because it is the strongest affordability/performance balance for day-to-day live voice.
+- Reserve `GPT-realtime-1.5` for high-stakes, customer-facing, or explicitly premium sessions where better expressiveness and robustness are worth the extra spend.
+- Keep the existing desktop-host and gateway trust boundary, but recast it as the action lane behind the voice runtime rather than the thing mobile voice talks to directly as chat.
+- Keep local models as the default background reasoning lane for self-improvement, drafting, triage, and long-running work.
+- If a chained STT -> LLM -> TTS pipeline is later needed for cost control, the first approved alternative should be a unified LiveKit Inference stack instead of custom per-device speech plumbing:
+  `Deepgram Nova-3` for STT,
+  `OpenAI GPT-4.1 mini` or the then-current affordable general LLM for reasoning,
+  and `Cartesia Sonic-3` for TTS.
+- Freedom should not adopt a separate premium voice provider stack unless measured testing proves the customer experience gain is material enough to justify the integration and operating complexity.
+
+### Cost And UX Policy
+
+- Default all live sessions to `gpt-realtime-mini`.
+- Upgrade a session to `GPT-realtime-1.5` only when:
+  the operator opts into premium mode,
+  the conversation is unusually sensitive or high-emotion,
+  or the session is a showcase/demo where best-case voice quality matters more than efficiency.
+- Exit the live voice lane as soon as the agent has enough intent to continue work asynchronously.
+- Long-running coding, research, or orchestration should continue in cheaper non-voice lanes and report back into the session when useful.
+- Reuse cached prompts and stable system/persona context wherever possible.
+- Do not pay premium voice-runtime costs for background silence, waiting, or work that no longer needs live duplex interaction.
+- Mobile fallback speech services may exist for resilience, but they should be treated as degraded quality and should not shape the primary UX assumptions.
+- Cost optimization must never come from reintroducing slow endpointing, fake barge-in, or session-crossing state bugs.
+
+### Required Repo Changes
+
+- Keep the shared default `FREEDOM_VOICE_RUNTIME_MODEL` on `gpt-realtime-mini`.
+- Keep `FREEDOM_VOICE_RUNTIME_PROVIDER` on `openai-realtime` as the default.
+- Keep mobile on the same per-session realtime room model used by web.
+- Keep device speech recognition and device TTS only behind an explicit fallback capability flag.
+- Keep authenticated, per-session, short-TTL room tokens instead of any shared-room token design.
+- Give every voice session a first-class `voiceSessionId` and bind it to one chat session, one room, one transcript stream, one interrupt lane, and one assistant playback controller.
+- Make interruption a realtime control event, not a delayed side effect of transcript commit.
+- Keep gateway and desktop-host out of the turn-taking hot path; they should receive structured intents and execution requests after the voice runtime has already captured the turn.
+- Remove polling from desktop-host work pickup for any session that is expected to feel live.
+
+### Implementation Order
+
+- Phase 1:
+  unify the product decision in code by setting one default voice runtime,
+  one default model,
+  and one fallback policy across web and mobile.
+- Phase 2:
+  secure the voice entry points by replacing shared-room token issuance with authenticated per-session tokens and room isolation.
+- Phase 3:
+  add a mobile realtime client path that joins the same `LiveKit` session model as web and owns mic, transcript, assistant playback, and interrupt signaling per session.
+- Phase 4:
+  demote the current mobile `expo-speech-recognition` and device TTS stack to fallback-only status behind an explicit degraded-mode gate.
+- Phase 5:
+  rework the gateway/desktop contract so voice sends structured intents immediately, desktop work is pushed instead of polled, and assistant progress can flow back without rewriting full state on every token.
+- Phase 6:
+  add approval classes for voice-triggered actions so the live voice agent can safely confirm, block, or defer risky work without pretending everything is just chat text.
+- Phase 7:
+  redesign the operator-facing desktop voice surface as a first-class conversation view rather than a sidebar accessory.
+- Phase 8:
+  optimize only after the unified path exists:
+  interruption timing,
+  TTS chunking,
+  reconnect behavior,
+  mobile background behavior,
+  and premium-mode escalation rules.
+
+### Voice Acceptance Gates
+
+- Web and mobile must use the same primary live voice runtime and session semantics.
+- A user interruption must stop assistant speech and propagate to backend execution quickly enough to feel conversational, not transactional.
+- No assistant speech, transcript draft, or interrupt event may leak across sessions.
+- A reconnect must recover the active voice session cleanly or fail into an explicit degraded mode.
+- Risky voice actions must require confirmation based on action class, not just transcript regexes.
+- Premium mode must be measurable and optional; the system should be able to prove when it is spending more and why.
+- The fallback path must be clearly marked as degraded so the team does not mistake survivability for parity.
+
+### Vendor Notes As Of 2026-04-17
+
+- OpenAI pricing currently positions `GPT-realtime-1.5` as the most capable realtime voice model and `gpt-realtime-mini` as the cheaper realtime option:
+  https://openai.com/api/pricing/
+- OpenAI developer pricing currently lists `gpt-4o-mini-transcribe` at an estimated `$0.003 / minute`, which makes it a viable fallback transcription option but not a reason to keep device-primary voice as the main UX:
+  https://developers.openai.com/api/docs/pricing
+- LiveKit currently provides one API-key surface for transport plus inference options, includes free agent-session minutes on the build tier, and offers adaptive interruption handling on LiveKit Cloud:
+  https://livekit.com/pricing/inference
+  https://livekit.com/blog/adaptive-interruption-handling
+- LiveKit’s current voice AI quickstart still presents both the chained pipeline path and the single realtime-model path, which matches the recommended architecture here:
+  https://docs.livekit.io/agents/start/voice-ai/
+
 ## Personality Persistence
 
 - Freedom's core persona should live in a stable, versioned prompt artifact rather than only inline runtime prose.
@@ -289,7 +404,7 @@
   `OutboundDecision`,
   `OutboundApprovalState`.
 - Safety defaults:
-  local-first by default,
+  Codex-first for day-to-day conversation by default,
   no silent provider escalation,
   no silent external sends outside trusted policy,
   no agent creation outside `New Build Agent` or a validated internalized equivalent,
@@ -361,8 +476,8 @@
 - Freedom receives a request to create a new agent and routes it through `New Build Agent`, producing the full governed artifact set instead of improvising a custom shortcut.
 - Freedom refuses to bypass `New Build Agent` for non-internalized build paths and explains why.
 - A previously validated internalized build path is allowed to run without the external builder and leaves a learning/audit trace proving eligibility.
-- Freedom uses a local model for self-improvement work by default and completes the task without provider escalation when quality thresholds are met.
-- When local capability is insufficient, Freedom pauses and requests permission to upgrade to `Codex` or `Claude Code` with a clear justification.
+- Freedom uses `Codex` for day-to-day conversational work by default and keeps local execution as an explicit optional cheaper lane rather than the standard experience.
+- When the cheaper local lane is selected and capability is insufficient, Freedom pauses and requests permission to upgrade to `Codex` or `Claude Code` with a clear justification.
 - Freedom evaluates whether a problem should be solved by building, automating, delegating,
   simplifying, or stopping, and explains the expected long-term freedom outcome.
 - Freedom compares multiple outcome options explicitly instead of defaulting to build-first reasoning.
@@ -379,6 +494,10 @@
 - Freedom surfaces a better structural solution when the current way of operating is the
   real bottleneck, even if that means challenging the framing of the original request.
 - Trusted-contact email or wake actions can be routed autonomously under policy, while non-trusted or broadened outbound actions trigger approval or runtime override requirements.
+- Voice uses one primary runtime across web and mobile, while degraded fallback remains visibly separate and policy-bounded.
+- Interrupting the assistant from mobile or web stops both speech and underlying work quickly enough to feel natural.
+- Realtime room/session isolation prevents transcript, playback, or interrupt leakage across sessions.
+- Premium voice mode can be enabled per session, leaves an audit trail, and is measurably more expensive than the default mode.
 - Repeated use of a tool or agent increases learning confidence but does not auto-promote it into core unless a separate core-admission rule is satisfied.
 - Dual-surface behavior remains intact:
   communication-triggered work from phone appears in Freedom governance/runtime views, and desktop-originated tasks can be monitored/escalated from the phone.
@@ -388,8 +507,9 @@
 - Core posture: communication belongs in core; most tools and specialist agents do not.
 - Growth posture: Freedom self-evolves mainly by learning, routing, composing, and internalizing validated patterns, not by indiscriminately absorbing dependencies.
 - Builder policy: `New Build Agent` is the canonical external agent-builder until a specific path is proven internalized.
-- Model policy: local-first, permissioned escalation to `Codex` or `Claude Code`.
+- Model policy: `Codex`-first for day-to-day work, with optional local cost-control routing and permissioned escalation to `Claude Code` where justified.
 - Provider intent: escalate to paid/external providers for more horsepower or faster turnaround only after explicit approval.
+- Voice policy: one primary realtime voice stack across web and mobile, `gpt-realtime-mini` by default, premium realtime upgrade only by explicit policy or operator choice, device speech services fallback-only.
 - Advisor posture: Freedom should behave like a co-founder and trusted advisor, not merely
   a reactive assistant.
 - Decision posture: Freedom should look for the best reachable solution, not just the best

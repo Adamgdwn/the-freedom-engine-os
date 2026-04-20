@@ -11,28 +11,36 @@ Required env vars (set in .env at repo root or export in shell):
     LIVEKIT_API_KEY
     LIVEKIT_API_SECRET
     OPENAI_API_KEY
-    NEXT_PUBLIC_VOICE_ID   (optional, defaults to "nova")
+    NEXT_PUBLIC_VOICE_ID   (optional, defaults to "marin")
 """
 import asyncio
 import json
 import os
 from dotenv import load_dotenv
+from openai.types import realtime
 
-# Load from repo root .env first, then local .env fallback
-load_dotenv(dotenv_path="../../.env", override=False)
+# Prefer the repo root `.env` over stale shell exports so the paired desktop and
+# voice worker use the same runtime credentials during local development.
+load_dotenv(dotenv_path="../../.env", override=True)
 load_dotenv(override=False)
 
 from livekit import agents, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions, cli, WorkerOptions
+from livekit.agents.voice.room_io.types import RoomOptions
 from livekit.plugins import openai as lk_openai
 
 from persona import load_freedom_core_prompt, load_freedom_runtime_policy_prompt
 from tools import (
     build_runtime_context,
+    check_weather,
+    get_current_voice_profile,
     park_task,
     pending_approvals,
     prepare_email_draft,
     record_learning_signal,
+    review_runtime_status,
+    review_build_lane_queue,
+    review_voice_profile,
     request_persona_adjustment,
     request_persona_overlay_retirement,
     request_persona_overlay_revision,
@@ -41,7 +49,11 @@ from tools import (
     review_persona_overlays,
     review_pending_programming_requests,
     review_trusted_email_recipients,
+    route_conversation_to_build_lane,
     request_self_programming,
+    persist_voice_runtime_transcript,
+    set_voice_profile_preferences,
+    search_web,
     set_event_room,
     top_venture_status,
     update_task_status,
@@ -53,17 +65,52 @@ SYSTEM_PROMPT = "\n\n".join([
     load_freedom_runtime_policy_prompt(),
 ]).strip()
 
+SUPPORTED_REALTIME_VOICES = {
+    "alloy",
+    "ash",
+    "ballad",
+    "cedar",
+    "coral",
+    "echo",
+    "marin",
+    "sage",
+    "shimmer",
+    "verse",
+}
+LEGACY_REALTIME_VOICE_ALIASES = {
+    "nova": "marin",
+}
+
+
+def resolve_realtime_voice(profile: dict[str, object] | None = None) -> str:
+    requested = str(profile.get("targetVoice", "")) if profile else os.getenv("NEXT_PUBLIC_VOICE_ID", "marin").strip().lower()
+    normalized = LEGACY_REALTIME_VOICE_ALIASES.get(requested, requested)
+    return normalized if normalized in SUPPORTED_REALTIME_VOICES else "marin"
+
 
 async def entrypoint(ctx: agents.JobContext) -> None:
     await ctx.connect()
     set_event_room(ctx.room)
-    supplemental_context = build_runtime_context()
+    voice_profile = get_current_voice_profile()
+    supplemental_context = build_runtime_context(ctx.room.name)
     instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\nRuntime context:\n{supplemental_context}"
+    user_transcript_count = 0
+    assistant_transcript_count = 0
 
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
-            model="gpt-4o-realtime-preview",
-            voice=os.getenv("NEXT_PUBLIC_VOICE_ID", "nova"),
+            model="gpt-realtime-mini",
+            voice=resolve_realtime_voice(voice_profile),
+            input_audio_transcription=realtime.AudioTranscription(
+                model="gpt-4o-transcribe",
+            ),
+            input_audio_noise_reduction="near_field",
+            turn_detection=realtime.realtime_audio_input_turn_detection.SemanticVad(
+                type="semantic_vad",
+                create_response=True,
+                eagerness="auto",
+                interrupt_response=True,
+            ),
         ),
     )
 
@@ -87,15 +134,26 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(event) -> None:
+        nonlocal user_transcript_count
         transcript = getattr(event, "transcript", "").strip()
         if transcript:
+            user_transcript_count += 1
+            persist_voice_runtime_transcript(
+                ctx.room.name,
+                f"{ctx.room.name}:user:{user_transcript_count}",
+                "user",
+                transcript,
+            )
             asyncio.create_task(publish_event({
                 "type": "transcript",
                 "text": transcript,
+                "source": "user",
+                "final": True,
             }))
 
     @session.on("conversation_item_added")
     def on_conversation_item_added(event) -> None:
+        nonlocal assistant_transcript_count
         item = getattr(event, "item", None)
         if getattr(item, "type", None) != "message":
             return
@@ -105,9 +163,18 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
         text = getattr(item, "text_content", "").strip()
         if text:
+            assistant_transcript_count += 1
+            persist_voice_runtime_transcript(
+                ctx.room.name,
+                f"{ctx.room.name}:assistant:{assistant_transcript_count}",
+                "assistant",
+                text,
+            )
             asyncio.create_task(publish_event({
                 "type": "transcript",
                 "text": text,
+                "source": "assistant",
+                "final": True,
             }))
 
     @session.on("agent_state_changed")
@@ -134,24 +201,32 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             agent=Agent(
                 instructions=instructions,
                 tools=[
+                    review_runtime_status,
                     top_venture_status,
                     pending_approvals,
                     weekly_metrics,
+                    search_web,
+                    check_weather,
                     review_open_tasks,
                     review_learning_signals,
                     review_pending_programming_requests,
+                    review_build_lane_queue,
                     review_trusted_email_recipients,
+                    review_voice_profile,
                     review_persona_overlays,
                     park_task,
                     update_task_status,
                     record_learning_signal,
                     request_self_programming,
+                    route_conversation_to_build_lane,
                     request_persona_adjustment,
                     request_persona_overlay_revision,
                     request_persona_overlay_retirement,
+                    set_voice_profile_preferences,
                     prepare_email_draft,
                 ],
             ),
+            room_options=RoomOptions(delete_room_on_close=True),
             room_input_options=RoomInputOptions(noise_cancellation=True),
         )
     finally:

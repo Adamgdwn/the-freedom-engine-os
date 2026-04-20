@@ -45,6 +45,9 @@ For a fast operator-facing view of what is actually live right now, use
   Shared React voice session context, LiveKit room session, interrupt/task data channel,
   and Python Realtime worker coordination surfaced in the Next.js operator workbench
   voice console and mobile voice action surfaces.
+- Conversation-to-build lane:
+  governed intake path that turns app conversations into roadmap candidates, business
+  cases, approval-bearing Pop!_OS build sessions, and explicit report-back artifacts.
 - Voice partner autonomy layer:
   The Python Freedom worker carries an explicit operating-policy prompt plus read/write
   coordination tools for open tasks, durable learning, pending programming requests,
@@ -99,8 +102,11 @@ For a fast operator-facing view of what is actually live right now, use
    read-only turns can stay on a configured local command lane while escalated work can
    use an operator-selected external lane such as `OpenAI / ChatGPT`, `Codex`, or
    `Claude Code`.
-12. Future persistence will swap the seed layer for Supabase queries while preserving the
-   same entity boundaries.
+12. Significant ideas that arise in conversation are meant to be promoted into the
+    dedicated Pop!_OS build lane, where business case, approval posture, and execution
+    evidence are made explicit before or during implementation.
+13. Future persistence will swap the seed layer for Supabase queries while preserving the
+    same entity boundaries.
 
 ## Dependencies
 
@@ -140,5 +146,9 @@ For a fast operator-facing view of what is actually live right now, use
   `pop-os.taildcb5c5.ts.net:43111/install`.
 - The first integration posture centres AI Consulting Build, with PDF Flow as a live
   execution domain and GitHub as the code-control surface.
+- The intended operating direction is a mostly autonomous business partner:
+  Freedom should capture opportunities from conversation, classify them through business
+  and governance lenses, execute approved Pop!_OS work, and report back with evidence
+  rather than behaving like a generic question-answer voice assistant.
 
 See `docs/adr/0001-shared-control-plane-v1.md`.

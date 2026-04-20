@@ -275,8 +275,6 @@ function updateApplicationMenu(): void {
   const pairingCode = latestOverview?.overview.hostStatus?.host.pairingCode ?? "Unavailable";
   const mobileUrl = latestOverview?.overview.hostStatus?.tailscale.suggestedUrl ?? latestOverview?.publicBaseUrl ?? dashboardFallbackUrl;
   const installUrl = latestOverview?.installUrl ?? `${dashboardFallbackUrl}install`;
-  const dashboardUrl = latestOverview?.dashboardUrl ?? dashboardFallbackUrl;
-
   const template = [
     {
       label: "Freedom",

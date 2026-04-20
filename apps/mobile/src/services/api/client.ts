@@ -1,8 +1,11 @@
 import type {
+  AssistantVoiceProfile,
   ChatMessage,
   ChatSession,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
+  CreateVoiceRuntimeSessionRequest,
+  HostBuildLaneResponse,
   HostStatus,
   NotificationEvent,
   OutboundRecipient,
@@ -14,7 +17,9 @@ import type {
   RenameDeviceRequest,
   SendExternalMessageRequest,
   SendExternalMessageResponse,
+  VoiceRuntimeSessionResponse,
   UpdateNotificationPrefsRequest,
+  UpdateHostVoiceProfileRequest,
   UpdateSessionRequest
 } from "@freedom/shared";
 
@@ -28,6 +33,18 @@ export class ApiClient {
 
   getHostStatus(token: string, baseUrl: string): Promise<HostStatus> {
     return this.request("GET", `${baseUrl}/host/status`, token);
+  }
+
+  getBuildLaneSummary(token: string, baseUrl: string): Promise<HostBuildLaneResponse> {
+    return this.request("GET", `${baseUrl}/host/build-lane`, token);
+  }
+
+  updateVoiceProfile(
+    token: string,
+    baseUrl: string,
+    input: UpdateHostVoiceProfileRequest
+  ): Promise<AssistantVoiceProfile> {
+    return this.request("POST", `${baseUrl}/host/voice-profile`, token, input);
   }
 
   listSessions(token: string, baseUrl: string): Promise<ChatSession[]> {
@@ -64,6 +81,14 @@ export class ApiClient {
 
   createRealtimeTicket(token: string, baseUrl: string): Promise<RealtimeTicketResponse> {
     return this.request("POST", `${baseUrl}/realtime/ticket`, token);
+  }
+
+  createVoiceRuntimeSession(
+    token: string,
+    baseUrl: string,
+    input: CreateVoiceRuntimeSessionRequest
+  ): Promise<VoiceRuntimeSessionResponse> {
+    return this.request("POST", `${baseUrl}/voice/runtime/session`, token, input);
   }
 
   renameDevice(token: string, baseUrl: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice> {

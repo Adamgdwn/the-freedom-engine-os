@@ -3,11 +3,14 @@ import type {
   ChatSession,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
+  CreateVoiceRuntimeSessionRequest,
   HostAssistantDeltaRequest,
+  HostBuildLaneResponse,
   HostCompleteTurnRequest,
   HostFailTurnRequest,
   HostHeartbeatRequest,
   HostInterruptTurnRequest,
+  HostVoiceProfileResponse,
   HostStartTurnRequest,
   HostStatus,
   HostWorkItem,
@@ -20,18 +23,26 @@ import type {
   RegisterHostRequest,
   RegisterHostResponse,
   SendExternalMessageRequest,
-  SendExternalMessageResponse
+  SendExternalMessageResponse,
+  VoiceRuntimeSessionResponse
 } from "../schemas/platform.js";
 import type {
   NotificationEvent,
   RenameDeviceRequest,
+  UpdateHostVoiceProfileRequest,
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest
 } from "../schemas/platform.js";
 
+export interface HostWorkPollOptions {
+  waitMs?: number;
+  acceptQueued?: boolean;
+}
+
 export interface MobileApi {
   completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse>;
   getHostStatus(token: string): Promise<HostStatus>;
+  getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
   listSessions(token: string): Promise<ChatSession[]>;
   listDevices(token: string): Promise<PairedDevice[]>;
   createSession(token: string, input: CreateSessionRequest): Promise<ChatSession>;
@@ -41,6 +52,7 @@ export interface MobileApi {
   postMessage(token: string, sessionId: string, input: PostMessageRequest): Promise<ChatMessage>;
   stopSession(token: string, sessionId: string): Promise<ChatSession>;
   createRealtimeTicket(token: string): Promise<RealtimeTicketResponse>;
+  createVoiceRuntimeSession(token: string, input: CreateVoiceRuntimeSessionRequest): Promise<VoiceRuntimeSessionResponse>;
   renameDevice(token: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice>;
   revokeDevice(token: string, deviceId: string): Promise<PairedDevice>;
   registerPushToken(token: string, deviceId: string, input: RegisterPushTokenRequest): Promise<PairedDevice>;
@@ -55,11 +67,14 @@ export interface MobileApi {
 export interface HostApi {
   registerHost(input: RegisterHostRequest): Promise<RegisterHostResponse>;
   heartbeat(token: string, input: HostHeartbeatRequest): Promise<HostStatus>;
-  getNextWork(token: string): Promise<HostWorkItem | null>;
+  getNextWork(token: string, options?: HostWorkPollOptions): Promise<HostWorkItem | null>;
   startTurn(token: string, input: HostStartTurnRequest): Promise<ChatSession>;
   appendAssistantDelta(token: string, input: HostAssistantDeltaRequest): Promise<ChatMessage>;
   completeTurn(token: string, input: HostCompleteTurnRequest): Promise<ChatSession>;
   failTurn(token: string, input: HostFailTurnRequest): Promise<ChatSession>;
   interruptTurn(token: string, input: HostInterruptTurnRequest): Promise<ChatSession>;
   getHostStatus(token: string): Promise<HostStatus>;
+  getVoiceProfile(token: string): Promise<HostVoiceProfileResponse>;
+  getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
+  updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse>;
 }

@@ -29,11 +29,19 @@
   bounded parallel task work instead of a single blocking run
 - Operator workspace refresh:
   desktop control plane is now a denser workbench and the Android shell now matches the
-  command-and-capture voice posture more closely
+  command-and-capture voice posture more closely, with `Start`, `Talk`, and the hidden
+  utility sheet replacing the older dashboard-style phone shell
+- Conversational voice profile control:
+  Freedom can now save live voice preferences for preset voice, gender presentation,
+  accent hints, tone, warmth, and pace from conversation, and the Android companion
+  now distinguishes the live realtime voice from the phone's fallback spoken-reply voice
 
 ## Now
 
 - verify APK sideload on device and confirm voice + gateway pairing work end-to-end
+- validate conversational voice-profile updates end to end: review current profile,
+  save a new one in voice, restart the session, and confirm the next live voice uses
+  the expected preset mapping
 - run real-device Android acceptance for start voice, assistant playback, interrupt,
   mute/unmute, post-TTS resume, voice switching, and safe multi-task handling
 - validate control-plane web voice against LiveKit/OpenAI in-browser: explicit interrupt,
@@ -51,6 +59,8 @@
 - validate the new Personality review surface end to end: Freedom-originated overlay
   requests appear in the UI, operator approvals activate them, and retire actions remove
   them from runtime context cleanly
+- design the next voice-first identity layer: operator voice recognition, trusted-speaker
+  filtering in shared rooms, and a wake phrase path such as "Freedom, it's Adam"
 - define and validate the outcome model for build / automate / delegate / stop decisions
   so Freedom is optimizing for long-term personal and organizational freedom rather than
   just local task completion
@@ -62,6 +72,77 @@
 - connect AI Consulting Build metrics and workflow exceptions into the evidence room
 - activate voice agent tools (`top_venture_status`, `pending_approvals`, `weekly_metrics`)
   against live Supabase data instead of stubs
+
+## From Conversations To Be Done On Pop!_OS
+
+This section is the dedicated bridge between app conversation and real implementation
+work on the desktop build lane. Every serious idea that needs a programming or systems
+session should land here before it becomes active execution.
+
+Runtime note:
+
+- the first live routing loop is now in place:
+  the voice runtime can persist structured build-lane items,
+  the mobile companion can read them,
+  and the desktop agent-control queue can prefer them over seeded examples
+
+Status legend:
+
+- `Conversation capture`:
+  the idea is real, but still needs business framing
+- `Needs approval`:
+  Freedom recommends the work, but execution scope is not yet authorized
+- `Approved for discovery`:
+  Freedom may research, spec, estimate, and architecture the work
+- `Approved for build`:
+  Freedom may execute the local Pop!_OS programming session inside approved bounds
+- `Approved for release`:
+  Freedom may ship or publish through the allowed release path
+- `Blocked`:
+  waiting on Adam, a credential, an external dependency, or a policy decision
+
+- `Conversation build lane + reporting path`
+  Status: `Approved for discovery`
+  Objective: turn app conversations into governed Pop!_OS implementation work with a
+  clear audit trail, approval state, reporting path, and next checkpoint
+  Business case: makes Freedom more scalable, more autonomous, and less likely to
+  drift into voice-assistant behavior
+  Next checkpoint: wire roadmap/spec/process records so build candidates can be
+  promoted from conversation into execution with explicit status and ownership
+
+- `Connector authority pack`
+  Status: `Needs approval`
+  Objective: define governed access posture for GitHub, Supabase, Vercel, LiveKit,
+  OpenAI, Claude, Codex, and local LLM runtimes so Freedom can modify and create real
+  systems independently inside approved boundaries
+  Business case: reduces operator bottlenecks and makes real autonomous execution
+  possible instead of only planning
+  Next checkpoint: finalize which credentials and permissions Freedom should hold,
+  what actions are autonomous, and what still requires explicit release approval
+
+- `Electrical contractor intake app opportunity`
+  Status: `Conversation capture`
+  Objective: evaluate and possibly build a customer intake and estimating app for an
+  electrical contracting company
+  Business case: potential immediate service revenue plus a reusable vertical product
+  if the intake, triage, and estimate flow generalizes to other contractors
+  Next checkpoint: produce a founder-grade opportunity memo covering:
+  one-off build vs repeatable product,
+  likely build cost,
+  sale price,
+  subscription vs one-time pricing,
+  support burden,
+  expansion potential,
+  and the first thin technical slice
+
+- `Executive business-case workbench for new builds`
+  Status: `Approved for discovery`
+  Objective: standardize how Freedom evaluates new app, tool, and agent opportunities
+  from the voice surface before implementation starts
+  Business case: raises build quality, pricing discipline, and reuse thinking across
+  all future ventures and client work
+  Next checkpoint: turn the electrical-app example into a reusable evaluation template
+  for future `New Build` conversations
 
 ## Next
 

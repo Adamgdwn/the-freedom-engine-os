@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { sanitizeTextForSpeech } from "../../utils/operatorConsole";
+import { pickAutomaticVoice } from "./voiceOptionPersona";
 
 export interface TtsVoiceOption {
   id: string;
@@ -151,8 +152,10 @@ export class TtsService {
   private expoVoice: { language: string; identifier?: string } | null = null;
   private preferredVoiceId: string | null = null;
   private selectedVoiceId: string | null = null;
+  private selectedBackend: SpeechBackend | null = null;
   private lastSuccessfulBackend: SpeechBackend | null = null;
   private lastAttemptedBackend: SpeechBackend | null = null;
+  private readonly knownVoiceBackendById = new Map<string, SpeechBackend>();
 
   private hasWarmBackend(): boolean {
     return Boolean(this.initPromise || this.selectedVoiceId || this.lastSuccessfulBackend || this.lastAttemptedBackend);
@@ -174,17 +177,21 @@ export class TtsService {
       return false;
     }
 
-    if (preferredVoiceId !== undefined && this.preferredVoiceId !== preferredVoiceId) {
+    if (preferredVoiceId !== undefined) {
+      const voiceChanged = this.preferredVoiceId !== preferredVoiceId;
+      const backendChanged = await this.updatePreferredVoiceRouting(preferredVoiceId);
       this.preferredVoiceId = preferredVoiceId;
-      if (this.hasWarmBackend()) {
+      if ((voiceChanged || backendChanged) && this.hasWarmBackend()) {
         try {
-          await this.applyPreferredVoice();
+          if (backendChanged) {
+            this.resetBackendState();
+          } else {
+            await this.applyPreferredVoice();
+          }
         } catch {
           this.resetBackendState();
         }
       }
-    } else if (preferredVoiceId !== undefined) {
-      this.preferredVoiceId = preferredVoiceId;
     }
 
     if (!this.initPromise) {
@@ -215,10 +222,14 @@ export class TtsService {
 
   async setPreferredVoice(voiceId: string | null): Promise<TtsVoiceOption | null> {
     const voiceChanged = this.preferredVoiceId !== voiceId;
+    const backendChanged = await this.updatePreferredVoiceRouting(voiceId);
     this.preferredVoiceId = voiceId;
-    if (voiceChanged && this.hasWarmBackend()) {
+    if ((voiceChanged || backendChanged) && this.hasWarmBackend()) {
       try {
-        return await this.applyPreferredVoice();
+        if (!backendChanged) {
+          return await this.applyPreferredVoice();
+        }
+        this.resetBackendState();
       } catch {
         this.resetBackendState();
       }
@@ -341,6 +352,10 @@ export class TtsService {
     const availableBackends = this.availableBackends();
     if (!availableBackends.length) {
       return null;
+    }
+
+    if (this.selectedBackend && availableBackends.includes(this.selectedBackend)) {
+      return this.selectedBackend;
     }
 
     if (this.lastSuccessfulBackend && availableBackends.includes(this.lastSuccessfulBackend)) {
@@ -511,8 +526,7 @@ export class TtsService {
     const voices = await this.getExpoVoiceOptions();
     const preferredVoice =
       (this.preferredVoiceId ? voices.find((voice) => voice.id === this.preferredVoiceId) : null) ??
-      voices.find((voice) => /^en(?:-|_)US$/i.test(voice.language)) ??
-      voices.find((voice) => /^en(?:[-_]|$)/i.test(voice.language)) ??
+      pickAutomaticVoice(voices) ??
       voices[0] ??
       null;
 
@@ -529,9 +543,7 @@ export class TtsService {
     const voices = await this.getReactNativeVoiceOptions();
     const preferredVoice =
       (this.preferredVoiceId ? voices.find((voice) => voice.id === this.preferredVoiceId) : null) ??
-      voices.find((voice) => /^en(?:-|_)US$/i.test(voice.language) && voice.qualityLabel !== "Network") ??
-      voices.find((voice) => /^en(?:[-_]|$)/i.test(voice.language) && voice.qualityLabel !== "Network") ??
-      voices.find((voice) => /^en(?:[-_]|$)/i.test(voice.language)) ??
+      pickAutomaticVoice(voices) ??
       voices[0] ??
       null;
 
@@ -550,7 +562,7 @@ export class TtsService {
   private async getExpoVoiceOptions(): Promise<TtsVoiceOption[]> {
     const voices =
       (await withTimeout(Promise.resolve(this.expoSpeech?.getAvailableVoicesAsync?.().catch(() => []) ?? []), 1200, [])) ?? [];
-    return voices
+    const options = voices
       .map((voice, index) => ({
         id: voice.identifier ?? `${voice.language ?? "unknown"}:${voice.name ?? index}`,
         label: voice.name?.trim() || voice.identifier?.trim() || `Voice ${index + 1}`,
@@ -560,12 +572,14 @@ export class TtsService {
         nativeIdentifier: voice.identifier ?? null
       }))
       .sort(compareVoiceOptions);
+    options.forEach((voice) => this.knownVoiceBackendById.set(voice.id, "expo-speech"));
+    return options;
   }
 
   private async getReactNativeVoiceOptions(): Promise<TtsVoiceOption[]> {
     const voices =
       (await withTimeout(Promise.resolve(this.reactNativeTts?.voices?.().catch(() => []) ?? []), 1200, [])) ?? [];
-    return voices
+    const options = voices
       .filter((voice) => !voice.notInstalled)
       .map((voice) => ({
         id: voice.id,
@@ -576,6 +590,36 @@ export class TtsService {
         nativeIdentifier: voice.id
       }))
       .sort(compareVoiceOptions);
+    options.forEach((voice) => this.knownVoiceBackendById.set(voice.id, "react-native-tts"));
+    return options;
+  }
+
+  private async updatePreferredVoiceRouting(voiceId: string | null): Promise<boolean> {
+    const previousBackend = this.resolvePreferredBackend();
+    this.selectedBackend = voiceId ? await this.resolveBackendForVoiceId(voiceId) : null;
+    return Boolean(this.selectedBackend && this.selectedBackend !== previousBackend);
+  }
+
+  private async resolveBackendForVoiceId(voiceId: string): Promise<SpeechBackend | null> {
+    const cachedBackend = this.knownVoiceBackendById.get(voiceId);
+    if (cachedBackend) {
+      return cachedBackend;
+    }
+
+    const [reactNativeVoices, expoVoices] = await Promise.all([
+      this.reactNativeTts ? this.getReactNativeVoiceOptions() : Promise.resolve([]),
+      this.expoSpeech ? this.getExpoVoiceOptions() : Promise.resolve([])
+    ]);
+
+    if (reactNativeVoices.some((voice) => voice.id === voiceId)) {
+      return "react-native-tts";
+    }
+
+    if (expoVoices.some((voice) => voice.id === voiceId)) {
+      return "expo-speech";
+    }
+
+    return null;
   }
 }
 

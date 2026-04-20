@@ -1,3 +1,5 @@
+import type { ConversationBuildLaneItem } from '@freedom/shared';
+
 export type LearningSignalKind = 'preference' | 'focus' | 'workflow' | 'capability';
 export type LearningSignalStatus = 'observed' | 'tracking' | 'internalized';
 
@@ -22,6 +24,7 @@ export interface SelfProgrammingRequest {
   id:         string;
   capability: string;
   reason:     string;
+  buildLane?: ConversationBuildLaneItem | null;
   status:     SelfProgrammingRequestStatus;
   createdAt:  number;
   updatedAt:  number;
