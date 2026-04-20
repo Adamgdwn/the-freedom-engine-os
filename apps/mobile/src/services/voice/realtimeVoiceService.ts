@@ -111,20 +111,33 @@ export class RealtimeVoiceService {
       this.room = room;
 
       room.on(RoomEvent.Reconnecting, () => {
-        this.callbacks?.onReconnecting();
+        if (this.room !== room) {
+          return;
+        }
+        callbacks.onReconnecting();
       });
 
       room.on(RoomEvent.Reconnected, () => {
-        this.callbacks?.onReconnected();
+        if (this.room !== room) {
+          return;
+        }
+        callbacks.onReconnected();
       });
 
       room.on(RoomEvent.Disconnected, () => {
+        if (this.room !== room) {
+          return;
+        }
         const expected = this.disconnectExpected;
         this.room = null;
-        this.callbacks?.onDisconnected(expected);
+        this.callbacks = null;
+        callbacks.onDisconnected(expected);
       });
 
       room.on(RoomEvent.DataReceived, (payloadBuffer) => {
+        if (this.room !== room) {
+          return;
+        }
         this.handleDataMessage(payloadBuffer);
       });
 
@@ -165,6 +178,7 @@ export class RealtimeVoiceService {
 
     const room = this.room;
     this.room = null;
+    this.callbacks = null;
     if (room) {
       room.disconnect();
     }
@@ -173,6 +187,7 @@ export class RealtimeVoiceService {
       await AudioSession.stopAudioSession().catch(() => undefined);
       this.audioSessionStarted = false;
     }
+    this.disconnectExpected = false;
   }
 
   private handleDataMessage(payloadBuffer: Uint8Array): void {

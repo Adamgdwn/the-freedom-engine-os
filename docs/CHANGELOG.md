@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-04-19 (conversational voice profile + release 0.2.38)
+
+- added a host-level realtime voice profile so Freedom can save conversational requests
+  for voice, gender presentation, accent hints, tone, warmth, and pace instead of
+  relying on one global env voice
+- wired the LiveKit/OpenAI voice agent to review and update that profile through tools,
+  and to load the saved preset plus delivery hints at the start of a new voice session
+- surfaced the live Freedom voice profile in the Android companion so it is clear that
+  the realtime voice is separate from the phone&apos;s local `Spoken Reply Voice` fallback
+- bumped Android release metadata to `versionCode 45` / `versionName 0.2.38`
+
+## 2026-04-19 (runtime cleanup hardening + release 0.2.37)
+
+- tightened gateway voice-session minting so mobile realtime voice can only bind to a
+  chat session owned by the paired device instead of trusting any arbitrary session id
+- hardened the mobile realtime room service against stale disconnect and data callbacks
+  from old LiveKit rooms, which reduces wrong-session state flips after reconnects or
+  rapid restarts
+- taught the gateway install and Android download routes to answer normal `HEAD`
+  probes cleanly, so health checks and release verification no longer misread the live
+  install surface as missing when the browser path is actually healthy
+- configured the voice worker to delete its LiveKit room on close and removed the live
+  host/device state JSON files from source control so the repo keeps only the sanitized
+  bootstrap examples under `.local-data`
+- bumped the Android release metadata to `versionCode 44` / `versionName 0.2.37` so this
+  cleanup pass ships as a distinct installable build
+
 ## 2026-04-19 (mobile voice runtime recovery + release 0.2.36)
 
 - fixed the Android fallback recognizer picker so the phone no longer treats the

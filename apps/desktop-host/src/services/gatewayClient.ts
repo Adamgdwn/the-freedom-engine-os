@@ -7,11 +7,13 @@ import type {
   HostFailTurnRequest,
   HostHeartbeatRequest,
   HostInterruptTurnRequest,
+  HostVoiceProfileResponse,
   HostStartTurnRequest,
   HostStatus,
   HostWorkItem,
   RegisterHostRequest,
-  RegisterHostResponse
+  RegisterHostResponse,
+  UpdateHostVoiceProfileRequest
 } from "@freedom/shared";
 import type { HostWorkPollOptions } from "@freedom/shared";
 
@@ -59,6 +61,14 @@ export class HttpGatewayClient implements HostApi {
 
   getHostStatus(token: string): Promise<HostStatus> {
     return this.request("GET", "/host/status", token);
+  }
+
+  getVoiceProfile(token: string): Promise<HostVoiceProfileResponse> {
+    return this.request("GET", "/host/voice-profile", token);
+  }
+
+  updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse> {
+    return this.request("POST", "/host/voice-profile", token, input);
   }
 
   private async request<T>(method: string, pathname: string | URL, token?: string, body?: unknown): Promise<T> {

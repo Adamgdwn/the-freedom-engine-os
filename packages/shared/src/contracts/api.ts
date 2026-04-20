@@ -9,6 +9,7 @@ import type {
   HostFailTurnRequest,
   HostHeartbeatRequest,
   HostInterruptTurnRequest,
+  HostVoiceProfileResponse,
   HostStartTurnRequest,
   HostStatus,
   HostWorkItem,
@@ -27,6 +28,7 @@ import type {
 import type {
   NotificationEvent,
   RenameDeviceRequest,
+  UpdateHostVoiceProfileRequest,
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest
 } from "../schemas/platform.js";
@@ -70,4 +72,6 @@ export interface HostApi {
   failTurn(token: string, input: HostFailTurnRequest): Promise<ChatSession>;
   interruptTurn(token: string, input: HostInterruptTurnRequest): Promise<ChatSession>;
   getHostStatus(token: string): Promise<HostStatus>;
+  getVoiceProfile(token: string): Promise<HostVoiceProfileResponse>;
+  updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse>;
 }

@@ -79,6 +79,11 @@ that ties business outcomes back to freedom outcomes.
   as placeholders only so template commits never leak working credentials.
 - The shared realtime voice defaults are now `gpt-realtime-mini` with supported voice
   fallback to `marin`, even if an older env value still says `nova`.
+- The live Freedom voice can now be tuned in conversation. Ask for changes to voice,
+  gender presentation, accent hints, tone, pace, warmth, or similar traits, and the
+  agent will save a host-level voice profile.
+- Realtime preset voice changes take effect on the next voice session after restart.
+  The phone's `Spoken Reply Voice` setting still only controls the local TTS fallback.
 - The operating rule for focus is simple:
   if a task is interesting but off-plan, the system should challenge it, park it, or turn
   it into a bounded experiment instead of silently expanding scope.

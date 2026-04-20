@@ -5,7 +5,8 @@ import {
   FREEDOM_PRODUCT_NAME,
   FREEDOM_RUNTIME_NAME,
   PROJECT_TEMPLATES,
-  humanizeResponseStyle
+  humanizeResponseStyle,
+  summarizeAssistantVoiceProfile
 } from "@freedom/shared";
 import type { AppState } from "../store/appStore";
 import {
@@ -293,9 +294,17 @@ export function HostScreen(props: {
           <Switch value={store.autoSendVoice} onValueChange={() => store.toggleAutoSendVoice().catch((error) => console.warn(error))} />
         </View>
         <View style={styles.insetCard}>
+          <Text style={styles.inputLabel}>Realtime Freedom Voice</Text>
+          <Text style={styles.helperText}>
+            {store.hostStatus?.voiceProfile
+              ? `Current live voice profile: ${summarizeAssistantVoiceProfile(store.hostStatus.voiceProfile)}. Ask ${FREEDOM_PRODUCT_NAME} by voice to change this, and restart the session to hear the new live preset.`
+              : `Ask ${FREEDOM_PRODUCT_NAME} by voice to change the live realtime voice. Changes to the synthesizer preset take effect on the next voice session.`}
+          </Text>
+        </View>
+        <View style={styles.insetCard}>
           <Text style={styles.inputLabel}>Spoken Reply Voice</Text>
           <Text style={styles.helperText}>
-            Freedom is now only surfacing the strongest installed voices instead of the full raw list, with cues aimed at sounding less mechanical.
+            This controls the phone&apos;s local spoken-reply fallback voice. It is separate from the live realtime Freedom voice profile above.
           </Text>
           <View style={styles.voiceChoiceList}>
             <Pressable

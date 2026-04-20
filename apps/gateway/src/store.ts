@@ -6,6 +6,7 @@ import { createId, generatePairingCode, nowIso } from "@freedom/core";
 import { AccessToken } from "livekit-server-sdk";
 import type {
   AuditEvent,
+  AssistantVoiceProfile,
   ChatMessage,
   ChatSession,
   CreateOutboundRecipientRequest,
@@ -43,6 +44,7 @@ import type {
   StreamEvent,
   TaskItem,
   TailscaleStatus,
+  UpdateHostVoiceProfileRequest,
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest,
   VoiceRuntimeSessionResponse,
@@ -51,9 +53,11 @@ import type {
 import {
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
+  getAssistantVoiceCatalogEntry,
   getModelRouterConfig,
   hasRunnableLocalDayToDay,
-  isPrimaryFreedomSessionTitle
+  isPrimaryFreedomSessionTitle,
+  normalizeAssistantVoicePresetId
 } from "@freedom/shared";
 import { createEmailProvider, renderOutboundEmail, resolveOutboundEmailStatus } from "./outboundEmail.js";
 import { resolveWakeControl } from "./wakeControl.js";
@@ -62,6 +66,7 @@ interface HostRecord extends RegisteredHost {
   auth: HostAuthState;
   tailscale: TailscaleStatus;
   hostToken: string;
+  voiceProfile: AssistantVoiceProfile | null;
 }
 
 interface DeviceRecord extends PairedDevice {
@@ -192,7 +197,8 @@ export class GatewayStore {
         isOnline: true,
         auth: defaultAuthState,
         tailscale: defaultTailscaleStatus,
-        hostToken: createId("hosttoken")
+        hostToken: createId("hosttoken"),
+        voiceProfile: null
       };
       state.hosts.push(host);
     } else {
@@ -202,6 +208,7 @@ export class GatewayStore {
       host.lastSeenAt = issuedAt;
       host.isOnline = true;
       host.hostToken = createId("hosttoken");
+      host.voiceProfile = host.voiceProfile ?? null;
     }
 
     this.addAuditEvent(state, {
@@ -295,6 +302,58 @@ export class GatewayStore {
     return principal.host.id;
   }
 
+  async getVoiceProfile(token: string): Promise<AssistantVoiceProfile> {
+    const principal = await this.requireHost(token);
+    return resolveHostVoiceProfile(principal.host);
+  }
+
+  async updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<AssistantVoiceProfile> {
+    const principal = await this.requireHost(token);
+    const state = await this.readState();
+    const host = state.hosts.find((item) => item.id === principal.host.id);
+    if (!host) {
+      throw new Error("Host not found.");
+    }
+
+    if (input.resetToDefault) {
+      host.voiceProfile = null;
+      this.addAuditEvent(state, {
+        hostId: host.id,
+        deviceId: null,
+        sessionId: null,
+        type: "voice_profile_reset",
+        detail: null
+      });
+    } else {
+      const baseline = resolveHostVoiceProfile(host);
+      const targetVoice = normalizeAssistantVoicePresetId(input.targetVoice ?? baseline.targetVoice);
+      const catalog = getAssistantVoiceCatalogEntry(targetVoice);
+      host.voiceProfile = {
+        targetVoice,
+        displayName: catalog.label,
+        gender: input.gender ?? baseline.gender,
+        accent: normalizeOptionalPreference(input.accent, baseline.accent),
+        tone: normalizeOptionalPreference(input.tone, baseline.tone),
+        warmth: input.warmth ?? baseline.warmth,
+        pace: input.pace ?? baseline.pace,
+        notes: normalizeOptionalPreference(input.notes, baseline.notes),
+        source: "conversation",
+        updatedAt: nowIso()
+      };
+      this.addAuditEvent(state, {
+        hostId: host.id,
+        deviceId: null,
+        sessionId: null,
+        type: "voice_profile_updated",
+        detail: summarizeHostVoiceProfile(host.voiceProfile)
+      });
+    }
+
+    await this.writeState(state);
+    this.emitHostStatus(host);
+    return resolveHostVoiceProfile(host);
+  }
+
   async createRealtimeTicket(token: string): Promise<RealtimeTicketResponse> {
     const principal = await this.requirePrincipal(token);
     const ticket = createId("realtime");
@@ -310,7 +369,7 @@ export class GatewayStore {
     token: string,
     input: CreateVoiceRuntimeSessionRequest,
   ): Promise<VoiceRuntimeSessionResponse> {
-    const principal = await this.requirePrincipal(token);
+    const principal = await this.requireDevice(token);
     const apiKey = process.env.LIVEKIT_API_KEY?.trim();
     const apiSecret = process.env.LIVEKIT_API_SECRET?.trim();
     const wsUrl = process.env.LIVEKIT_URL?.trim();
@@ -324,6 +383,7 @@ export class GatewayStore {
       throw new Error("Voice session id is invalid.");
     }
 
+    const chatSession = await this.requireSessionForDevice(input.chatSessionId.trim(), principal.device.id);
     const roomName = `${principal.host.id}-${voiceSessionId}`;
     const participantIdentity = `voice-mobile-${randomUUID()}`;
     const expiresAt = new Date(Date.now() + 120_000).toISOString();
@@ -348,7 +408,7 @@ export class GatewayStore {
       expiresAt,
       binding: {
         voiceSessionId,
-        chatSessionId: input.chatSessionId,
+        chatSessionId: chatSession.id,
         assistantName: input.assistantName?.trim() || FREEDOM_PRODUCT_NAME,
         model: router.voiceRuntimeModel,
         runtimeMode: "realtime_primary",
@@ -1622,6 +1682,7 @@ export class GatewayStore {
       auth: host.auth,
       tailscale: host.tailscale,
       wakeControl: buildWakeControl(process.env, host),
+      voiceProfile: resolveHostVoiceProfile(host),
       outboundEmail: resolveOutboundEmailStatus(process.env, recipientCount),
       availability: deriveHostAvailability(host),
       repairState: deriveRepairState(host),
@@ -2050,6 +2111,77 @@ function toPublicSession(session: SessionRecord): ChatSession {
   };
 }
 
+function buildDefaultHostVoiceProfile(host: HostRecord): AssistantVoiceProfile {
+  const entry = getAssistantVoiceCatalogEntry(process.env.NEXT_PUBLIC_VOICE_ID);
+  return {
+    targetVoice: entry.id,
+    displayName: entry.label,
+    gender: entry.gender,
+    accent: null,
+    tone: entry.summary,
+    warmth: entry.warmth,
+    pace: entry.pace,
+    notes: null,
+    source: "default",
+    updatedAt: host.createdAt
+  };
+}
+
+function normalizeStoredVoiceProfile(profile: Partial<AssistantVoiceProfile> | null): AssistantVoiceProfile | null {
+  if (!profile) {
+    return null;
+  }
+
+  const entry = getAssistantVoiceCatalogEntry(profile.targetVoice);
+  return {
+    targetVoice: entry.id,
+    displayName: profile.displayName?.trim() || entry.label,
+    gender: profile.gender ?? entry.gender,
+    accent: normalizeOptionalPreference(profile.accent, null),
+    tone: normalizeOptionalPreference(profile.tone, entry.summary),
+    warmth: profile.warmth ?? entry.warmth,
+    pace: profile.pace ?? entry.pace,
+    notes: normalizeOptionalPreference(profile.notes, null),
+    source: profile.source === "conversation" || profile.source === "manual" ? profile.source : "default",
+    updatedAt: profile.updatedAt ?? nowIso()
+  };
+}
+
+function resolveHostVoiceProfile(host: HostRecord): AssistantVoiceProfile {
+  return normalizeStoredVoiceProfile(host.voiceProfile) ?? buildDefaultHostVoiceProfile(host);
+}
+
+function normalizeOptionalPreference(value: string | null | undefined, fallback: string | null): string | null {
+  if (value === null) {
+    return null;
+  }
+  if (value === undefined) {
+    return fallback;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function summarizeHostVoiceProfile(profile: AssistantVoiceProfile): string {
+  const details = [profile.displayName];
+  if (profile.gender !== "unspecified") {
+    details.push(profile.gender);
+  }
+  if (profile.accent) {
+    details.push(profile.accent);
+  }
+  if (profile.tone) {
+    details.push(profile.tone);
+  }
+  if (profile.warmth !== "medium") {
+    details.push(profile.warmth);
+  }
+  if (profile.pace !== "steady") {
+    details.push(profile.pace);
+  }
+  return details.join(" | ");
+}
+
 function getLatestHostRecord(state: GatewayState): HostRecord | null {
   return [...state.hosts].sort((left, right) => right.lastSeenAt.localeCompare(left.lastSeenAt))[0] ?? null;
 }
@@ -2164,6 +2296,7 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
       return {
         ...record,
         auth: record.auth ?? defaultAuthState,
+        voiceProfile: normalizeStoredVoiceProfile(record.voiceProfile ?? null),
         tailscale: {
           ...defaultTailscaleStatus,
           ...(record.tailscale ?? {})

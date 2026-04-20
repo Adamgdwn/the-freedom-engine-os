@@ -7,16 +7,310 @@ import json
 import os
 import time
 from urllib import error, parse, request
+from pathlib import Path
 
 from livekit import rtc
 from livekit.agents import function_tool
 
 _event_room: rtc.Room | None = None
 
+_HOST_STATE_PATH = Path(
+    os.getenv(
+        "FREEDOM_DESKTOP_HOST_STATE_PATH",
+        str(Path(__file__).resolve().parents[2] / "apps/desktop-host/.local-data/desktop/host-state.json"),
+    )
+)
+
+_VOICE_CATALOG: dict[str, dict[str, object]] = {
+    "alloy": {
+        "label": "Alloy",
+        "gender": "neutral",
+        "warmth": "medium",
+        "pace": "steady",
+        "tone_hints": {"clear", "direct", "neutral", "balanced"},
+    },
+    "ash": {
+        "label": "Ash",
+        "gender": "masculine",
+        "warmth": "medium",
+        "pace": "steady",
+        "tone_hints": {"grounded", "calm", "measured"},
+    },
+    "ballad": {
+        "label": "Ballad",
+        "gender": "masculine",
+        "warmth": "high",
+        "pace": "slower",
+        "tone_hints": {"warm", "expressive", "storytelling"},
+    },
+    "cedar": {
+        "label": "Cedar",
+        "gender": "masculine",
+        "warmth": "low",
+        "pace": "steady",
+        "tone_hints": {"dry", "direct", "steady"},
+    },
+    "coral": {
+        "label": "Coral",
+        "gender": "feminine",
+        "warmth": "high",
+        "pace": "adaptive",
+        "tone_hints": {"warm", "upbeat", "friendly"},
+    },
+    "echo": {
+        "label": "Echo",
+        "gender": "masculine",
+        "warmth": "low",
+        "pace": "brisk",
+        "tone_hints": {"plainspoken", "focused", "direct"},
+    },
+    "marin": {
+        "label": "Marin",
+        "gender": "feminine",
+        "warmth": "high",
+        "pace": "steady",
+        "tone_hints": {"warm", "capable", "assured"},
+    },
+    "sage": {
+        "label": "Sage",
+        "gender": "androgynous",
+        "warmth": "medium",
+        "pace": "slower",
+        "tone_hints": {"calm", "measured", "thoughtful"},
+    },
+    "shimmer": {
+        "label": "Shimmer",
+        "gender": "feminine",
+        "warmth": "medium",
+        "pace": "brisk",
+        "tone_hints": {"bright", "light", "energetic"},
+    },
+    "verse": {
+        "label": "Verse",
+        "gender": "androgynous",
+        "warmth": "medium",
+        "pace": "adaptive",
+        "tone_hints": {"expressive", "dramatic", "textured"},
+    },
+}
+
+_VOICE_ALIASES = {
+    "nova": "marin",
+}
+
 
 def set_event_room(room: rtc.Room | None) -> None:
     global _event_room
     _event_room = room
+
+
+def _read_host_runtime_state() -> dict[str, object] | None:
+    try:
+        raw = _HOST_STATE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    return payload if isinstance(payload, dict) else None
+
+
+def _gateway_request(
+    method: str,
+    pathname: str,
+    body: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    host_state = _read_host_runtime_state()
+    if not host_state:
+        return None
+
+    gateway_url = os.getenv("FREEDOM_GATEWAY_URL") or host_state.get("gatewayUrl")
+    host_token = host_state.get("hostToken")
+    if not isinstance(gateway_url, str) or not gateway_url.strip():
+        return None
+    if not isinstance(host_token, str) or not host_token.strip():
+        return None
+
+    endpoint = parse.urljoin(gateway_url.rstrip("/") + "/", pathname.lstrip("/"))
+    payload = None if body is None else json.dumps(body).encode("utf-8")
+    req = request.Request(endpoint, data=payload, method=method)
+    req.add_header("Authorization", f"Bearer {host_token}")
+    if payload is not None:
+        req.add_header("Content-Type", "application/json")
+
+    try:
+        with request.urlopen(req, timeout=5) as response:
+            raw = response.read().decode("utf-8")
+    except (error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+
+    if not raw.strip():
+        return None
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    return parsed if isinstance(parsed, dict) else None
+
+
+def get_current_voice_profile() -> dict[str, object] | None:
+    return _gateway_request("GET", "/host/voice-profile")
+
+
+def _normalize_voice_id(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+    normalized = _VOICE_ALIASES.get(normalized, normalized)
+    if normalized in _VOICE_CATALOG:
+        return normalized
+
+    for voice_id, entry in _VOICE_CATALOG.items():
+        if normalized == str(entry["label"]).strip().lower():
+            return voice_id
+
+    return None
+
+
+def _normalize_gender(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    aliases = {
+        "female": "feminine",
+        "woman": "feminine",
+        "male": "masculine",
+        "man": "masculine",
+        "nonbinary": "androgynous",
+        "non-binary": "androgynous",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in {"feminine", "masculine", "neutral", "androgynous", "unspecified"} else None
+
+
+def _normalize_warmth(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    aliases = {
+        "cool": "low",
+        "lean": "low",
+        "soft": "high",
+        "warm": "high",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in {"low", "medium", "high"} else None
+
+
+def _normalize_pace(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    aliases = {
+        "slow": "slower",
+        "slower": "slower",
+        "fast": "brisk",
+        "faster": "brisk",
+        "normal": "steady",
+        "adaptive": "adaptive",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in {"slower", "steady", "brisk", "adaptive"} else None
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _resolve_voice_choice(
+    target_voice: str | None,
+    gender: str | None,
+    tone: str | None,
+    warmth: str | None,
+    pace: str | None,
+) -> str:
+    explicit = _normalize_voice_id(target_voice)
+    if explicit:
+        return explicit
+
+    normalized_gender = _normalize_gender(gender)
+    normalized_warmth = _normalize_warmth(warmth)
+    normalized_pace = _normalize_pace(pace)
+    tone_tokens = {
+        token
+        for token in (tone or "").lower().replace(",", " ").split()
+        if token and len(token) > 2
+    }
+
+    best_voice = "marin"
+    best_score = -1
+    for voice_id, entry in _VOICE_CATALOG.items():
+        score = 0
+        if normalized_gender and entry["gender"] == normalized_gender:
+            score += 5
+        if normalized_warmth and entry["warmth"] == normalized_warmth:
+            score += 4
+        if normalized_pace and entry["pace"] == normalized_pace:
+            score += 3
+        score += len(tone_tokens.intersection(entry["tone_hints"])) * 2
+        if voice_id == "marin":
+            score += 1
+        if score > best_score:
+            best_score = score
+            best_voice = voice_id
+    return best_voice
+
+
+def format_voice_profile(profile: dict[str, object]) -> str:
+    voice_id = _normalize_voice_id(str(profile.get("targetVoice", ""))) or "marin"
+    entry = _VOICE_CATALOG[voice_id]
+    details = [str(profile.get("displayName") or entry["label"])]
+
+    gender = _normalize_gender(str(profile.get("gender"))) if profile.get("gender") is not None else None
+    if gender and gender != "unspecified":
+        details.append(gender)
+
+    accent = _clean_optional_text(str(profile.get("accent"))) if profile.get("accent") is not None else None
+    tone = _clean_optional_text(str(profile.get("tone"))) if profile.get("tone") is not None else None
+    notes = _clean_optional_text(str(profile.get("notes"))) if profile.get("notes") is not None else None
+    warmth = _normalize_warmth(str(profile.get("warmth"))) if profile.get("warmth") is not None else None
+    pace = _normalize_pace(str(profile.get("pace"))) if profile.get("pace") is not None else None
+
+    if accent:
+        details.append(accent)
+    if tone:
+        details.append(tone)
+    if warmth and warmth != "medium":
+        details.append("warmer" if warmth == "high" else "leaner")
+    if pace and pace != "steady":
+        details.append(pace)
+    if notes:
+        details.append(notes)
+
+    return " | ".join(details)
+
+
+def get_voice_profile_context() -> str:
+    profile = get_current_voice_profile()
+    if not profile:
+        return ""
+
+    return (
+        "Operator voice profile:\n"
+        f"- {format_voice_profile(profile)}\n"
+        "- Match the requested delivery style in your wording now when reasonable.\n"
+        "- Realtime synthesizer voice changes apply on the next voice session after restart."
+    )
 
 
 async def _publish_event(message: dict[str, object]) -> None:
@@ -195,6 +489,7 @@ def build_runtime_context() -> str:
         get_learning_signal_context(),
         get_pending_programming_context(),
         get_trusted_recipient_context(),
+        get_voice_profile_context(),
         get_persona_overlay_context(),
         get_pending_persona_adjustment_context(),
     ]
@@ -282,6 +577,85 @@ async def review_persona_overlays() -> str:
     ]
     message = "\n\n".join(section for section in sections if section).strip()
     return message or "No approved or pending persona overlays are available right now."
+
+
+@function_tool
+async def review_voice_profile() -> str:
+    """
+    Review the current operator voice profile before changing Freedom's live
+    voice characteristics.
+    """
+    profile = get_current_voice_profile()
+    if not profile:
+        return (
+            "No saved voice profile is available right now. Freedom will use the current default "
+            "realtime voice until a profile is saved."
+        )
+
+    options = ", ".join(f"{entry['label']} ({voice_id})" for voice_id, entry in _VOICE_CATALOG.items())
+    return (
+        f"Current voice profile: {format_voice_profile(profile)}.\n"
+        f"Supported preset voices: {options}.\n"
+        "Changing the live synthesizer voice takes effect on the next realtime voice session."
+    )
+
+
+@function_tool
+async def set_voice_profile_preferences(
+    target_voice: str = "",
+    gender: str = "",
+    accent: str = "",
+    tone: str = "",
+    warmth: str = "",
+    pace: str = "",
+    notes: str = "",
+    reset_to_default: bool = False,
+) -> str:
+    """
+    Save the operator's preferred Freedom voice characteristics.
+
+    Use this when the user explicitly asks to change Freedom's live voice,
+    accent, warmth, tone, pace, or similar delivery traits. Realtime preset
+    changes apply on the next voice session after restart.
+    """
+    if reset_to_default:
+        profile = _gateway_request("POST", "/host/voice-profile", {"resetToDefault": True})
+        if not profile:
+            return "I could not reset the saved voice profile because the desktop gateway is unavailable right now."
+        return (
+            f"Reset the voice profile to the default: {format_voice_profile(profile)}. "
+            "Restart the voice session to hear the default realtime voice again."
+        )
+
+    normalized_gender = _normalize_gender(gender or None)
+    normalized_warmth = _normalize_warmth(warmth or None)
+    normalized_pace = _normalize_pace(pace or None)
+    resolved_voice = _resolve_voice_choice(
+        target_voice or None,
+        normalized_gender,
+        tone or None,
+        normalized_warmth,
+        normalized_pace,
+    )
+    payload = {
+        "targetVoice": resolved_voice,
+        "gender": normalized_gender,
+        "accent": _clean_optional_text(accent or None),
+        "tone": _clean_optional_text(tone or None),
+        "warmth": normalized_warmth,
+        "pace": normalized_pace,
+        "notes": _clean_optional_text(notes or None),
+    }
+    profile = _gateway_request("POST", "/host/voice-profile", payload)
+    if not profile:
+        return "I could not save the voice profile because the desktop gateway is unavailable right now."
+
+    resolved_name = str(profile.get("displayName") or _VOICE_CATALOG[resolved_voice]["label"])
+    return (
+        f"Saved the voice profile as {format_voice_profile(profile)}. "
+        f"The closest current realtime preset is {resolved_name}. "
+        "Restart the voice session to hear the new live voice."
+    )
 
 
 @function_tool

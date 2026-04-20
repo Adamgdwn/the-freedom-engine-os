@@ -86,6 +86,9 @@ template file.
 8. For premium voice, prefer the `Talk` canvas. The current realtime lane defaults to
    `gpt-realtime-mini` and normalizes legacy unsupported voice ids such as `nova` back
    to a supported voice like `marin`.
+9. Ask Freedom directly to change the live voice profile if you want a different voice,
+   gender presentation, accent hint, tone, pace, or warmth. Restart the voice session
+   to hear a new realtime preset; the phone's local spoken-reply picker stays separate.
 
 ## APK Download
 

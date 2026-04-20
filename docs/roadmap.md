@@ -31,10 +31,17 @@
   desktop control plane is now a denser workbench and the Android shell now matches the
   command-and-capture voice posture more closely, with `Start`, `Talk`, and the hidden
   utility sheet replacing the older dashboard-style phone shell
+- Conversational voice profile control:
+  Freedom can now save live voice preferences for preset voice, gender presentation,
+  accent hints, tone, warmth, and pace from conversation, and the Android companion
+  now distinguishes the live realtime voice from the phone's fallback spoken-reply voice
 
 ## Now
 
 - verify APK sideload on device and confirm voice + gateway pairing work end-to-end
+- validate conversational voice-profile updates end to end: review current profile,
+  save a new one in voice, restart the session, and confirm the next live voice uses
+  the expected preset mapping
 - run real-device Android acceptance for start voice, assistant playback, interrupt,
   mute/unmute, post-TTS resume, voice switching, and safe multi-task handling
 - validate control-plane web voice against LiveKit/OpenAI in-browser: explicit interrupt,
@@ -52,6 +59,8 @@
 - validate the new Personality review surface end to end: Freedom-originated overlay
   requests appear in the UI, operator approvals activate them, and retire actions remove
   them from runtime context cleanly
+- design the next voice-first identity layer: operator voice recognition, trusted-speaker
+  filtering in shared rooms, and a wake phrase path such as "Freedom, it's Adam"
 - define and validate the outcome model for build / automate / delegate / stop decisions
   so Freedom is optimizing for long-term personal and organizational freedom rather than
   just local task completion

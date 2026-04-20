@@ -19,6 +19,7 @@ import {
   renameDeviceRequestSchema,
   sendExternalMessageRequestSchema,
   sendTestNotificationRequestSchema,
+  updateHostVoiceProfileRequestSchema,
   updateNotificationPrefsRequestSchema,
   updateSessionRequestSchema
 } from "@freedom/shared";
@@ -114,21 +115,41 @@ const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const method = req.method ?? "GET";
+    const isReadOnlyHead = method === "HEAD";
+    const requestMethod = isReadOnlyHead ? "GET" : method;
 
-    if (method === "GET" && url.pathname === "/") {
+    if (requestMethod === "GET" && url.pathname === "/") {
       const overview = await store.getOverview();
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end();
+        return;
+      }
       sendHtml(res, 200, renderDesktopPage(await buildInstallPageModel(req, overview)));
       return;
     }
 
-    if (method === "GET" && url.pathname === "/install") {
+    if (requestMethod === "GET" && url.pathname === "/install") {
       const overview = await store.getOverview();
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end();
+        return;
+      }
       sendHtml(res, 200, renderInstallPage(await buildInstallPageModel(req, overview)));
       return;
     }
 
-    if (method === "GET" && url.pathname === "/install/qr.svg") {
+    if (requestMethod === "GET" && url.pathname === "/install/qr.svg") {
       const overview = await store.getOverview();
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "image/svg+xml; charset=utf-8");
+        res.end();
+        return;
+      }
       sendSvg(res, 200, await renderInstallQrSvg(req, overview));
       return;
     }
@@ -166,12 +187,18 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (method === "GET" && url.pathname === "/healthz") {
+    if (requestMethod === "GET" && url.pathname === "/healthz") {
+      if (isReadOnlyHead) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "application/json; charset=utf-8");
+        res.end();
+        return;
+      }
       sendJson(res, 200, { ok: true });
       return;
     }
 
-    if (method === "GET" && (url.pathname === "/downloads/android/latest.apk" || /^\/downloads\/android\/[^/]+\.apk$/.test(url.pathname))) {
+    if (requestMethod === "GET" && (url.pathname === "/downloads/android/latest.apk" || /^\/downloads\/android\/[^/]+\.apk$/.test(url.pathname))) {
       const artifact = await findAndroidArtifact();
       if (!artifact) {
         sendJson(res, 404, { error: "Android APK not found on this desktop yet." });
@@ -194,6 +221,10 @@ const server = createServer(async (req, res) => {
       res.setHeader("surrogate-control", "no-store");
       res.setHeader("etag", `"${artifact.buildId}"`);
       res.setHeader("last-modified", new Date(artifact.builtAt).toUTCString());
+      if (isReadOnlyHead) {
+        res.end();
+        return;
+      }
       createReadStream(artifact.filePath).pipe(res);
       return;
     }
@@ -212,6 +243,17 @@ const server = createServer(async (req, res) => {
 
     if (method === "GET" && url.pathname === "/host/status") {
       sendJson(res, 200, await store.getHostStatus(readBearer(req)));
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/host/voice-profile") {
+      sendJson(res, 200, await store.getVoiceProfile(readBearer(req)));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/host/voice-profile") {
+      const parsed = updateHostVoiceProfileRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.updateVoiceProfile(readBearer(req), parsed));
       return;
     }
 

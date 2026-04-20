@@ -25,15 +25,18 @@ load_dotenv(override=False)
 
 from livekit import agents, rtc
 from livekit.agents import AgentSession, Agent, RoomInputOptions, cli, WorkerOptions
+from livekit.agents.voice.room_io.types import RoomOptions
 from livekit.plugins import openai as lk_openai
 
 from persona import load_freedom_core_prompt, load_freedom_runtime_policy_prompt
 from tools import (
     build_runtime_context,
+    get_current_voice_profile,
     park_task,
     pending_approvals,
     prepare_email_draft,
     record_learning_signal,
+    review_voice_profile,
     request_persona_adjustment,
     request_persona_overlay_retirement,
     request_persona_overlay_revision,
@@ -43,6 +46,7 @@ from tools import (
     review_pending_programming_requests,
     review_trusted_email_recipients,
     request_self_programming,
+    set_voice_profile_preferences,
     set_event_room,
     top_venture_status,
     update_task_status,
@@ -71,8 +75,8 @@ LEGACY_REALTIME_VOICE_ALIASES = {
 }
 
 
-def resolve_realtime_voice() -> str:
-    requested = os.getenv("NEXT_PUBLIC_VOICE_ID", "marin").strip().lower()
+def resolve_realtime_voice(profile: dict[str, object] | None = None) -> str:
+    requested = str(profile.get("targetVoice", "")) if profile else os.getenv("NEXT_PUBLIC_VOICE_ID", "marin").strip().lower()
     normalized = LEGACY_REALTIME_VOICE_ALIASES.get(requested, requested)
     return normalized if normalized in SUPPORTED_REALTIME_VOICES else "marin"
 
@@ -80,13 +84,14 @@ def resolve_realtime_voice() -> str:
 async def entrypoint(ctx: agents.JobContext) -> None:
     await ctx.connect()
     set_event_room(ctx.room)
+    voice_profile = get_current_voice_profile()
     supplemental_context = build_runtime_context()
     instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\nRuntime context:\n{supplemental_context}"
 
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
             model="gpt-realtime-mini",
-            voice=resolve_realtime_voice(),
+            voice=resolve_realtime_voice(voice_profile),
             input_audio_transcription=realtime.AudioTranscription(
                 model="gpt-4o-transcribe",
             ),
@@ -178,6 +183,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                     review_learning_signals,
                     review_pending_programming_requests,
                     review_trusted_email_recipients,
+                    review_voice_profile,
                     review_persona_overlays,
                     park_task,
                     update_task_status,
@@ -186,9 +192,11 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                     request_persona_adjustment,
                     request_persona_overlay_revision,
                     request_persona_overlay_retirement,
+                    set_voice_profile_preferences,
                     prepare_email_draft,
                 ],
             ),
+            room_options=RoomOptions(delete_room_on_close=True),
             room_input_options=RoomInputOptions(noise_cancellation=True),
         )
     finally:

@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { FREEDOM_PRODUCT_NAME } from "../freedom.js";
+import {
+  assistantVoicePresetIds,
+  voiceGenderPresentationIds,
+  voicePaceIds,
+  voiceWarmthIds
+} from "../voiceProfile.js";
 
 export const hostAuthStatusSchema = z.enum(["logged_in", "logged_out", "error"]);
 export const chatSessionStatusSchema = z.enum(["idle", "queued", "running", "stopping", "error"]);
@@ -32,6 +38,38 @@ export const outboundChannelSchema = z.enum(["email"]);
 export const wakeRequestStatusSchema = z.enum(["sent", "awake", "timeout", "error"]);
 export const voiceRuntimeModeSchema = z.enum(["realtime_primary", "device_fallback"]);
 export const voiceTransportSchema = z.enum(["livekit_webrtc", "device_local"]);
+export const assistantVoicePresetSchema = z.enum(assistantVoicePresetIds);
+export const voiceGenderPresentationSchema = z.enum(voiceGenderPresentationIds);
+export const voiceWarmthSchema = z.enum(voiceWarmthIds);
+export const voicePaceSchema = z.enum(voicePaceIds);
+
+export const assistantVoiceProfileSchema = z.object({
+  targetVoice: assistantVoicePresetSchema,
+  displayName: z.string().min(1),
+  gender: voiceGenderPresentationSchema,
+  accent: z.string().min(1).max(80).nullable(),
+  tone: z.string().min(1).max(160).nullable(),
+  warmth: voiceWarmthSchema,
+  pace: voicePaceSchema,
+  notes: z.string().min(1).max(280).nullable(),
+  source: z.enum(["default", "conversation", "manual"]),
+  updatedAt: z.string().datetime()
+});
+
+export const updateHostVoiceProfileRequestSchema = z
+  .object({
+    resetToDefault: z.boolean().optional(),
+    targetVoice: assistantVoicePresetSchema.optional(),
+    gender: voiceGenderPresentationSchema.optional(),
+    accent: z.string().min(1).max(80).nullable().optional(),
+    tone: z.string().min(1).max(160).nullable().optional(),
+    warmth: voiceWarmthSchema.optional(),
+    pace: voicePaceSchema.optional(),
+    notes: z.string().min(1).max(280).nullable().optional()
+  })
+  .refine((input) => input.resetToDefault || Object.keys(input).some((key) => key !== "resetToDefault"), {
+    message: "Voice profile update must set a preference or reset to default."
+  });
 
 export const hostAuthStateSchema = z.object({
   status: hostAuthStatusSchema,
@@ -191,6 +229,7 @@ export const hostStatusSchema = z.object({
   auth: hostAuthStateSchema,
   tailscale: tailscaleStatusSchema,
   wakeControl: wakeControlSchema,
+  voiceProfile: assistantVoiceProfileSchema.optional(),
   outboundEmail: outboundEmailStatusSchema,
   availability: hostAvailabilitySchema,
   repairState: repairStateSchema,
@@ -376,6 +415,8 @@ export const voiceRuntimeSessionResponseSchema = z.object({
   binding: voiceSessionBindingSchema
 });
 
+export const hostVoiceProfileResponseSchema = assistantVoiceProfileSchema;
+
 export const renameDeviceRequestSchema = z.object({
   deviceName: z.string().min(1).max(120)
 });
@@ -468,11 +509,16 @@ export type TransportSecurity = z.infer<typeof transportSecuritySchema>;
 export type OutboundProvider = z.infer<typeof outboundProviderSchema>;
 export type OutboundChannel = z.infer<typeof outboundChannelSchema>;
 export type WakeRequestStatus = z.infer<typeof wakeRequestStatusSchema>;
+export type AssistantVoicePreset = z.infer<typeof assistantVoicePresetSchema>;
+export type VoiceGenderPresentation = z.infer<typeof voiceGenderPresentationSchema>;
+export type VoiceWarmth = z.infer<typeof voiceWarmthSchema>;
+export type VoicePace = z.infer<typeof voicePaceSchema>;
 export type HostAuthState = z.infer<typeof hostAuthStateSchema>;
 export type TailscaleStatus = z.infer<typeof tailscaleStatusSchema>;
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
 export type WakeControl = z.infer<typeof wakeControlSchema>;
 export type OutboundEmailStatus = z.infer<typeof outboundEmailStatusSchema>;
+export type AssistantVoiceProfile = z.infer<typeof assistantVoiceProfileSchema>;
 export type RegisteredHost = z.infer<typeof registeredHostSchema>;
 export type PairedDevice = z.infer<typeof pairedDeviceSchema>;
 export type ChatSession = z.infer<typeof chatSessionSchema>;
@@ -503,6 +549,8 @@ export type StreamEvent = z.infer<typeof streamEventSchema>;
 export type RealtimeTicketResponse = z.infer<typeof realtimeTicketResponseSchema>;
 export type CreateVoiceRuntimeSessionRequest = z.infer<typeof createVoiceRuntimeSessionRequestSchema>;
 export type VoiceRuntimeSessionResponse = z.infer<typeof voiceRuntimeSessionResponseSchema>;
+export type UpdateHostVoiceProfileRequest = z.infer<typeof updateHostVoiceProfileRequestSchema>;
+export type HostVoiceProfileResponse = z.infer<typeof hostVoiceProfileResponseSchema>;
 export type RenameDeviceRequest = z.infer<typeof renameDeviceRequestSchema>;
 export type RegisterPushTokenRequest = z.infer<typeof registerPushTokenRequestSchema>;
 export type UpdateNotificationPrefsRequest = z.infer<typeof updateNotificationPrefsRequestSchema>;

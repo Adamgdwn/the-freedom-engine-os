@@ -243,10 +243,11 @@
 
 - Freedom should run one primary voice stack across web and mobile.
 - Voice is not premium if web uses one turn-taking model and mobile uses a different STT/TTS/chat bridge.
-- The current repo posture is split:
+- The current repo posture is now converging:
   web already uses `LiveKit + OpenAI Realtime`,
-  while mobile still relies on device speech recognition and device TTS as the main path.
-- The current default voice model value in shared routing is `gpt-4o-realtime-preview`; this should be treated as legacy and replaced.
+  mobile now prefers the same `LiveKit + OpenAI Realtime` path,
+  and device speech recognition plus device TTS remain only as the degraded fallback lane.
+- The current shared default voice model value is `gpt-realtime-mini`.
 
 ### Product Decision
 
@@ -295,11 +296,11 @@
 
 ### Required Repo Changes
 
-- Replace the shared default `FREEDOM_VOICE_RUNTIME_MODEL` from `gpt-4o-realtime-preview` to `gpt-realtime-mini`.
+- Keep the shared default `FREEDOM_VOICE_RUNTIME_MODEL` on `gpt-realtime-mini`.
 - Keep `FREEDOM_VOICE_RUNTIME_PROVIDER` on `openai-realtime` as the default.
-- Move mobile from device-primary STT/TTS to the same per-session realtime room model used by web.
+- Keep mobile on the same per-session realtime room model used by web.
 - Keep device speech recognition and device TTS only behind an explicit fallback capability flag.
-- Replace the current fixed-room voice token design with authenticated, per-session, short-TTL room tokens.
+- Keep authenticated, per-session, short-TTL room tokens instead of any shared-room token design.
 - Give every voice session a first-class `voiceSessionId` and bind it to one chat session, one room, one transcript stream, one interrupt lane, and one assistant playback controller.
 - Make interruption a realtime control event, not a delayed side effect of transcript commit.
 - Keep gateway and desktop-host out of the turn-taking hot path; they should receive structured intents and execution requests after the voice runtime has already captured the turn.

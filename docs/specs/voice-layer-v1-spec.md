@@ -48,7 +48,7 @@ Browser / Phone
                                    │
                                LiveKit agent worker (Python)
                                    │
-                               OpenAI Realtime API (GPT-4o)
+                               OpenAI Realtime API (`gpt-realtime-mini` default)
                                    │
                                tool stubs (top venture / approvals / metrics)
 
@@ -103,14 +103,16 @@ Append to `.env.example` (keep existing Supabase entries intact):
 
 ```
 LIVEKIT_URL=wss://your-project.livekit.cloud
-LIVEKIT_API_KEY=
-LIVEKIT_API_SECRET=
-OPENAI_API_KEY=
+LIVEKIT_API_KEY=replace-with-livekit-api-key
+LIVEKIT_API_SECRET=replace-with-livekit-api-secret
+OPENAI_API_KEY=replace-with-openai-api-key
 NEXT_PUBLIC_VOICE_AGENT_NAME=Freedom
-NEXT_PUBLIC_VOICE_ID=nova
+NEXT_PUBLIC_VOICE_ID=marin
 ```
 
-Add the same keys (with real values) to `.env.local` for local dev. Never commit `.env.local`.
+Add the real runtime secrets to repo-root `.env` for local desktop, gateway, mobile, and
+voice-worker runs. Keep `.env.example` and `.env.local` as templates or web-only
+overrides, never as the committed source of runtime secrets.
 
 ---
 
@@ -607,6 +609,7 @@ import os
 from dotenv import load_dotenv
 from livekit import agents
 from livekit.agents import AgentSession, Agent, RoomInputOptions
+from livekit.agents.voice.room_io.types import RoomOptions
 from livekit.plugins import openai as lk_openai
 from tools import top_venture_status, pending_approvals, weekly_metrics
 from voice_session import FREEDOM_SYSTEM_PROMPT  # share prompt from TS via env or inline
@@ -623,8 +626,8 @@ async def entrypoint(ctx: agents.JobContext):
     await ctx.connect()
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
-            model="gpt-4o-realtime-preview",
-            voice=os.getenv("NEXT_PUBLIC_VOICE_ID", "nova"),
+            model="gpt-realtime-mini",
+            voice=os.getenv("NEXT_PUBLIC_VOICE_ID", "marin"),
         ),
     )
     await session.start(
@@ -633,6 +636,7 @@ async def entrypoint(ctx: agents.JobContext):
             instructions=SYSTEM_PROMPT,
             tools=[top_venture_status, pending_approvals, weekly_metrics],
         ),
+        room_options=RoomOptions(delete_room_on_close=True),
         room_input_options=RoomInputOptions(noise_cancellation=True),
     )
 
