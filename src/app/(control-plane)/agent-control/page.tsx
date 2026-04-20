@@ -1,9 +1,63 @@
 import { AppShell } from '@/components/app-shell';
 import { Panel } from '@/components/panel';
 import { getControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadFreedomMemorySnapshot } from '@/lib/freedom-memory-store';
+import type { AgentBuildRequest } from '@/lib/types';
 
-export default function AgentControlPage() {
+function mapLiveBuildRequests(): Promise<AgentBuildRequest[]> {
+  return loadFreedomMemorySnapshot().then((memory) => {
+    if (!memory.configured) {
+      return [];
+    }
+
+    return memory.programmingRequests
+      .filter((request) => request.buildLane)
+      .map((request) => {
+        const buildLane = request.buildLane!;
+        return {
+          id: buildLane.id,
+          capability: buildLane.title,
+          requestedFrom: mapRequestedFrom(buildLane.requestedFrom),
+          requestedBy: buildLane.requestedBy,
+          status: mapBuildLaneStatus(buildLane.approvalState),
+          builder: 'New Build Agent',
+          executionMode: buildLane.approvalState === 'approved-for-build' ? 'parallel-build' : 'serial',
+          parallelLaneCount: buildLane.approvalState === 'approved-for-build' ? 2 : 1,
+          coordinatorSkillId: 'skill-builder-orchestrator',
+          routeReason: buildLane.businessCase || buildLane.summary,
+          auditCorrelationId: `build-lane-${buildLane.id}`,
+          requestedAt: buildLane.requestedAt,
+        } satisfies AgentBuildRequest;
+      });
+  });
+}
+
+function mapRequestedFrom(value: 'mobile_companion' | 'desktop_shell' | 'voice_runtime' | 'web_control_plane'): AgentBuildRequest['requestedFrom'] {
+  return value === 'desktop_shell' ? 'desktop_shell' : 'mobile_companion';
+}
+
+function mapBuildLaneStatus(
+  approvalState: 'conversation-capture' | 'needs-approval' | 'approved-for-discovery' | 'approved-for-build' | 'approved-for-release' | 'blocked'
+): AgentBuildRequest['status'] {
+  switch (approvalState) {
+    case 'approved-for-build':
+    case 'approved-for-release':
+      return 'routed-to-builder';
+    case 'approved-for-discovery':
+    case 'conversation-capture':
+    case 'needs-approval':
+      return 'pending-approval';
+    case 'blocked':
+      return 'blocked';
+    default:
+      return 'pending-approval';
+  }
+}
+
+export default async function AgentControlPage() {
   const snapshot = getControlPlaneSnapshot();
+  const liveBuildRequests = await mapLiveBuildRequests();
+  const visibleBuildRequests = liveBuildRequests.length ? liveBuildRequests : snapshot.agentBuildRequests;
   const leadAgent = snapshot.agents[0];
 
   return (
@@ -15,7 +69,7 @@ export default function AgentControlPage() {
             <span>AGENTS {snapshot.agents.length}</span>
             <span>TOOLS {snapshot.tools.length}</span>
             <span>RUNS {snapshot.executions.length}</span>
-            <span>PENDING BUILDS {snapshot.agentBuildRequests.filter((request) => request.status === 'pending-approval').length}</span>
+            <span>PENDING BUILDS {visibleBuildRequests.filter((request) => request.status === 'pending-approval').length}</span>
           </div>
         </div>
       )}
@@ -81,12 +135,12 @@ export default function AgentControlPage() {
                   </h3>
                 </div>
                 <p className="font-mono text-xs text-[color:var(--ink-soft-on-dark)]">
-                  {snapshot.agentBuildRequests.length} queued
+                  {visibleBuildRequests.length} queued
                 </p>
               </div>
 
               <div className="mt-3 space-y-2">
-                {snapshot.agentBuildRequests.map((request) => (
+                {visibleBuildRequests.map((request) => (
                   <div key={request.id} className="rounded-lg border border-white/[0.08] bg-white/[0.05] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="font-semibold text-[color:var(--ink-on-dark)]">{request.capability}</p>

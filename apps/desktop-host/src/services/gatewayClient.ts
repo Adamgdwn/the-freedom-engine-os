@@ -3,6 +3,7 @@ import type {
   ChatSession,
   HostApi,
   HostAssistantDeltaRequest,
+  HostBuildLaneResponse,
   HostCompleteTurnRequest,
   HostFailTurnRequest,
   HostHeartbeatRequest,
@@ -65,6 +66,10 @@ export class HttpGatewayClient implements HostApi {
 
   getVoiceProfile(token: string): Promise<HostVoiceProfileResponse> {
     return this.request("GET", "/host/voice-profile", token);
+  }
+
+  getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse> {
+    return this.request("GET", "/host/build-lane", token);
   }
 
   updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse> {

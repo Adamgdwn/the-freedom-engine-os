@@ -4,6 +4,7 @@ import { buildProjectStarterPrompt, type VoiceRuntimeMode, type VoiceSessionBind
 import type {
   ChatMessage,
   ChatSession,
+  ConversationBuildLaneSummary,
   HostStatus,
   InputMode,
   NotificationEvent,
@@ -121,6 +122,7 @@ export interface AppState {
   token: string | null;
   currentDeviceId: string | null;
   hostStatus: HostStatus | null;
+  buildLaneSummary: ConversationBuildLaneSummary | null;
   devices: PairedDevice[];
   sessions: ChatSession[];
   selectedSessionId: string | null;
@@ -330,6 +332,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   token: null,
   currentDeviceId: null,
   hostStatus: null,
+  buildLaneSummary: null,
   devices: [],
   sessions: [],
   selectedSessionId: null,
@@ -552,6 +555,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeSessionCount: 0,
           pairedDeviceCount: 1
         },
+        buildLaneSummary: null,
         pairingCode: "",
         newSessionRootPath: paired.host.approvedRoots[0] ?? "",
         realtimeConnected: false,
@@ -585,6 +589,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       token: null,
       currentDeviceId: null,
       hostStatus: null,
+      buildLaneSummary: null,
       devices: [],
       sessions: [],
       selectedSessionId: null,
@@ -639,8 +644,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ refreshing: true });
     try {
       const previousView = get().view;
-      const [hostStatus, sessions, devices, outboundRecipients] = await Promise.all([
+      const [hostStatus, buildLaneSummary, sessions, devices, outboundRecipients] = await Promise.all([
         api.getHostStatus(token, baseUrl),
+        api.getBuildLaneSummary(token, baseUrl),
         api.listSessions(token, baseUrl),
         api.listDevices(token, baseUrl),
         api.listOutboundRecipients(token, baseUrl)
@@ -662,6 +668,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       set({
         hostStatus,
+        buildLaneSummary,
         wakeControl: hostStatus.wakeControl,
         devices,
         outboundRecipients,
@@ -2574,6 +2581,7 @@ async function enterRepairMode(
   set({
     token: null,
     hostStatus: null,
+    buildLaneSummary: null,
     sessions: [],
     selectedSessionId: null,
     messagesBySession: {},

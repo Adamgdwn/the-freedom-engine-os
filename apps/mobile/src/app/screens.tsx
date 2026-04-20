@@ -168,6 +168,40 @@ export function StartScreen(props: {
           <Text style={styles.voiceSurfaceActionLabel}>{store.voiceSessionActive ? "End" : "Talk"}</Text>
         </Pressable>
       </View>
+
+      {store.buildLaneSummary?.items.length ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>From Conversations To Build</Text>
+          <Text style={styles.supportingText}>
+            Freedom is now routing deeper app and business ideas into the Pop!_OS build lane. Pending approvals stay visible here so we can keep the voice surface moving without losing governance.
+          </Text>
+          <View style={styles.statusRow}>
+            <StatusChip label={`${store.buildLaneSummary.pendingCount} pending`} tone={store.buildLaneSummary.pendingCount ? "orange" : "teal"} />
+            <StatusChip label={`${store.buildLaneSummary.approvedCount} approved`} tone="teal" />
+            <StatusChip label={`${store.buildLaneSummary.blockedCount} blocked`} tone={store.buildLaneSummary.blockedCount ? "orange" : "teal"} />
+          </View>
+          {store.buildLaneSummary.items.slice(0, 3).map((item) => (
+            <View key={item.id} style={styles.insetCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.inputLabel}>{item.title}</Text>
+                <Text style={styles.helperText}>{humanizeBuildLaneApproval(item.approvalState)}</Text>
+              </View>
+              <Text style={styles.helperText}>{item.summary}</Text>
+              <Text style={styles.metric}>Next checkpoint: {item.nextCheckpoint || "Review on desktop"}</Text>
+              <Text style={styles.helperText}>
+                {item.executionSurface} • {item.reportingPath}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : store.buildLaneSummary?.configured ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>From Conversations To Build</Text>
+          <Text style={styles.supportingText}>
+            No conversation-originated Pop!_OS build items are queued yet. When a voice turn turns into real product work, Freedom can now route it here.
+          </Text>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -1225,5 +1259,32 @@ function humanizeSessionKind(kind: "operator" | "project" | "admin" | "build" | 
       return FREEDOM_PRODUCT_NAME;
     default:
       return "Project";
+  }
+}
+
+function humanizeBuildLaneApproval(
+  value:
+    | "conversation-capture"
+    | "needs-approval"
+    | "approved-for-discovery"
+    | "approved-for-build"
+    | "approved-for-release"
+    | "blocked"
+): string {
+  switch (value) {
+    case "conversation-capture":
+      return "Conversation capture";
+    case "needs-approval":
+      return "Needs approval";
+    case "approved-for-discovery":
+      return "Approved for discovery";
+    case "approved-for-build":
+      return "Approved for build";
+    case "approved-for-release":
+      return "Approved for release";
+    case "blocked":
+      return "Blocked";
+    default:
+      return value;
   }
 }

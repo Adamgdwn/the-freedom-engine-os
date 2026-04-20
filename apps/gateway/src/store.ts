@@ -9,6 +9,8 @@ import type {
   AssistantVoiceProfile,
   ChatMessage,
   ChatSession,
+  ConversationBuildLaneItem,
+  ConversationBuildLaneSummary,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
   CreateVoiceRuntimeSessionRequest,
@@ -56,7 +58,10 @@ import {
   getAssistantVoiceCatalogEntry,
   getModelRouterConfig,
   hasRunnableLocalDayToDay,
+  isBuildLaneApprovalApproved,
+  isBuildLaneApprovalPending,
   isPrimaryFreedomSessionTitle,
+  parseProgrammingRequestReason,
   normalizeAssistantVoicePresetId
 } from "@freedom/shared";
 import { createEmailProvider, renderOutboundEmail, resolveOutboundEmailStatus } from "./outboundEmail.js";
@@ -98,6 +103,15 @@ interface DesktopShellState {
   overview: GatewayOverview;
   desktopSession: ChatSession | null;
   desktopMessages: ChatMessage[];
+}
+
+interface ProgrammingRequestMemoryRow {
+  id: string;
+  capability: string;
+  reason: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 type Principal =
@@ -305,6 +319,11 @@ export class GatewayStore {
   async getVoiceProfile(token: string): Promise<AssistantVoiceProfile> {
     const principal = await this.requireHost(token);
     return resolveHostVoiceProfile(principal.host);
+  }
+
+  async getBuildLaneSummary(token: string): Promise<ConversationBuildLaneSummary> {
+    const principal = await this.requirePrincipal(token);
+    return loadConversationBuildLaneSummary(principal.host.id);
   }
 
   async updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<AssistantVoiceProfile> {
@@ -2211,6 +2230,67 @@ function sameRoots(left: string[], right: string[]): boolean {
   const leftSorted = [...left].sort();
   const rightSorted = [...right].sort();
   return leftSorted.every((value, index) => value === rightSorted[index]);
+}
+
+async function loadConversationBuildLaneSummary(hostId: string): Promise<ConversationBuildLaneSummary> {
+  const rows = await fetchProgrammingRequestRows(40);
+  const items = rows
+    .map((row) =>
+      parseProgrammingRequestReason(row.reason, {
+        id: row.id,
+        title: row.capability,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }).buildLane
+    )
+    .filter((item): item is ConversationBuildLaneItem => Boolean(item))
+    .filter((item) => !item.hostId || item.hostId === hostId)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+  return {
+    configured: isProgrammingMemoryConfigured(),
+    items,
+    pendingCount: items.filter((item) => isBuildLaneApprovalPending(item.approvalState)).length,
+    approvedCount: items.filter((item) => isBuildLaneApprovalApproved(item.approvalState)).length,
+    blockedCount: items.filter((item) => item.approvalState === "blocked").length
+  };
+}
+
+async function fetchProgrammingRequestRows(limit: number): Promise<ProgrammingRequestMemoryRow[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_programming_requests", supabaseUrl);
+  url.searchParams.set("select", "id,capability,reason,status,created_at,updated_at");
+  url.searchParams.set("order", "updated_at.desc");
+  url.searchParams.set("limit", String(limit));
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`
+      }
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? (parsed as ProgrammingRequestMemoryRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isProgrammingMemoryConfigured(): boolean {
+  return Boolean(
+    (process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim()) &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+  );
 }
 
 function truncatePreview(value: string, maxLength = 140): string {

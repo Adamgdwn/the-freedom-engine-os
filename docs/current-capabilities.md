@@ -181,7 +181,13 @@ or the boundary between modeled and fully operational capability.
 ### Self-Programming
 
 - Freedom can record and surface self-programming requests.
-- Approved requests do not yet flow automatically into a governed build-and-apply pipeline.
+- Freedom can now route substantial conversation-born work into a governed Pop!_OS
+  build lane with objective, business case, approval state, autonomy envelope,
+  reporting path, and next checkpoint captured in live memory.
+- That live build lane is now surfaced in the mobile companion and in the desktop
+  agent-control page rather than existing only as roadmap documentation.
+- Approval still gates actual code execution, release, external spend, and connector
+  expansion; this is a real runtime routing loop, not approval-free self-modification.
 
 ### Autonomous Research
 

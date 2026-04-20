@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-04-20 (conversation build lane runtime + release 0.2.39)
+
+- Freedom voice runtime can now route substantial conversation-born build ideas into
+  governed `freedom_programming_requests` records with structured Pop!_OS build-lane
+  metadata instead of leaving the process documentation-only
+- the desktop agent-control surface now prefers live build-lane records over seeded
+  mock requests, so queued work reflects what conversation actually created
+- the Android companion now reads and displays the live `From Conversations To Build`
+  queue so approval-needed work remains visible from the voice-first surface
+- gateway and shared contracts now expose a live build-lane summary endpoint, and the
+  voice worker prompt/tooling now explicitly distinguishes loose ideas from governed
+  build-session candidates
+
+## 2026-04-19 (conversation-to-build governance lane)
+
+- added a dedicated `From Conversations To Be Done On Pop!_OS` section to the roadmap
+  so serious ideas from the app conversation surface have an explicit path into real
+  desktop build sessions
+- added `docs/conversation-build-lane.md` to define the intended operating loop:
+  conversation intake, business framing, approval posture, Pop!_OS execution, and
+  report-back expectations for a mostly autonomous business-partner posture
+- updated architecture, manual, runbook, current-capabilities, risk, and tool-access
+  docs so Freedom's programming direction now emphasizes governed execution, external
+  connector posture, and executive-level business-case thinking rather than generic
+  voice-assistant behavior
+
 ## 2026-04-19 (conversational voice profile + release 0.2.38)
 
 - added a host-level realtime voice profile so Freedom can save conversational requests

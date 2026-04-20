@@ -4,6 +4,7 @@ import type {
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
   CreateVoiceRuntimeSessionRequest,
+  HostBuildLaneResponse,
   HostStatus,
   NotificationEvent,
   OutboundRecipient,
@@ -30,6 +31,10 @@ export class ApiClient {
 
   getHostStatus(token: string, baseUrl: string): Promise<HostStatus> {
     return this.request("GET", `${baseUrl}/host/status`, token);
+  }
+
+  getBuildLaneSummary(token: string, baseUrl: string): Promise<HostBuildLaneResponse> {
+    return this.request("GET", `${baseUrl}/host/build-lane`, token);
   }
 
   listSessions(token: string, baseUrl: string): Promise<ChatSession[]> {

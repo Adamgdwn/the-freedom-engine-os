@@ -25,6 +25,10 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Freedom memory looks missing or stale:
   verify `SUPABASE_SERVICE_ROLE_KEY`, confirm the latest memory migration is applied, and
   restore from the latest local backup if needed.
+- Conversation ideas are piling up but not turning into real implementation:
+  review `docs/roadmap.md` under `From Conversations To Be Done On Pop!_OS`, make sure
+  each serious item has an approval state and next checkpoint, and move vague ideas back
+  into business framing before opening a build session.
 
 ## Dependencies
 
@@ -51,6 +55,12 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 7. If premium mobile voice still stalls after reconnecting, stop stale LiveKit workers,
    restart one clean worker from `agents/freedom_agent`, and start a fresh room from the
    phone instead of reusing an already-stuck session.
+8. If Freedom has been left to work between sessions, require a morning report that states:
+   what moved in the Pop!_OS build lane,
+   what was done autonomously,
+   what approvals were assumed or used,
+   what remains blocked,
+   and the next recommended decision.
 
 ## Escalation
 
@@ -58,3 +68,6 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   Adam Goodwin for priority changes, policy decisions, and external commitments
 - Technical lead:
   hybrid session for architecture, validation, and deployment readiness
+- Build-lane governance:
+  use `docs/conversation-build-lane.md` for the required intake, approval, and reporting
+  path when conversation-driven work becomes a real Pop!_OS programming session

@@ -16,3 +16,4 @@
 | R-004 | Platform work consumes time before revenue proof is strong enough | High | High | AI Consulting Build prioritized as first deep integration, weekly review stop-doing lens | Adam Goodwin | Open |
 | R-005 | Future live integrations import sensitive or money-moving data without adequate controls | Medium | High | Reassess governance whenever data sensitivity or money movement changes | Adam Goodwin | Open |
 | R-006 | Mobile companion access broadens the trust boundary around workspace control | Medium | High | Restrict `DESKTOP_APPROVED_ROOTS`, keep local Codex auth on the desktop, use Tailscale/private networking, and require explicit phone pairing | Adam Goodwin | Open |
+| R-007 | Connector sprawl gives Freedom broad platform access without enough approval clarity or reporting | Medium | High | Tool permission matrix, staged approval ladder, Pop!_OS build lane records, explicit morning report-back expectation | Adam Goodwin | Open |

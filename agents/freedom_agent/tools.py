@@ -98,6 +98,22 @@ _VOICE_ALIASES = {
     "nova": "marin",
 }
 
+_BUILD_LANE_REASON_PREFIX = "[freedom-build-lane-v1]"
+_BUILD_LANE_APPROVAL_STATES = {
+    "conversation-capture",
+    "needs-approval",
+    "approved-for-discovery",
+    "approved-for-build",
+    "approved-for-release",
+    "blocked",
+}
+_BUILD_LANE_REQUESTED_FROM = {
+    "mobile_companion",
+    "desktop_shell",
+    "voice_runtime",
+    "web_control_plane",
+}
+
 
 def set_event_room(room: rtc.Room | None) -> None:
     global _event_room
@@ -116,6 +132,70 @@ def _read_host_runtime_state() -> dict[str, object] | None:
         return None
 
     return payload if isinstance(payload, dict) else None
+
+
+def _postgrest_request(
+    method: str,
+    table: str,
+    *,
+    payload: dict[str, object] | None = None,
+    query: dict[str, str] | None = None,
+    prefer: str | None = None,
+) -> object | None:
+    supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL") or os.getenv("SUPABASE_URL")
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+
+    if not supabase_url or not service_role_key:
+        return None
+
+    query_string = parse.urlencode(query or {})
+    endpoint = f"{supabase_url.rstrip('/')}/rest/v1/{table}"
+    if query_string:
+        endpoint = f"{endpoint}?{query_string}"
+
+    encoded = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = request.Request(endpoint, data=encoded, method=method)
+    req.add_header("apikey", service_role_key)
+    req.add_header("Authorization", f"Bearer {service_role_key}")
+    if encoded is not None:
+        req.add_header("Content-Type", "application/json")
+    if prefer:
+        req.add_header("Prefer", prefer)
+
+    try:
+        with request.urlopen(req, timeout=5) as response:
+            raw = response.read().decode("utf-8")
+    except (error.URLError, TimeoutError):
+        return None
+
+    if not raw.strip():
+        return None
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def _upsert_row(table: str, payload: dict[str, object]) -> bool:
+    supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL") or os.getenv("SUPABASE_URL")
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not supabase_url or not service_role_key:
+        return False
+
+    endpoint = f"{supabase_url.rstrip('/')}/rest/v1/{table}"
+    encoded = json.dumps(payload).encode("utf-8")
+    req = request.Request(endpoint, data=encoded, method="POST")
+    req.add_header("apikey", service_role_key)
+    req.add_header("Authorization", f"Bearer {service_role_key}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Prefer", "resolution=merge-duplicates,return=minimal")
+
+    try:
+        with request.urlopen(req, timeout=5):
+            return True
+    except (error.URLError, TimeoutError):
+        return False
 
 
 def _gateway_request(
@@ -327,34 +407,106 @@ async def _publish_event(message: dict[str, object]) -> None:
 
 
 def _fetch_rows(table: str, select_clause: str, limit: int) -> list[dict[str, object]]:
-    supabase_url = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-
-    if not supabase_url or not service_role_key:
-        return []
-
-    query = parse.urlencode({
-        "select": select_clause,
-        "order": "updated_at.desc",
-        "limit": str(limit),
-    })
-    endpoint = f"{supabase_url}/rest/v1/{table}?{query}"
-    req = request.Request(endpoint)
-    req.add_header("apikey", service_role_key)
-    req.add_header("Authorization", f"Bearer {service_role_key}")
-
-    try:
-        with request.urlopen(req, timeout=5) as response:
-            payload = response.read().decode("utf-8")
-    except (error.URLError, TimeoutError, json.JSONDecodeError):
-        return []
-
-    try:
-        rows = json.loads(payload)
-    except json.JSONDecodeError:
-        return []
-
+    rows = _postgrest_request(
+        "GET",
+        table,
+        query={
+            "select": select_clause,
+            "order": "updated_at.desc",
+            "limit": str(limit),
+        },
+    )
     return rows if isinstance(rows, list) else []
+
+
+def _host_runtime_identity() -> tuple[str | None, str | None]:
+    host_state = _read_host_runtime_state() or {}
+    host_id = host_state.get("hostId")
+    host_name = host_state.get("hostName")
+    return (
+        host_id.strip() if isinstance(host_id, str) and host_id.strip() else None,
+        host_name.strip() if isinstance(host_name, str) and host_name.strip() else None,
+    )
+
+
+def _normalize_build_lane_approval_state(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    return normalized if normalized in _BUILD_LANE_APPROVAL_STATES else "needs-approval"
+
+
+def _normalize_build_lane_requested_from(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    return normalized if normalized in _BUILD_LANE_REQUESTED_FROM else "voice_runtime"
+
+
+def _programming_status_for_build_lane(approval_state: str) -> str:
+    if approval_state in {"approved-for-build", "approved-for-release"}:
+        return "approved"
+    if approval_state == "blocked":
+        return "denied"
+    return "pending"
+
+
+def _serialize_build_lane_reason(summary: str, build_lane: dict[str, object] | None = None) -> str:
+    trimmed_summary = summary.strip()
+    if not build_lane:
+        return trimmed_summary
+
+    envelope = {
+        "format": "freedom-build-lane-v1",
+        "summary": trimmed_summary,
+        "buildLane": build_lane,
+    }
+    return f"{_BUILD_LANE_REASON_PREFIX}\n{json.dumps(envelope)}"
+
+
+def _parse_build_lane_reason(row: dict[str, object]) -> dict[str, object] | None:
+    raw_reason = str(row.get("reason") or "").strip()
+    if not raw_reason.startswith(_BUILD_LANE_REASON_PREFIX):
+        return None
+
+    payload = raw_reason[len(_BUILD_LANE_REASON_PREFIX):].strip()
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(parsed, dict) or parsed.get("format") != "freedom-build-lane-v1":
+        return None
+
+    build_lane = parsed.get("buildLane")
+    if not isinstance(build_lane, dict):
+        return None
+
+    return {
+        "id": str(row.get("id") or "").strip(),
+        "title": str(row.get("capability") or "").strip() or "Untitled build lane item",
+        "summary": str(parsed.get("summary") or "").strip() or str(row.get("reason") or "").strip(),
+        "objective": str(build_lane.get("objective") or "").strip(),
+        "businessCase": str(build_lane.get("businessCase") or "").strip(),
+        "operator": str(build_lane.get("operator") or "Adam Goodwin").strip(),
+        "approvalState": _normalize_build_lane_approval_state(str(build_lane.get("approvalState") or "")),
+        "autonomyEnvelope": str(build_lane.get("autonomyEnvelope") or "").strip(),
+        "executionSurface": str(build_lane.get("executionSurface") or "").strip(),
+        "reportingPath": str(build_lane.get("reportingPath") or "").strip(),
+        "nextCheckpoint": str(build_lane.get("nextCheckpoint") or "").strip(),
+        "requestedBy": str(build_lane.get("requestedBy") or "Freedom").strip(),
+        "requestedFrom": _normalize_build_lane_requested_from(str(build_lane.get("requestedFrom") or "")),
+        "pricingModel": str(build_lane.get("pricingModel") or "").strip() or None,
+        "scalePotential": str(build_lane.get("scalePotential") or "").strip() or None,
+        "hostId": str(build_lane.get("hostId") or "").strip() or None,
+        "requestedAt": str(row.get("created_at") or "").strip(),
+        "updatedAt": str(row.get("updated_at") or "").strip(),
+    }
+
+
+def _format_build_lane_item(item: dict[str, object]) -> str:
+    return (
+        f"- {item.get('title', 'Untitled')} "
+        f"[{item.get('approvalState', 'needs-approval')}] "
+        f"from {item.get('requestedFrom', 'voice_runtime')}: "
+        f"{item.get('summary', '')}"
+    )
 
 
 def get_open_task_context(limit: int = 6) -> str:
@@ -414,6 +566,24 @@ def get_pending_programming_context(limit: int = 3) -> str:
         "Pending self-programming requests requiring approval:\n"
         + "\n".join(programming_lines)
     )
+
+
+def get_build_lane_context(limit: int = 6) -> str:
+    host_id, _ = _host_runtime_identity()
+    rows = _fetch_rows(
+        "freedom_programming_requests",
+        "id,capability,reason,status,created_at,updated_at",
+        limit,
+    )
+    items = [
+        item for row in rows
+        if (item := _parse_build_lane_reason(row))
+        and (not host_id or item.get("hostId") in {None, host_id})
+    ]
+    if not items:
+        return ""
+
+    return "Conversation build lane:\n" + "\n".join(_format_build_lane_item(item) for item in items)
 
 
 def get_trusted_recipient_context(limit: int = 10) -> str:
@@ -488,6 +658,7 @@ def build_runtime_context() -> str:
         get_open_task_context(),
         get_learning_signal_context(),
         get_pending_programming_context(),
+        get_build_lane_context(),
         get_trusted_recipient_context(),
         get_voice_profile_context(),
         get_persona_overlay_context(),
@@ -554,6 +725,15 @@ async def review_pending_programming_requests() -> str:
         get_pending_programming_context()
         or "No pending self-programming requests are waiting for approval right now."
     )
+
+
+@function_tool
+async def review_build_lane_queue() -> str:
+    """
+    Review conversation-originated build-lane items before adding another
+    dedicated Pop!_OS programming session request.
+    """
+    return get_build_lane_context() or "No conversation-originated build items are queued right now."
 
 
 @function_tool
@@ -756,6 +936,18 @@ async def request_self_programming(request_id: str, capability: str, reason: str
     UI so the operator can decide whether Freedom should pursue it.
     """
     now = int(time.time() * 1000)
+    created_at = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now / 1000))
+    stored = _upsert_row(
+        "freedom_programming_requests",
+        {
+            "id": request_id,
+            "capability": capability,
+            "reason": _serialize_build_lane_reason(reason),
+            "status": "pending",
+            "created_at": created_at,
+            "updated_at": created_at,
+        },
+    )
     await _publish_event({
         "type": "self_programming_update",
         "payload": {
@@ -770,7 +962,109 @@ async def request_self_programming(request_id: str, capability: str, reason: str
             },
         },
     })
+    if not stored:
+        return "I raised the self-programming request in-session, but I could not persist it to the governed memory store right now."
     return "Self-programming request recorded for approval."
+
+
+@function_tool
+async def route_conversation_to_build_lane(
+    request_id: str,
+    title: str,
+    summary: str,
+    objective: str,
+    business_case: str,
+    approval_state: str = "needs-approval",
+    execution_surface: str = "Dedicated Pop!_OS programming session",
+    reporting_path: str = "Roadmap build lane + morning operating report",
+    next_checkpoint: str = "Review with Adam in the next desktop programming session",
+    pricing_model: str = "",
+    scale_potential: str = "",
+    requested_from: str = "voice_runtime",
+    requested_by: str = "Freedom",
+    autonomy_envelope: str = "Freedom may frame the work, document the business case, and prepare execution, but code, releases, external spend, and connector changes follow governance approval.",
+) -> str:
+    """
+    Route a substantial conversation-born idea into the governed Pop!_OS build lane.
+
+    Use this when a voice conversation turns into real product, agent, business,
+    or runtime work that needs a dedicated programming session and a clear
+    approval/reporting path.
+    """
+    normalized_approval = _normalize_build_lane_approval_state(approval_state)
+    normalized_requested_from = _normalize_build_lane_requested_from(requested_from)
+    host_id, host_name = _host_runtime_identity()
+    created_at = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    build_lane = {
+        "objective": objective.strip(),
+        "businessCase": business_case.strip(),
+        "operator": host_name or "Adam Goodwin",
+        "approvalState": normalized_approval,
+        "autonomyEnvelope": autonomy_envelope.strip(),
+        "executionSurface": execution_surface.strip(),
+        "reportingPath": reporting_path.strip(),
+        "nextCheckpoint": next_checkpoint.strip(),
+        "requestedBy": requested_by.strip() or "Freedom",
+        "requestedFrom": normalized_requested_from,
+        "pricingModel": pricing_model.strip() or None,
+        "scalePotential": scale_potential.strip() or None,
+        "hostId": host_id,
+    }
+    stored = _upsert_row(
+        "freedom_programming_requests",
+        {
+            "id": request_id,
+            "capability": title.strip(),
+            "reason": _serialize_build_lane_reason(summary, build_lane),
+            "status": _programming_status_for_build_lane(normalized_approval),
+            "created_at": created_at,
+            "updated_at": created_at,
+        },
+    )
+    now = int(time.time() * 1000)
+    await _publish_event({
+        "type": "self_programming_update",
+        "payload": {
+            "type": "created",
+            "request": {
+                "id": request_id,
+                "capability": title.strip(),
+                "reason": summary.strip(),
+                "buildLane": {
+                    "id": request_id,
+                    "title": title.strip(),
+                    "summary": summary.strip(),
+                    "objective": objective.strip(),
+                    "businessCase": business_case.strip(),
+                    "operator": host_name or "Adam Goodwin",
+                    "approvalState": normalized_approval,
+                    "autonomyEnvelope": autonomy_envelope.strip(),
+                    "executionSurface": execution_surface.strip(),
+                    "reportingPath": reporting_path.strip(),
+                    "nextCheckpoint": next_checkpoint.strip(),
+                    "requestedBy": requested_by.strip() or "Freedom",
+                    "requestedFrom": normalized_requested_from,
+                    "pricingModel": pricing_model.strip() or None,
+                    "scalePotential": scale_potential.strip() or None,
+                    "hostId": host_id,
+                    "requestedAt": created_at,
+                    "updatedAt": created_at,
+                },
+                "status": _programming_status_for_build_lane(normalized_approval),
+                "createdAt": now,
+                "updatedAt": now,
+            },
+        },
+    })
+    if not stored:
+        return (
+            f"I framed '{title.strip()}' as a Pop!_OS build-lane item in-session, "
+            "but I could not persist it to the governed memory store right now."
+        )
+    return (
+        f"Routed '{title.strip()}' into the Pop!_OS build lane with status "
+        f"{normalized_approval}. It will now stay visible for approval and reporting."
+    )
 
 
 @function_tool

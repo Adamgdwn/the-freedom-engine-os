@@ -5,6 +5,7 @@ import type {
   CreateSessionRequest,
   CreateVoiceRuntimeSessionRequest,
   HostAssistantDeltaRequest,
+  HostBuildLaneResponse,
   HostCompleteTurnRequest,
   HostFailTurnRequest,
   HostHeartbeatRequest,
@@ -41,6 +42,7 @@ export interface HostWorkPollOptions {
 export interface MobileApi {
   completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse>;
   getHostStatus(token: string): Promise<HostStatus>;
+  getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
   listSessions(token: string): Promise<ChatSession[]>;
   listDevices(token: string): Promise<PairedDevice[]>;
   createSession(token: string, input: CreateSessionRequest): Promise<ChatSession>;
@@ -73,5 +75,6 @@ export interface HostApi {
   interruptTurn(token: string, input: HostInterruptTurnRequest): Promise<ChatSession>;
   getHostStatus(token: string): Promise<HostStatus>;
   getVoiceProfile(token: string): Promise<HostVoiceProfileResponse>;
+  getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
   updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse>;
 }

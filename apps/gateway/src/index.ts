@@ -251,6 +251,11 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/host/build-lane") {
+      sendJson(res, 200, await store.getBuildLaneSummary(readBearer(req)));
+      return;
+    }
+
     if (method === "POST" && url.pathname === "/host/voice-profile") {
       const parsed = updateHostVoiceProfileRequestSchema.parse(await readJson(req));
       sendJson(res, 200, await store.updateVoiceProfile(readBearer(req), parsed));

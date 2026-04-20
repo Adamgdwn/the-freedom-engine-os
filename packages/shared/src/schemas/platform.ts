@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { FREEDOM_PRODUCT_NAME } from "../freedom.js";
 import {
+  buildLaneApprovalStates,
+  buildLaneRequestedFromValues
+} from "../conversationBuildLane.js";
+import {
   assistantVoicePresetIds,
   voiceGenderPresentationIds,
   voicePaceIds,
@@ -42,6 +46,8 @@ export const assistantVoicePresetSchema = z.enum(assistantVoicePresetIds);
 export const voiceGenderPresentationSchema = z.enum(voiceGenderPresentationIds);
 export const voiceWarmthSchema = z.enum(voiceWarmthIds);
 export const voicePaceSchema = z.enum(voicePaceIds);
+export const buildLaneApprovalStateSchema = z.enum(buildLaneApprovalStates);
+export const buildLaneRequestedFromSchema = z.enum(buildLaneRequestedFromValues);
 
 export const assistantVoiceProfileSchema = z.object({
   targetVoice: assistantVoicePresetSchema,
@@ -54,6 +60,35 @@ export const assistantVoiceProfileSchema = z.object({
   notes: z.string().min(1).max(280).nullable(),
   source: z.enum(["default", "conversation", "manual"]),
   updatedAt: z.string().datetime()
+});
+
+export const conversationBuildLaneItemSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  objective: z.string(),
+  businessCase: z.string(),
+  operator: z.string().min(1),
+  approvalState: buildLaneApprovalStateSchema,
+  autonomyEnvelope: z.string(),
+  executionSurface: z.string(),
+  reportingPath: z.string(),
+  nextCheckpoint: z.string(),
+  requestedBy: z.string().min(1),
+  requestedFrom: buildLaneRequestedFromSchema,
+  pricingModel: z.string().min(1).nullable(),
+  scalePotential: z.string().min(1).nullable(),
+  hostId: z.string().min(1).nullable(),
+  requestedAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const conversationBuildLaneSummarySchema = z.object({
+  configured: z.boolean(),
+  items: z.array(conversationBuildLaneItemSchema),
+  pendingCount: z.number().int().nonnegative(),
+  approvedCount: z.number().int().nonnegative(),
+  blockedCount: z.number().int().nonnegative()
 });
 
 export const updateHostVoiceProfileRequestSchema = z
@@ -416,6 +451,7 @@ export const voiceRuntimeSessionResponseSchema = z.object({
 });
 
 export const hostVoiceProfileResponseSchema = assistantVoiceProfileSchema;
+export const hostBuildLaneResponseSchema = conversationBuildLaneSummarySchema;
 
 export const renameDeviceRequestSchema = z.object({
   deviceName: z.string().min(1).max(120)
@@ -519,6 +555,8 @@ export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
 export type WakeControl = z.infer<typeof wakeControlSchema>;
 export type OutboundEmailStatus = z.infer<typeof outboundEmailStatusSchema>;
 export type AssistantVoiceProfile = z.infer<typeof assistantVoiceProfileSchema>;
+export type ConversationBuildLaneItem = z.infer<typeof conversationBuildLaneItemSchema>;
+export type ConversationBuildLaneSummary = z.infer<typeof conversationBuildLaneSummarySchema>;
 export type RegisteredHost = z.infer<typeof registeredHostSchema>;
 export type PairedDevice = z.infer<typeof pairedDeviceSchema>;
 export type ChatSession = z.infer<typeof chatSessionSchema>;
@@ -551,6 +589,7 @@ export type CreateVoiceRuntimeSessionRequest = z.infer<typeof createVoiceRuntime
 export type VoiceRuntimeSessionResponse = z.infer<typeof voiceRuntimeSessionResponseSchema>;
 export type UpdateHostVoiceProfileRequest = z.infer<typeof updateHostVoiceProfileRequestSchema>;
 export type HostVoiceProfileResponse = z.infer<typeof hostVoiceProfileResponseSchema>;
+export type HostBuildLaneResponse = z.infer<typeof hostBuildLaneResponseSchema>;
 export type RenameDeviceRequest = z.infer<typeof renameDeviceRequestSchema>;
 export type RegisterPushTokenRequest = z.infer<typeof registerPushTokenRequestSchema>;
 export type UpdateNotificationPrefsRequest = z.infer<typeof updateNotificationPrefsRequestSchema>;

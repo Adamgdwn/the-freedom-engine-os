@@ -42,6 +42,27 @@ that ties business outcomes back to freedom outcomes.
 - Keep that document current whenever live behavior, operator workflows, or the
   modeled-vs-live boundary changes.
 
+## Conversation To Build Lane
+
+- Use `docs/conversation-build-lane.md` when a live conversation turns into real
+  programming, systems, or product work that needs a dedicated Pop!_OS session.
+- The roadmap section `From Conversations To Be Done On Pop!_OS` is the required queue
+  for serious implementation candidates coming from the app conversation surface.
+- The voice runtime can now persist those items directly into governed memory, and the
+  mobile companion plus agent-control page can read the same live queue.
+- Before substantial implementation work begins, record:
+  the objective,
+  business case,
+  approval state,
+  autonomy envelope,
+  execution surface,
+  reporting path,
+  and next checkpoint.
+- Freedom may autonomously move ideas from conversation into discovery material,
+  specs, pricing analysis, technical architecture, and local implementation prep.
+- Freedom must still stop for approval before spending money, making external
+  commitments, broadening credentials, or taking destructive production actions.
+
 ## Operator Notes
 
 - V1 is seeded and does not yet require Supabase credentials.
@@ -84,6 +105,12 @@ that ties business outcomes back to freedom outcomes.
   agent will save a host-level voice profile.
 - Realtime preset voice changes take effect on the next voice session after restart.
   The phone's `Spoken Reply Voice` setting still only controls the local TTS fallback.
+- The Android companion now shows the live conversation-originated build lane so
+  approval-needed work stays visible without leaving the voice-first surface.
+- The intended operating direction is a mostly autonomous business partner:
+  Freedom should identify what deserves a real build session, develop the business and
+  technical case, execute approved Pop!_OS work, and report clearly on what changed,
+  what approvals were used, and what still needs Adam.
 - The operating rule for focus is simple:
   if a task is interesting but off-plan, the system should challenge it, park it, or turn
   it into a bounded experiment instead of silently expanding scope.
