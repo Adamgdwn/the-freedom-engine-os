@@ -1,6 +1,13 @@
 import { create } from "zustand";
 import { Platform } from "react-native";
-import { buildProjectStarterPrompt, type VoiceRuntimeMode, type VoiceSessionBinding } from "@freedom/shared";
+import {
+  buildProjectStarterPrompt,
+  getAssistantVoiceCatalogEntry,
+  normalizeAssistantVoicePresetId,
+  type AssistantVoicePresetId,
+  type VoiceRuntimeMode,
+  type VoiceSessionBinding
+} from "@freedom/shared";
 import type {
   ChatMessage,
   ChatSession,
@@ -197,6 +204,7 @@ export interface AppState {
   toggleVoiceMute(): Promise<void>;
   setResponseStyle(style: ResponseStyle): Promise<void>;
   selectAssistantVoice(voiceId: string | null): Promise<void>;
+  selectFreedomVoicePreset(voiceId: AssistantVoicePresetId): Promise<void>;
   setRenameDraft(sessionId: string, value: string): void;
   setField<K extends EditableField>(field: K, value: AppState[K]): void;
   setView(view: View): void;
@@ -1523,6 +1531,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         : `Spoken reply voice reset to automatic. ${FREEDOM_RUNTIME_NAME} will use the phone's default English voice.`,
       error: null
     });
+  },
+  async selectFreedomVoicePreset(voiceId) {
+    try {
+      const token = requireValue(get().token, "Pair this phone with the desktop first.");
+      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+      const targetVoice = normalizeAssistantVoicePresetId(voiceId);
+      const updated = await api.updateVoiceProfile(token, baseUrl, {
+        targetVoice,
+        notes: null
+      });
+      const entry = getAssistantVoiceCatalogEntry(updated.targetVoice);
+      set((state) => ({
+        hostStatus: state.hostStatus
+          ? {
+              ...state.hostStatus,
+              voiceProfile: updated
+            }
+          : state.hostStatus,
+        notice: `${entry.label} is set as Freedom's live voice. Start a fresh Talk session to hear it clearly.`,
+        error: null
+      }));
+    } catch (error) {
+      await handleStoreError(error, set, get, "Could not update Freedom's live voice.");
+    }
   },
   setRenameDraft(sessionId, value) {
     set((state) => ({

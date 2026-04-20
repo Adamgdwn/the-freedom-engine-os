@@ -1,4 +1,5 @@
 import type {
+  AssistantVoiceProfile,
   ChatMessage,
   ChatSession,
   CreateOutboundRecipientRequest,
@@ -18,6 +19,7 @@ import type {
   SendExternalMessageResponse,
   VoiceRuntimeSessionResponse,
   UpdateNotificationPrefsRequest,
+  UpdateHostVoiceProfileRequest,
   UpdateSessionRequest
 } from "@freedom/shared";
 
@@ -35,6 +37,14 @@ export class ApiClient {
 
   getBuildLaneSummary(token: string, baseUrl: string): Promise<HostBuildLaneResponse> {
     return this.request("GET", `${baseUrl}/host/build-lane`, token);
+  }
+
+  updateVoiceProfile(
+    token: string,
+    baseUrl: string,
+    input: UpdateHostVoiceProfileRequest
+  ): Promise<AssistantVoiceProfile> {
+    return this.request("POST", `${baseUrl}/host/voice-profile`, token, input);
   }
 
   listSessions(token: string, baseUrl: string): Promise<ChatSession[]> {

@@ -109,10 +109,11 @@ export function StartScreen(props: {
   onRefresh(): void;
   bottomPadding: number;
   onOpenTypedChat(): void;
-  onOpenUtility(): void;
+  onOpenActions(): void;
+  onOpenSettings(): void;
   onStartTalk(): void;
 }): React.JSX.Element {
-  const { store, onRefresh, bottomPadding, onOpenTypedChat, onOpenUtility, onStartTalk } = props;
+  const { store, onRefresh, bottomPadding, onOpenTypedChat, onOpenActions, onOpenSettings, onStartTalk } = props;
   const currentSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
   const voiceHeadline = store.voiceAvailable ? "Start talking" : "Voice unavailable";
   const voiceHint = currentSession?.title ?? "Freedom is ready when you are.";
@@ -127,14 +128,14 @@ export function StartScreen(props: {
       {...refreshScrollInteractionProps}
     >
       <View style={styles.voiceSurfaceHeader}>
-        <Pressable testID="controls-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenUtility}>
+        <Pressable testID="controls-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenActions}>
           <Text style={styles.voiceSurfaceIconGlyph}>≡</Text>
         </Pressable>
         <View style={styles.voiceSurfaceTitleWrap}>
           <Text style={styles.voiceSurfaceTitle}>{FREEDOM_PRODUCT_NAME}</Text>
           <Text style={styles.voiceSurfaceTitleAccent}>Voice</Text>
         </View>
-        <Pressable style={styles.voiceSurfaceIconButton} onPress={onOpenUtility}>
+        <Pressable testID="settings-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenSettings}>
           <Text style={styles.voiceSurfaceIconGlyph}>⋮</Text>
         </Pressable>
       </View>
@@ -173,39 +174,6 @@ export function StartScreen(props: {
         </Pressable>
       </View>
 
-      {store.buildLaneSummary?.items.length ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>From Conversations To Build</Text>
-          <Text style={styles.supportingText}>
-            Freedom is now routing deeper app and business ideas into the Pop!_OS build lane. Pending approvals stay visible here so we can keep the voice surface moving without losing governance.
-          </Text>
-          <View style={styles.statusRow}>
-            <StatusChip label={`${store.buildLaneSummary.pendingCount} pending`} tone={store.buildLaneSummary.pendingCount ? "orange" : "teal"} />
-            <StatusChip label={`${store.buildLaneSummary.approvedCount} approved`} tone="teal" />
-            <StatusChip label={`${store.buildLaneSummary.blockedCount} blocked`} tone={store.buildLaneSummary.blockedCount ? "orange" : "teal"} />
-          </View>
-          {store.buildLaneSummary.items.slice(0, 3).map((item) => (
-            <View key={item.id} style={styles.insetCard}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.inputLabel}>{item.title}</Text>
-                <Text style={styles.helperText}>{humanizeBuildLaneApproval(item.approvalState)}</Text>
-              </View>
-              <Text style={styles.helperText}>{item.summary}</Text>
-              <Text style={styles.metric}>Next checkpoint: {item.nextCheckpoint || "Review on desktop"}</Text>
-              <Text style={styles.helperText}>
-                {item.executionSurface} • {item.reportingPath}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : store.buildLaneSummary?.configured ? (
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>From Conversations To Build</Text>
-          <Text style={styles.supportingText}>
-            No conversation-originated Pop!_OS build items are queued yet. When a voice turn turns into real product work, Freedom can now route it here.
-          </Text>
-        </View>
-      ) : null}
     </ScrollView>
   );
 }
@@ -788,12 +756,22 @@ export function ChatScreen(props: {
   footerBottomPadding: number;
   toolSheetBottomPadding: number;
   manualToolsVisible: boolean;
-  onOpenStart(): void;
-  onOpenUtility(): void;
+  onOpenActions(): void;
+  onOpenSettings(): void;
   onToggleManualTools(): void;
   onStartOrStopVoice(): void;
 }): React.JSX.Element {
-  const { store, onRefresh, footerBottomPadding, toolSheetBottomPadding, manualToolsVisible, onOpenStart, onOpenUtility, onToggleManualTools, onStartOrStopVoice } = props;
+  const {
+    store,
+    onRefresh,
+    footerBottomPadding,
+    toolSheetBottomPadding,
+    manualToolsVisible,
+    onOpenActions,
+    onOpenSettings,
+    onToggleManualTools,
+    onStartOrStopVoice
+  } = props;
   const selectedSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? null;
   const stopTargetSession = findStopTargetSession(store.selectedSessionId, store.sessions);
   const hasSelectedSession = Boolean(store.selectedSessionId);
@@ -826,10 +804,12 @@ export function ChatScreen(props: {
   const [composerFocused, setComposerFocused] = useState(false);
   const [composerMinimized, setComposerMinimized] = useState(false);
   const composerRef = useRef<TextInput | null>(null);
+  const transcriptScrollRef = useRef<ScrollView | null>(null);
   const { height: windowHeight } = useWindowDimensions();
   const showExternalDraftCard = Boolean(store.externalDraft);
   const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
   const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
+  const transcriptPanelHeight = Math.max(240, Math.min(420, Math.round(windowHeight * 0.42)));
   const shouldShowTranscript = showTranscript || showExternalDraftCard;
   const centerHeadline =
     busy || store.sendingMessage
@@ -858,7 +838,7 @@ export function ChatScreen(props: {
       return;
     }
     const timer = setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
+      transcriptScrollRef.current?.scrollToEnd({ animated: true });
     }, 50);
     return () => clearTimeout(timer);
   }, [lastMessageSnapshot, selectedSession?.id, shouldShowTranscript, stickToBottom]);
@@ -908,41 +888,26 @@ export function ChatScreen(props: {
           const distanceFromBottom = contentSize.height - (layoutMeasurement.height + contentOffset.y);
           setStickToBottom(distanceFromBottom < 140);
         }}
-        onContentSizeChange={() => {
-          if (stickToBottom && shouldShowTranscript) {
-            scrollRef.current?.scrollToEnd({ animated: true });
-          }
-        }}
         scrollEventThrottle={16}
       >
         <View style={styles.voiceSurfaceHeader}>
-          <Pressable style={styles.voiceSurfaceIconButton} onPress={onOpenStart}>
-            <Text style={styles.voiceSurfaceIconGlyph}>‹</Text>
+          <Pressable testID="controls-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenActions}>
+            <Text style={styles.voiceSurfaceIconGlyph}>≡</Text>
           </Pressable>
           <View style={styles.voiceSurfaceTitleWrap}>
             <Text style={styles.voiceSurfaceTitle}>{FREEDOM_PRODUCT_NAME}</Text>
             <Text style={styles.voiceSurfaceTitleAccent}>Voice</Text>
           </View>
-          <Pressable testID="controls-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenUtility}>
+          <Pressable testID="settings-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenSettings}>
             <Text style={styles.voiceSurfaceIconGlyph}>⋮</Text>
           </Pressable>
         </View>
 
-        <Pressable
-          testID="voice-dialogue-toggle"
-          style={styles.voiceSurfaceCenter}
-          onPress={() => {
-            if (showExternalDraftCard) {
-              return;
-            }
-            setShowTranscript((value) => !value);
-          }}
-        >
+        <View style={styles.voiceSurfaceCenter}>
           <Text style={styles.voiceSurfaceHeadline}>{centerHeadline}</Text>
           <Text style={styles.voiceSurfaceSubhead} numberOfLines={shouldShowTranscript ? 3 : 2}>
             {centerSubhead}
           </Text>
-          <Text style={styles.voiceSurfaceCenterHint}>{shouldShowTranscript ? "Tap here to close recent thread" : "Tap here to open recent thread"}</Text>
           {surfaceMessage ? (
             <View
               style={[
@@ -953,13 +918,14 @@ export function ChatScreen(props: {
               <Text style={styles.voiceSurfaceStatusLabel}>{surfaceMessage}</Text>
             </View>
           ) : null}
-        </Pressable>
+        </View>
 
         {shouldShowTranscript ? (
-          <View style={styles.voiceTranscriptPanel}>
+          <View style={[styles.voiceTranscriptPanel, { maxHeight: transcriptPanelHeight }]}>
             <View style={styles.voiceTranscriptHeader}>
               <Text style={styles.voiceTranscriptTitle}>{selectedSession?.title ?? "Conversation"}</Text>
               <Pressable
+                testID="voice-thread-collapse-button"
                 style={styles.voiceTranscriptToggle}
                 onPress={() => {
                   if (!hasSelectedSession && store.sessions[0]) {
@@ -968,39 +934,52 @@ export function ChatScreen(props: {
                   setShowTranscript(false);
                 }}
               >
-                <Text style={styles.voiceTranscriptToggleLabel}>Close</Text>
+                <Text style={styles.voiceTranscriptToggleLabel}>Collapse</Text>
               </Pressable>
             </View>
-            <View style={styles.messages}>
-            {messages.length > 0 ? (
-              messages.map((item) => (
-                <MessageBubble
-                  key={item.id}
-                  message={item}
-                  actionLabel={item.role === "assistant" && item.status === "completed" ? "Email this reply" : undefined}
-                  onActionPress={
-                    item.role === "assistant" && item.status === "completed"
-                      ? () => store.beginExternalMessageDraft(item.id, item.sessionId)
-                      : undefined
-                  }
-                />
-              ))
-            ) : (
-              <Text style={styles.metric}>Open a chat to see message history.</Text>
-            )}
-            {busy || store.sendingMessage ? (
-              <WorkingBubble
-                label={
-                  store.sendingMessage
-                    ? `${FREEDOM_RUNTIME_NAME} is sending your turn to the desktop.`
-                    : `${FREEDOM_RUNTIME_NAME} is still working, but you can interrupt, ask a side question, or queue the next task.`
-                }
-              />
-            ) : null}
-            </View>
+            <ScrollView
+              ref={transcriptScrollRef}
+              style={styles.voiceTranscriptBody}
+              contentContainerStyle={styles.voiceTranscriptBodyContent}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.messages}>
+                {messages.length > 0 ? (
+                  messages.map((item) => (
+                    <MessageBubble
+                      key={item.id}
+                      message={item}
+                      actionLabel={item.role === "assistant" && item.status === "completed" ? "Email this reply" : undefined}
+                      onActionPress={
+                        item.role === "assistant" && item.status === "completed"
+                          ? () => store.beginExternalMessageDraft(item.id, item.sessionId)
+                          : undefined
+                      }
+                    />
+                  ))
+                ) : (
+                  <Text style={styles.metric}>Open a chat to see message history.</Text>
+                )}
+                {busy || store.sendingMessage ? (
+                  <WorkingBubble
+                    label={
+                      store.sendingMessage
+                        ? `${FREEDOM_RUNTIME_NAME} is sending your turn to the desktop.`
+                        : `${FREEDOM_RUNTIME_NAME} is still working, but you can interrupt, ask a side question, or queue the next task.`
+                    }
+                  />
+                ) : null}
+              </View>
+            </ScrollView>
           </View>
         ) : (
-          <Pressable style={styles.voicePeekPill} onPress={() => setShowTranscript(true)}>
+          <Pressable
+            testID="voice-thread-peek"
+            style={styles.voicePeekPill}
+            onPress={() => setShowTranscript(true)}
+          >
             <Text style={styles.voicePeekEyebrow}>Recent thread</Text>
             <Text style={styles.voicePeekTitle}>{selectedSession?.title ?? "Ready for a new turn"}</Text>
             <Text style={styles.voicePeekMeta} numberOfLines={1}>
@@ -1008,6 +987,7 @@ export function ChatScreen(props: {
                 ? "Freedom is still working"
                 : summarizeThreadPeek(selectedSession, lastMessage, hasFallbackSession, canCreateFromApprovedRoot)}
             </Text>
+            <Text style={styles.voicePeekAction}>Open</Text>
           </Pressable>
         )}
       </ScrollView>
@@ -1345,32 +1325,5 @@ function humanizeSessionKind(kind: "operator" | "project" | "admin" | "build" | 
       return FREEDOM_PRODUCT_NAME;
     default:
       return "Project";
-  }
-}
-
-function humanizeBuildLaneApproval(
-  value:
-    | "conversation-capture"
-    | "needs-approval"
-    | "approved-for-discovery"
-    | "approved-for-build"
-    | "approved-for-release"
-    | "blocked"
-): string {
-  switch (value) {
-    case "conversation-capture":
-      return "Conversation capture";
-    case "needs-approval":
-      return "Needs approval";
-    case "approved-for-discovery":
-      return "Approved for discovery";
-    case "approved-for-build":
-      return "Approved for build";
-    case "approved-for-release":
-      return "Approved for release";
-    case "blocked":
-      return "Blocked";
-    default:
-      return value;
   }
 }

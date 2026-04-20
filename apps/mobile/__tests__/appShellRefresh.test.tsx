@@ -55,6 +55,15 @@ const mockStore = {
       replyToAddress: null,
       recipientCount: 0
     },
+    voiceProfile: {
+      targetVoice: "marin",
+      gender: "feminine",
+      accent: null,
+      tone: "warm",
+      warmth: "high",
+      pace: "steady",
+      notes: null
+    },
     availability: "ready",
     repairState: "healthy",
     runState: "ready",
@@ -143,6 +152,7 @@ const mockStore = {
   toggleVoiceMute: jest.fn(async () => undefined),
   setResponseStyle: jest.fn(async () => undefined),
   selectAssistantVoice: jest.fn(async () => undefined),
+  selectFreedomVoicePreset: jest.fn(async () => undefined),
   setRenameDraft: jest.fn(),
   setField: jest.fn(),
   setView: jest.fn()
@@ -279,7 +289,7 @@ describe("refresh affordances", () => {
     expect(labels).toContain("−");
   });
 
-  test("voice dialogue toggles recent thread open and closed", async () => {
+  test("recent thread card toggles transcript open and closed", async () => {
     mockStore.view = "chat";
     mockStore.sessions = [
       {
@@ -331,29 +341,47 @@ describe("refresh affordances", () => {
       tree = ReactTestRenderer.create(<AppShell />);
     });
 
-    expect(
-      tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children))
-    ).toContain("Tap here to open recent thread");
-
-    await ReactTestRenderer.act(async () => {
-      tree!.root.findByProps({ testID: "voice-dialogue-toggle" }).props.onPress();
-    });
-
     let labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
-    expect(labels).toContain("Close");
-    expect(labels).toContain("Tap here to close recent thread");
+    expect(labels).toContain("Recent thread");
+    expect(labels).toContain("Open");
+    expect(labels).not.toContain("Tap here to open recent thread");
 
     await ReactTestRenderer.act(async () => {
-      tree!.root.findByProps({ testID: "voice-dialogue-toggle" }).props.onPress();
+      tree!.root.findByProps({ testID: "voice-thread-peek" }).props.onPress();
     });
 
     labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
-    expect(labels).toContain("Tap here to open recent thread");
+    expect(labels).toContain("Collapse");
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "voice-thread-collapse-button" }).props.onPress();
+    });
+
+    labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Recent thread");
+    expect(labels).toContain("Open");
   });
 
-  test("utility sheet exposes destinations and mute while the live voice loop is active", async () => {
+  test("actions sheet exposes capabilities and mute while the live voice loop is active", async () => {
     mockStore.view = "chat";
     mockStore.voiceSessionActive = true;
+    mockStore.buildLaneSummary = {
+      configured: true,
+      pendingCount: 1,
+      approvedCount: 0,
+      blockedCount: 0,
+      items: [
+        {
+          id: "lane-1",
+          title: "Electrical contractor app",
+          summary: "Capture the business case and kickoff path.",
+          approvalState: "pending_operator",
+          executionSurface: "pop_os",
+          reportingPath: "morning_check_in",
+          nextCheckpoint: "Review with Adam"
+        }
+      ]
+    };
     mockStore.sessions = [
       {
         id: "session-1",
@@ -401,9 +429,47 @@ describe("refresh affordances", () => {
     expect(labels).toContain("Retrieval");
     expect(labels).toContain("Current Thread");
     expect(labels).toContain("Mute");
-    expect(labels).toContain("Auto-send voice turns");
-    expect(labels).toContain("Captured turns pause for review instead of sending automatically.");
+    expect(labels).toContain("From Conversations To Build");
     expect(labels).toContain("Resume Thread");
+  });
+
+  test("settings sheet exposes voice choices and system adjustments", async () => {
+    mockStore.view = "chat";
+    mockStore.autoSpeak = true;
+    mockStore.autoSendVoice = false;
+    mockStore.hostStatus.voiceProfile = {
+      targetVoice: "marin",
+      gender: "feminine",
+      accent: null,
+      tone: "warm",
+      warmth: "high",
+      pace: "steady",
+      notes: null
+    };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "settings-toggle" }).props.onPress();
+    });
+
+    const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+
+    expect(labels).toContain("Freedom voice");
+    expect(labels).toContain("Realtime Freedom voice");
+    expect(labels).toContain("Marin • feminine • warm • warmer");
+    expect(labels).toContain("Live");
+    expect(labels).toContain("Auto-read replies");
+    expect(labels).toContain("Auto-send voice turns");
+    expect(labels).toContain("Phone fallback voice");
+    expect(labels).toContain("Open Homebase Voice Settings");
+    expect(labels).toContain("System adjustments");
+    expect(labels).toContain("Open Homebase");
+    expect(labels).toContain("About this build");
   });
 });
 

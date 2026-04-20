@@ -256,9 +256,36 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/host/voice-runtime-bootstrap") {
+      const roomName = url.searchParams.get("roomName")?.trim();
+      if (!roomName) {
+        throw new Error("roomName is required.");
+      }
+      sendJson(res, 200, await store.getVoiceRuntimeBootstrap(readBearer(req), roomName));
+      return;
+    }
+
     if (method === "POST" && url.pathname === "/host/voice-profile") {
       const parsed = updateHostVoiceProfileRequestSchema.parse(await readJson(req));
       sendJson(res, 200, await store.updateVoiceProfile(readBearer(req), parsed));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/host/voice-runtime-transcript") {
+      const parsed = await readJson<{
+        roomName?: unknown;
+        messageId?: unknown;
+        role?: unknown;
+        text?: unknown;
+      }>(req);
+      const roomName = typeof parsed.roomName === "string" ? parsed.roomName.trim() : "";
+      const messageId = typeof parsed.messageId === "string" ? parsed.messageId.trim() : "";
+      const role = parsed.role === "user" || parsed.role === "assistant" ? parsed.role : null;
+      const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
+      if (!roomName || !messageId || !role || !text) {
+        throw new Error("roomName, messageId, role, and text are required.");
+      }
+      sendJson(res, 200, await store.appendVoiceRuntimeTranscript(readBearer(req), { roomName, messageId, role, text }));
       return;
     }
 

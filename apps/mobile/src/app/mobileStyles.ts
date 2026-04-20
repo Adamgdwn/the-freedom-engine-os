@@ -85,10 +85,10 @@ export const styles = StyleSheet.create({
   mobileVoiceButtonTitle: { color: "#ffffff", fontSize: 18, lineHeight: 22, fontWeight: "800" },
   mobileVoiceButtonHint: { color: "rgba(232, 244, 243, 0.82)", fontSize: 12, lineHeight: 17 },
   mobileVoiceButtonGlyph: { color: "#ffffff", fontSize: 20, fontWeight: "800" },
+  mobileSheetOverlay: { flex: 1, justifyContent: "flex-end" },
   mobileSheetBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(23, 34, 37, 0.28)",
-    justifyContent: "flex-end"
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(23, 34, 37, 0.28)"
   },
   mobileSheet: {
     backgroundColor: "#fff8ef",
@@ -572,13 +572,6 @@ export const styles = StyleSheet.create({
     fontWeight: "400",
     textAlign: "center"
   },
-  voiceSurfaceCenterHint: {
-    color: "#7c8593",
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "600",
-    textAlign: "center"
-  },
   voiceSurfaceStatusPill: {
     maxWidth: "88%",
     borderRadius: 18,
@@ -628,6 +621,7 @@ export const styles = StyleSheet.create({
   },
   voicePeekTitle: { color: "#111111", fontSize: 15, lineHeight: 20, fontWeight: "700", textAlign: "center" },
   voicePeekMeta: { color: "#7b8190", fontSize: 12, lineHeight: 18, textAlign: "center" },
+  voicePeekAction: { color: "#4b5563", fontSize: 12, lineHeight: 16, fontWeight: "700", textAlign: "center", marginTop: 2 },
   voiceTranscriptPanel: {
     backgroundColor: "rgba(255,255,255,0.82)",
     borderRadius: 28,
@@ -639,6 +633,8 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 3
   },
+  voiceTranscriptBody: { minHeight: 0 },
+  voiceTranscriptBodyContent: { paddingBottom: 4 },
   voiceTranscriptHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   voiceTranscriptTitle: { color: "#111111", fontSize: 16, lineHeight: 20, fontWeight: "700", flex: 1 },
   voiceTranscriptToggle: {

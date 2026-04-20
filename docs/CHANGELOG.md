@@ -1,5 +1,71 @@
 # Changelog
 
+## 2026-04-20 (realtime conversation continuity fix)
+
+- fixed the premium mobile realtime voice lane so new voice sessions now bootstrap from
+  the recent thread instead of acting like each reconnect starts with no conversational context
+- added transcript persistence for realtime user and assistant turns into the gateway's
+  threaded session history, so Freedom can actually carry forward recent conversation
+  instead of only retaining separate task/learning memory channels
+
+## 2026-04-20 (realtime voice choices cleanup + release 0.2.50)
+
+- replaced the misleading mobile settings voice list with Freedom's real live realtime
+  voice presets, so the quick picker now shows Marin and the other actual voice options
+  instead of odd phone TTS voices that do not match live conversation
+- moved the device-only spoken-reply fallback voices back behind Homebase, where they
+  stay available for backup playback without competing with the primary Freedom voice lane
+- published Android `0.2.50 (57)` to the live install surface
+
+## 2026-04-20 (remove stray chat back control + release 0.2.49)
+
+- removed the leftover back-arrow control from the mobile voice chat header so the talk
+  surface now matches the clean start header layout again: hamburger on the left, title
+  centered, three dots on the right
+- published Android `0.2.49 (56)` to the live install surface
+
+## 2026-04-20 (voice worker env precedence fix)
+
+- changed the Python LiveKit/OpenAI voice worker to prefer repo-root `.env` values over
+  stale shell-exported secrets, so local restarts use the same `OPENAI_API_KEY` as the
+  paired desktop runtime instead of silently picking up an older invalid key from `.bashrc`
+
+## 2026-04-20 (split mobile actions from settings + release 0.2.48)
+
+- removed the `From Conversations To Build` card from the main start voice surface so
+  the talk-first canvas stays visually lighter
+- moved that governed build-lane queue into the pull-down utility sheet, where Freedom
+  can surface it intentionally when a thread should graduate into real build work
+- split the mobile header menus so the three-line pull-down now holds actions and
+  capabilities, while the three dots hold genuine settings like voice choices, reply
+  behavior, build/runtime details, and system adjustments
+- published Android `0.2.48 (55)` to the live install surface
+
+## 2026-04-20 (transcript collapse visibility + settings scroll fix + release 0.2.47)
+
+- moved the `Recent thread` transcript into its own bounded scroll area on the mobile
+  voice canvas so long histories no longer push the `Collapse` action offscreen
+- changed the utility/settings sheet to use a separate backdrop overlay and inner
+  scroll view, which improves scroll reliability on Android when the sheet is long
+- published Android `0.2.47 (54)` to the live install surface
+
+## 2026-04-20 (single recent-thread control + release 0.2.46)
+
+- removed the duplicate recent-thread trigger from the center `Freedom` stage on the
+  mobile voice canvas so the lower `Recent thread` card is now the only transcript entry point
+- changed the transcript close affordance to `Collapse` and kept that action inside the
+  opened thread panel so the history surface has one obvious escape path
+- published Android `0.2.46 (53)` to the live install surface
+
+## 2026-04-20 (Perplexity default search runtime)
+
+- added a live runtime-status tool so Freedom can report the published mobile build,
+  live Freedom voice profile, desktop voice runtime provider/model, and web-search readiness in conversation
+- added Perplexity-backed `search_web` and `check_weather` tools to the LiveKit/OpenAI
+  voice worker so current public lookups no longer fall back to "no web search access"
+- updated the runtime policy, env template, and capability docs so Perplexity is the
+  default configured search lane whenever `PERPLEXITY_API_KEY` is present in repo-root `.env`
+
 ## 2026-04-20 (compact text control + release 0.2.45)
 
 - shrank the idle typed-entry control on the mobile voice canvas down to the same compact footprint as `Mute` and relabeled it `Text` now that the raised composer behavior is clearer

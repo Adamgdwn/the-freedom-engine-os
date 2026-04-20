@@ -89,12 +89,24 @@ interface TaskRecord extends TaskItem {
 
 type OutboundRecipientRecord = OutboundRecipient;
 
+interface VoiceRuntimeSessionRecord {
+  roomName: string;
+  hostId: string;
+  deviceId: string;
+  chatSessionId: string;
+  voiceSessionId: string;
+  participantIdentity: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 interface GatewayState {
   hosts: HostRecord[];
   devices: DeviceRecord[];
   sessions: SessionRecord[];
   tasks: TaskRecord[];
   messages: ChatMessage[];
+  voiceRuntimeSessions: VoiceRuntimeSessionRecord[];
   outboundRecipients: OutboundRecipientRecord[];
   auditEvents: AuditEvent[];
 }
@@ -165,6 +177,7 @@ const defaultState = (): GatewayState => ({
   sessions: [],
   tasks: [],
   messages: [],
+  voiceRuntimeSessions: [],
   outboundRecipients: [],
   auditEvents: []
 });
@@ -403,6 +416,7 @@ export class GatewayStore {
     }
 
     const chatSession = await this.requireSessionForDevice(input.chatSessionId.trim(), principal.device.id);
+    const state = await this.readState();
     const roomName = `${principal.host.id}-${voiceSessionId}`;
     const participantIdentity = `voice-mobile-${randomUUID()}`;
     const expiresAt = new Date(Date.now() + 120_000).toISOString();
@@ -418,6 +432,21 @@ export class GatewayStore {
       canPublish: true,
       canSubscribe: true,
     });
+
+    state.voiceRuntimeSessions = [
+      ...state.voiceRuntimeSessions.filter((item) => item.roomName !== roomName && new Date(item.expiresAt).getTime() > Date.now() - 300_000),
+      {
+        roomName,
+        hostId: principal.host.id,
+        deviceId: principal.device.id,
+        chatSessionId: chatSession.id,
+        voiceSessionId,
+        participantIdentity,
+        createdAt: nowIso(),
+        expiresAt,
+      },
+    ];
+    await this.writeState(state);
 
     return {
       token: await accessToken.toJwt(),
@@ -437,6 +466,97 @@ export class GatewayStore {
         degraded: false,
       },
     };
+  }
+
+  async getVoiceRuntimeBootstrap(token: string, roomName: string): Promise<{
+    roomName: string;
+    chatSessionId: string;
+    sessionTitle: string;
+    recentMessages: Array<{ id: string; role: "user" | "assistant"; content: string; createdAt: string }>;
+  }> {
+    const principal = await this.requireHost(token);
+    const state = await this.readState();
+    const binding = state.voiceRuntimeSessions.find((item) => item.roomName === roomName && item.hostId === principal.host.id);
+    if (!binding) {
+      throw new Error("Voice runtime session not found.");
+    }
+
+    const session = this.requireSessionForHostState(state, binding.chatSessionId, principal.host.id);
+    const recentMessages = state.messages
+      .filter(
+        (item) =>
+          item.sessionId === session.id &&
+          (item.role === "user" || item.role === "assistant") &&
+          item.status === "completed" &&
+          item.content.trim()
+      )
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+      .slice(-10)
+      .map((item): { id: string; role: "user" | "assistant"; content: string; createdAt: string } => ({
+        id: item.id,
+        role: item.role === "user" ? "user" : "assistant",
+        content: item.content.trim(),
+        createdAt: item.createdAt,
+      }));
+
+    return {
+      roomName,
+      chatSessionId: session.id,
+      sessionTitle: session.title,
+      recentMessages,
+    };
+  }
+
+  async appendVoiceRuntimeTranscript(
+    token: string,
+    input: {
+      roomName: string;
+      messageId: string;
+      role: "user" | "assistant";
+      text: string;
+    }
+  ): Promise<ChatMessage> {
+    const principal = await this.requireHost(token);
+    const state = await this.readState();
+    const binding = state.voiceRuntimeSessions.find((item) => item.roomName === input.roomName && item.hostId === principal.host.id);
+    if (!binding) {
+      throw new Error("Voice runtime session not found.");
+    }
+
+    const session = this.requireSessionForHostState(state, binding.chatSessionId, principal.host.id);
+    const normalizedText = input.text.trim();
+    if (!normalizedText) {
+      throw new Error("Transcript text is required.");
+    }
+
+    const existing = state.messages.find((item) => item.id === input.messageId && item.sessionId === session.id);
+    if (existing) {
+      return existing;
+    }
+
+    const message: ChatMessage = {
+      id: input.messageId,
+      sessionId: session.id,
+      role: input.role,
+      content: normalizedText,
+      status: "completed",
+      errorMessage: null,
+      inputMode: "voice",
+      responseStyle: null,
+      transcriptPolished: input.role === "user",
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+
+    state.messages.push(message);
+    session.lastPreview = truncatePreview(normalizedText);
+    session.lastActivityAt = message.updatedAt;
+    session.updatedAt = message.updatedAt;
+
+    await this.writeState(state, { defer: true });
+    this.emitMessage(principal.host.id, message);
+    this.emitSession(session);
+    return message;
   }
 
   async consumeRealtimeTicket(ticket: string): Promise<string> {
@@ -2457,6 +2577,16 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
         transcriptPolished: record.transcriptPolished ?? null
       } as ChatMessage;
     }),
+    voiceRuntimeSessions: ((input as Partial<GatewayState>).voiceRuntimeSessions ?? []).map((record) => ({
+      roomName: record.roomName ?? "",
+      hostId: record.hostId ?? "",
+      deviceId: record.deviceId ?? "",
+      chatSessionId: record.chatSessionId ?? "",
+      voiceSessionId: record.voiceSessionId ?? "",
+      participantIdentity: record.participantIdentity ?? "",
+      createdAt: record.createdAt ?? now,
+      expiresAt: record.expiresAt ?? now,
+    })),
     outboundRecipients: (input.outboundRecipients ?? []).map((recipient) => {
       const record = recipient as Partial<OutboundRecipientRecord>;
       return {

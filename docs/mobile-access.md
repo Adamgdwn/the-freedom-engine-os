@@ -35,8 +35,8 @@ surface than a one-shot relay:
 - recognition paused during assistant playback, then resumed automatically after spoken replies
 - auto-send voice turns with review only for genuinely risky or unusually long
   transcripts
-- spoken-reply voice picker that now labels accent, engine, quality, and any
-  safe style or gender hints Android actually exposes
+- primary Freedom voice choices now surfaced as the real realtime presets such as
+  Marin, with device spoken-reply fallback voices kept secondary in Homebase
 - task-aware routing so Freedom can answer side questions or start a safe parallel
   subtask instead of defaulting to a single blocking "busy" response
 - Freedom-owned chat/build surfaces so the phone stays pointed at Freedom even
@@ -45,9 +45,21 @@ surface than a one-shot relay:
   without taking over the whole screen
 - sparse `Start` launch surface, dedicated `Talk` voice canvas, and a hidden utility
   sheet so the phone behaves more like a focused voice companion than a dashboard
+- premium realtime voice sessions now rehydrate from the recent thread and write their
+  final transcripts back into the shared session history, so ending and restarting Talk
+  no longer wipes the current conversational context
+- the header controls are now split cleanly:
+  the three-line pull-down is the actions/capabilities lane, while the three dots are
+  the settings lane for voice choices, reply behavior, and system adjustments
+- the `Talk` header now uses that same layout without the old back-control remnant, so
+  both primary voice surfaces read consistently
 - compact footer actions on the `Talk` canvas with `Mute`, `Text`, live voice controls,
-  a raised typed-turn composer, and a reversible `Recent thread` history toggle in the
-  center Freedom dialogue
+  a raised typed-turn composer, and one lower `Recent thread` card for opening and
+  collapsing transcript history without overloading the center Freedom dialogue; the
+  transcript itself now scrolls inside a bounded panel so the collapse control stays reachable
+- the governed `From Conversations To Build` queue now lives in the pull-down utility
+  sheet instead of the main start surface, so Freedom can surface it intentionally when
+  a conversation should graduate into real build work
 
 ## What To Configure
 
@@ -91,7 +103,8 @@ template file.
    to a supported voice like `marin`.
 9. Ask Freedom directly to change the live voice profile if you want a different voice,
    gender presentation, accent hint, tone, pace, or warmth. Restart the voice session
-   to hear a new realtime preset; the phone's local spoken-reply picker stays separate.
+   to hear a new realtime preset; the phone's local spoken-reply fallback picker stays
+   separate in Homebase.
 10. Use the small `Text` button for side-channel typed turns inside the current voice
     conversation, and use the `Build` view's `Launch build chat` flow when you want a
     separate project thread rather than more continuity in the default voice thread.

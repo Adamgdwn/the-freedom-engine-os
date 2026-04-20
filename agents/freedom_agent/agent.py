@@ -19,8 +19,9 @@ import os
 from dotenv import load_dotenv
 from openai.types import realtime
 
-# Load from repo root .env first, then local .env fallback
-load_dotenv(dotenv_path="../../.env", override=False)
+# Prefer the repo root `.env` over stale shell exports so the paired desktop and
+# voice worker use the same runtime credentials during local development.
+load_dotenv(dotenv_path="../../.env", override=True)
 load_dotenv(override=False)
 
 from livekit import agents, rtc
@@ -31,11 +32,13 @@ from livekit.plugins import openai as lk_openai
 from persona import load_freedom_core_prompt, load_freedom_runtime_policy_prompt
 from tools import (
     build_runtime_context,
+    check_weather,
     get_current_voice_profile,
     park_task,
     pending_approvals,
     prepare_email_draft,
     record_learning_signal,
+    review_runtime_status,
     review_build_lane_queue,
     review_voice_profile,
     request_persona_adjustment,
@@ -48,7 +51,9 @@ from tools import (
     review_trusted_email_recipients,
     route_conversation_to_build_lane,
     request_self_programming,
+    persist_voice_runtime_transcript,
     set_voice_profile_preferences,
+    search_web,
     set_event_room,
     top_venture_status,
     update_task_status,
@@ -87,8 +92,10 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     await ctx.connect()
     set_event_room(ctx.room)
     voice_profile = get_current_voice_profile()
-    supplemental_context = build_runtime_context()
+    supplemental_context = build_runtime_context(ctx.room.name)
     instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\nRuntime context:\n{supplemental_context}"
+    user_transcript_count = 0
+    assistant_transcript_count = 0
 
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
@@ -127,8 +134,16 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(event) -> None:
+        nonlocal user_transcript_count
         transcript = getattr(event, "transcript", "").strip()
         if transcript:
+            user_transcript_count += 1
+            persist_voice_runtime_transcript(
+                ctx.room.name,
+                f"{ctx.room.name}:user:{user_transcript_count}",
+                "user",
+                transcript,
+            )
             asyncio.create_task(publish_event({
                 "type": "transcript",
                 "text": transcript,
@@ -138,6 +153,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
     @session.on("conversation_item_added")
     def on_conversation_item_added(event) -> None:
+        nonlocal assistant_transcript_count
         item = getattr(event, "item", None)
         if getattr(item, "type", None) != "message":
             return
@@ -147,6 +163,13 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
         text = getattr(item, "text_content", "").strip()
         if text:
+            assistant_transcript_count += 1
+            persist_voice_runtime_transcript(
+                ctx.room.name,
+                f"{ctx.room.name}:assistant:{assistant_transcript_count}",
+                "assistant",
+                text,
+            )
             asyncio.create_task(publish_event({
                 "type": "transcript",
                 "text": text,
@@ -178,9 +201,12 @@ async def entrypoint(ctx: agents.JobContext) -> None:
             agent=Agent(
                 instructions=instructions,
                 tools=[
+                    review_runtime_status,
                     top_venture_status,
                     pending_approvals,
                     weekly_metrics,
+                    search_web,
+                    check_weather,
                     review_open_tasks,
                     review_learning_signals,
                     review_pending_programming_requests,

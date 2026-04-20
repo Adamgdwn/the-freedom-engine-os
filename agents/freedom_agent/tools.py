@@ -5,6 +5,7 @@ Supabase queries when the persistence layer is wired up.
 """
 import json
 import os
+import re
 import time
 from urllib import error, parse, request
 from pathlib import Path
@@ -20,6 +21,9 @@ _HOST_STATE_PATH = Path(
         str(Path(__file__).resolve().parents[2] / "apps/desktop-host/.local-data/desktop/host-state.json"),
     )
 )
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_MOBILE_RUNTIME_CONFIG_PATH = _REPO_ROOT / "apps/mobile/src/generated/runtimeConfig.ts"
+_RUNTIME_CONFIG_EXPORT_RE = re.compile(r"^export const (?P<key>[A-Z0-9_]+) = (?P<value>.+);$")
 
 _VOICE_CATALOG: dict[str, dict[str, object]] = {
     "alloy": {
@@ -240,6 +244,184 @@ def _gateway_request(
 
 def get_current_voice_profile() -> dict[str, object] | None:
     return _gateway_request("GET", "/host/voice-profile")
+
+
+def get_voice_runtime_bootstrap(room_name: str | None) -> dict[str, object] | None:
+    if not room_name:
+        return None
+    encoded_room_name = parse.quote(room_name, safe="")
+    return _gateway_request("GET", f"/host/voice-runtime-bootstrap?roomName={encoded_room_name}")
+
+
+def persist_voice_runtime_transcript(
+    room_name: str | None,
+    message_id: str,
+    role: str,
+    text: str,
+) -> bool:
+    if not room_name or role not in {"user", "assistant"} or not text.strip():
+        return False
+    response = _gateway_request(
+        "POST",
+        "/host/voice-runtime-transcript",
+        {
+            "roomName": room_name,
+            "messageId": message_id,
+            "role": role,
+            "text": text.strip(),
+        },
+    )
+    return response is not None
+
+
+def _read_mobile_runtime_config() -> dict[str, object]:
+    try:
+        lines = _MOBILE_RUNTIME_CONFIG_PATH.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+
+    parsed: dict[str, object] = {}
+    for line in lines:
+        match = _RUNTIME_CONFIG_EXPORT_RE.match(line.strip())
+        if not match:
+            continue
+        key = match.group("key")
+        raw_value = match.group("value").strip()
+        try:
+            parsed[key] = json.loads(raw_value)
+        except json.JSONDecodeError:
+            parsed[key] = raw_value.strip("\"'")
+    return parsed
+
+
+def _configured_web_search_provider() -> str:
+    return (os.getenv("FREEDOM_WEB_SEARCH_PROVIDER") or "perplexity").strip().lower() or "perplexity"
+
+
+def _configured_web_search_model() -> str:
+    return (os.getenv("FREEDOM_WEB_SEARCH_MODEL") or "sonar").strip() or "sonar"
+
+
+def _perplexity_api_key() -> str | None:
+    api_key = os.getenv("PERPLEXITY_API_KEY")
+    return api_key.strip() if api_key and api_key.strip() else None
+
+
+def _perplexity_chat_completion(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    search_recency_filter: str | None = None,
+    search_domain_filter: list[str] | None = None,
+    return_related_questions: bool = False,
+) -> tuple[dict[str, object] | None, str | None]:
+    provider = _configured_web_search_provider()
+    if provider != "perplexity":
+        return None, (
+            f"The configured web-search provider is '{provider}', but this runtime is currently wired "
+            "only for Perplexity-backed search."
+        )
+
+    api_key = _perplexity_api_key()
+    if not api_key:
+        return None, (
+            "Perplexity web search is not configured on this desktop yet. "
+            "Add PERPLEXITY_API_KEY to the repo-root .env to enable live search and weather."
+        )
+
+    payload: dict[str, object] = {
+        "model": _configured_web_search_model(),
+        "messages": [
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": user_prompt.strip()},
+        ],
+        "temperature": 0.2,
+        "web_search_options": {
+            "search_mode": "web",
+            "disable_search": False,
+            "return_related_questions": return_related_questions,
+        },
+    }
+    web_search_options = payload["web_search_options"]
+    if not isinstance(web_search_options, dict):
+        return None, "Internal error preparing Perplexity web search options."
+
+    normalized_recency = (search_recency_filter or "").strip().lower()
+    if normalized_recency in {"hour", "day", "week", "month", "year"}:
+        web_search_options["search_recency_filter"] = normalized_recency
+
+    domains = [domain.strip() for domain in (search_domain_filter or []) if domain.strip()]
+    if domains:
+        web_search_options["search_domain_filter"] = domains
+
+    req = request.Request(
+        "https://api.perplexity.ai/v1/sonar",
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+    )
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Content-Type", "application/json")
+
+    try:
+        with request.urlopen(req, timeout=20) as response:
+            raw = response.read().decode("utf-8")
+    except error.HTTPError as exc:
+        try:
+            detail = exc.read().decode("utf-8")
+        except Exception:
+            detail = ""
+        return None, (
+            f"Perplexity returned HTTP {exc.code}. "
+            f"{detail.strip() or 'The request did not complete successfully.'}"
+        )
+    except (error.URLError, TimeoutError) as exc:
+        return None, f"Perplexity web search is currently unavailable: {exc!s}"
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, "Perplexity returned a response that could not be parsed."
+
+    return parsed if isinstance(parsed, dict) else None, None
+
+
+def _format_perplexity_response(query: str, response: dict[str, object]) -> str:
+    choices = response.get("choices")
+    message_content = ""
+    if isinstance(choices, list) and choices:
+        first_choice = choices[0]
+        if isinstance(first_choice, dict):
+            message = first_choice.get("message")
+            if isinstance(message, dict):
+                raw_content = message.get("content")
+                if isinstance(raw_content, str):
+                    message_content = raw_content.strip()
+
+    search_results = response.get("search_results")
+    result_lines: list[str] = []
+    if isinstance(search_results, list):
+        for item in search_results[:3]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or item.get("url") or "Source").strip()
+            url = str(item.get("url") or "").strip()
+            if not url:
+                continue
+            result_lines.append(f"- {title}: {url}")
+
+    citations = response.get("citations")
+    citation_lines = [
+        f"- {url.strip()}"
+        for url in citations[:5]
+        if isinstance(citations, list) and isinstance(url, str) and url.strip()
+    ]
+
+    sections = [f"Live web answer for '{query.strip()}':", message_content or "Perplexity returned no answer text."]
+    if result_lines:
+        sections.append("Top sources:\n" + "\n".join(result_lines))
+    elif citation_lines:
+        sections.append("Citations:\n" + "\n".join(citation_lines))
+    return "\n".join(section for section in sections if section).strip()
 
 
 def _normalize_voice_id(value: str | None) -> str | None:
@@ -653,8 +835,35 @@ def get_pending_persona_adjustment_context(limit: int = 6) -> str:
     return "Pending persona adjustments requiring approval:\n" + "\n".join(overlay_lines)
 
 
-def build_runtime_context() -> str:
+def get_recent_thread_context(room_name: str | None, limit: int = 8) -> str:
+    bootstrap = get_voice_runtime_bootstrap(room_name)
+    if not isinstance(bootstrap, dict):
+        return ""
+
+    session_title = str(bootstrap.get("sessionTitle") or "Freedom").strip() or "Freedom"
+    recent_messages = bootstrap.get("recentMessages")
+    if not isinstance(recent_messages, list) or not recent_messages:
+        return ""
+
+    message_lines: list[str] = []
+    for item in recent_messages[-limit:]:
+        if not isinstance(item, dict):
+            continue
+        role = "User" if item.get("role") == "user" else "Freedom"
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        message_lines.append(f"- {role}: {content}")
+
+    if not message_lines:
+        return ""
+
+    return f"Recent conversation from {session_title}:\n" + "\n".join(message_lines)
+
+
+def build_runtime_context(room_name: str | None = None) -> str:
     sections = [
+        get_recent_thread_context(room_name),
         get_open_task_context(),
         get_learning_signal_context(),
         get_pending_programming_context(),
@@ -665,6 +874,77 @@ def build_runtime_context() -> str:
         get_pending_persona_adjustment_context(),
     ]
     return "\n\n".join(section for section in sections if section).strip()
+
+
+@function_tool
+async def review_runtime_status() -> str:
+    """
+    Review the current published mobile build, live Freedom voice profile, desktop
+    runtime posture, and web-search availability.
+    """
+    host_status = _gateway_request("GET", "/host/status") or {}
+    runtime_config = _read_mobile_runtime_config()
+    voice_profile = None
+    if isinstance(host_status.get("voiceProfile"), dict):
+        voice_profile = host_status["voiceProfile"]
+    else:
+        voice_profile = get_current_voice_profile()
+
+    published_version = runtime_config.get("MOBILE_APP_VERSION_NAME")
+    published_build = runtime_config.get("MOBILE_APP_VERSION_CODE")
+    runtime_mode = runtime_config.get("VOICE_RUNTIME_MODE")
+    voice_runtime_provider = os.getenv("FREEDOM_VOICE_RUNTIME_PROVIDER") or "openai-realtime"
+    voice_runtime_model = os.getenv("FREEDOM_VOICE_RUNTIME_MODEL") or "gpt-realtime-mini"
+
+    host_block = []
+    host = host_status.get("host")
+    if isinstance(host, dict):
+        host_name = str(host.get("hostName") or "Desktop host").strip()
+        host_online = "online" if host.get("isOnline") else "offline"
+        host_block.append(f"Desktop host: {host_name} ({host_online}).")
+
+    tailscale = host_status.get("tailscale")
+    if isinstance(tailscale, dict):
+        suggested_url = str(tailscale.get("suggestedUrl") or "").strip()
+        if suggested_url:
+            host_block.append(f"Install page: {suggested_url.rstrip('/')}/install")
+
+    sections = []
+    if published_version or published_build:
+        sections.append(
+            "Published mobile build: "
+            f"{published_version or 'unknown'} ({published_build or 'unknown'})"
+            + (f" with runtime mode {runtime_mode}." if runtime_mode else ".")
+        )
+
+    sections.append(
+        "Desktop voice runtime: "
+        f"{voice_runtime_provider} / {voice_runtime_model}."
+    )
+
+    if voice_profile:
+        sections.append(f"Current live Freedom voice profile: {format_voice_profile(voice_profile)}.")
+    else:
+        sections.append("Current live Freedom voice profile: default realtime preset with no saved host-level override.")
+
+    search_provider = _configured_web_search_provider()
+    search_model = _configured_web_search_model()
+    if search_provider == "perplexity" and _perplexity_api_key():
+        sections.append(f"Default live web search: Perplexity ({search_model}) is configured.")
+    elif search_provider == "perplexity":
+        sections.append(
+            f"Default live web search: Perplexity ({search_model}) is selected but not configured yet. "
+            "Add PERPLEXITY_API_KEY to the repo-root .env to enable it."
+        )
+    else:
+        sections.append(f"Default live web search provider: {search_provider} ({search_model}).")
+
+    sections.extend(host_block)
+    sections.append(
+        "Note: this runtime can review the published mobile build and live Freedom voice profile, "
+        "but it still cannot inspect the phone's current local Spoken Reply Voice selection directly."
+    )
+    return "\n".join(sections)
 
 
 @function_tool
@@ -778,6 +1058,68 @@ async def review_voice_profile() -> str:
         f"Supported preset voices: {options}.\n"
         "Changing the live synthesizer voice takes effect on the next realtime voice session."
     )
+
+
+@function_tool
+async def search_web(
+    query: str,
+    recency: str = "",
+    domains: str = "",
+) -> str:
+    """
+    Search the live web using the default configured research provider.
+
+    Use this for current events, public facts, product checks, weather-adjacent
+    research, or whenever the user explicitly asks you to look something up.
+    """
+    normalized_query = query.strip()
+    if not normalized_query:
+        return "Tell me what to look up, and I can run a live web search."
+
+    response, failure = _perplexity_chat_completion(
+        system_prompt=(
+            "You are Freedom's live web research tool. Answer concisely, include concrete facts and dates "
+            "when available, and ground the answer in current web results."
+        ),
+        user_prompt=normalized_query,
+        search_recency_filter=recency or None,
+        search_domain_filter=[item for item in domains.split(",") if item.strip()],
+        return_related_questions=False,
+    )
+    if failure:
+        return failure
+    if not response:
+        return "The live web search did not return a usable response."
+    return _format_perplexity_response(normalized_query, response)
+
+
+@function_tool
+async def check_weather(location: str) -> str:
+    """
+    Get the current weather and brief near-term outlook for a location using live web data.
+    """
+    normalized_location = location.strip()
+    if not normalized_location:
+        return "Tell me the location you want the weather for."
+
+    response, failure = _perplexity_chat_completion(
+        system_prompt=(
+            "You are Freedom's live weather tool. Use current web results. Include the location name, current or "
+            "most recent observed conditions, temperature, wind, precipitation if relevant, and a short near-term "
+            "outlook. Mention uncertainty briefly if the source timing is unclear."
+        ),
+        user_prompt=(
+            f"What is the current weather in {normalized_location}? Include a concise current summary and short outlook. "
+            "Prefer very recent sources."
+        ),
+        search_recency_filter="day",
+        return_related_questions=False,
+    )
+    if failure:
+        return failure
+    if not response:
+        return f"I could not retrieve live weather for {normalized_location} right now."
+    return _format_perplexity_response(f"weather in {normalized_location}", response)
 
 
 @function_tool

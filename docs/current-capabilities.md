@@ -52,6 +52,13 @@ or the boundary between modeled and fully operational capability.
   speech-model download flow instead of failing silently.
 - Bounded safe parallel task execution when the scheduler judges tasks non-conflicting.
 - Transcript and state updates streamed back into the browser UI.
+- Freedom voice now has a live web-research lane for current public lookups and weather
+  checks through Perplexity when `PERPLEXITY_API_KEY` is configured on the desktop.
+- Freedom can now inspect and report its published mobile build version/code, current
+  live voice profile, runtime provider/model, and web-search readiness during voice sessions.
+- Premium mobile realtime voice now persists final user and assistant transcript turns
+  into the threaded gateway history and restores recent thread context when a new voice
+  session starts, so conversation continuity is no longer lost at session boundaries.
 
 ### Persistent Memory
 
@@ -103,9 +110,18 @@ or the boundary between modeled and fully operational capability.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.
+- The conversation-originated build lane now lives in that utility sheet rather than on
+  the main start surface, so Freedom can surface governed build promotion when needed
+  without competing with the core talk-first interface.
+- The mobile header now separates action access from settings:
+  the hamburger pull-down is for actions/capabilities and the three dots hold genuine
+  settings such as voice choices, reply behavior, build/runtime info, and system adjustments.
+- The primary `Talk` header now matches the `Start` header again, with no leftover back
+  control artifact competing with the title.
 - The `Talk` canvas now uses compact footer controls:
   `Mute`, a small `Text` entry button, a dedicated raised typed-turn composer,
-  and a reversible `Recent thread` history toggle on the center Freedom dialogue.
+  and one lower `Recent thread` card as the transcript open/close surface, with the
+  transcript body scrolling inside a bounded panel so the collapse action stays visible.
 - The mobile companion now supports two distinct thread postures:
   one continuity-first default voice thread for ongoing relationship memory and
   day-to-day work, plus explicit new project kickoff through the `Build` view's
@@ -113,6 +129,8 @@ or the boundary between modeled and fully operational capability.
 - The mobile utility menu now includes an `About this build` section that shows the
   installed app version, build code, and current voice runtime directly on-device for
   release verification.
+- The mobile settings sheet now shows Freedom's actual live realtime voice presets,
+  with Marin as the default baseline, instead of leading with device-only fallback TTS voices.
 - Mobile voice auto-send is on by default again, and riskier or unusually long spoken requests are pushed into transcript review before they can run.
 - Android live voice now uses the device-default recognizer language instead of forcing
   `en-US`, which avoids on-device language-pack mismatches on phones whose configured
@@ -199,8 +217,10 @@ or the boundary between modeled and fully operational capability.
 ### Autonomous Research
 
 - Freedom can identify missing information, capability gaps, and candidate follow-up work.
-- The current voice runtime does not yet have a live external research toolchain, so
-  self-research remains approval-gated and partially modeled rather than end-to-end operational.
+- User-requested live web lookups and weather checks are now available through the
+  Perplexity-backed research lane when configured.
+- Broader self-directed research remains governed: Freedom should still avoid silently
+  expanding into autonomous external research loops without approval.
 
 ## Planned / Intentionally Not Live Yet
 
@@ -228,6 +248,8 @@ or the boundary between modeled and fully operational capability.
   browser voice transport and data-channel signaling.
 - OpenAI Realtime:
   current voice model runtime.
+- Perplexity:
+  default live web search and weather retrieval when configured.
 - Resend:
   outbound email delivery for the control-plane path.
 
