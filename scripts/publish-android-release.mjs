@@ -8,7 +8,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const sourceDir = path.resolve(repoRoot, "apps/mobile/android/app/build/outputs/apk/release");
 const sourceApkPath = path.join(sourceDir, "app-release.apk");
 const sourceMetadataPath = path.join(sourceDir, "output-metadata.json");
-const defaultPublishTargetDir = "/home/adamgoodwin/code/agents/codex_adam_connect/apps/mobile/android/app/build/outputs/apk/release";
+const defaultPublishTargetDir = sourceDir;
 const publishTargetDir = path.resolve(process.env.ANDROID_PUBLISH_TARGET_DIR?.trim() || defaultPublishTargetDir);
 const verifyUrl = process.env.ANDROID_PUBLISH_VERIFY_URL?.trim() || "http://127.0.0.1:43111/downloads/android/latest.apk";
 

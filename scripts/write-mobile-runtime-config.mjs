@@ -5,8 +5,7 @@ import dotenv from "dotenv";
 const repoRoot = path.resolve(new URL(".", import.meta.url).pathname, "..");
 dotenv.config({ path: path.join(repoRoot, ".env") });
 
-const defaultBaseUrl =
-  process.env.MOBILE_DEFAULT_BASE_URL?.trim() || process.env.ADAM_CONNECT_DEFAULT_BASE_URL?.trim() || "";
+const defaultBaseUrl = process.env.MOBILE_DEFAULT_BASE_URL?.trim() || "";
 const voiceRuntimeMode =
   process.env.MOBILE_VOICE_RUNTIME_MODE?.trim() === "device_fallback" ? "device_fallback" : "realtime_primary";
 const voiceSessionEnabled = process.env.MOBILE_VOICE_SESSION_ENABLED?.trim() !== "false";

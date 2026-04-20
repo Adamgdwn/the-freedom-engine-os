@@ -2,6 +2,7 @@ import React from "react";
 import ReactTestRenderer from "react-test-renderer";
 import { AppShell } from "../src/app/AppShell";
 import { refreshScrollInteractionProps } from "../src/app/screens";
+import type { AppState } from "../src/store/appStore";
 
 const mockStore = {
   booting: false,
@@ -61,7 +62,7 @@ const mockStore = {
     pairedDeviceCount: 1
   },
   devices: [],
-  sessions: [] as Array<any>,
+  sessions: [] as AppState["sessions"],
   selectedSessionId: null as string | null,
   messagesBySession: {},
   composer: "",

@@ -12,9 +12,10 @@ that ties business outcomes back to freedom outcomes.
 2. Review `project-control.yaml` and confirm that exceptions remain empty or are updated
    intentionally.
 3. Install dependencies with `npm install`.
-4. Copy `.env.example` to `.env.local` if local Supabase values are missing.
+4. Copy `.env.example` to `.env` for desktop, gateway, mobile, and voice-worker runtime
+   secrets. Use `.env.local` only for web-specific overrides.
 5. Start the control plane with `npm run dev`.
-5. When changing behavior, update the nearest matching controlled document in `docs/`.
+6. When changing behavior, update the nearest matching controlled document in `docs/`.
 6. Before finishing, run:
    `npm run lint`
    `npm run typecheck`
@@ -67,12 +68,17 @@ that ties business outcomes back to freedom outcomes.
   first run and for sharing the repo with others.
 - The scoring workbench is intended for scenario testing, not for silently changing live priorities.
 - Weekly Review is the preferred place to convert observations into approved next actions.
-- Phone access should reuse Adam Connect. Add this repo root to Adam Connect's
-  `DESKTOP_APPROVED_ROOTS` as a comma-separated absolute path list, then launch Adam
-  Connect and pair from your phone.
+- Phone access now runs through the integrated Freedom desktop-host and gateway in this
+  monorepo. If you customize `DESKTOP_APPROVED_ROOTS`, include this repo root as a
+  comma-separated absolute path list before launching the desktop host and pairing
+  from your phone.
 - Premium mobile voice now expects the paired desktop to have `LIVEKIT_URL`,
   `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY` configured. If those are
   absent, the Android companion falls back to the older device STT/TTS voice path.
+- Those premium voice runtime secrets are read from repo-root `.env`. Keep `.env.example`
+  as placeholders only so template commits never leak working credentials.
+- The shared realtime voice defaults are now `gpt-realtime-mini` with supported voice
+  fallback to `marin`, even if an older env value still says `nova`.
 - The operating rule for focus is simple:
   if a task is interesting but off-plan, the system should challenge it, park it, or turn
   it into a bounded experiment instead of silently expanding scope.

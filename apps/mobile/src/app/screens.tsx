@@ -746,7 +746,7 @@ export function ChatScreen(props: {
   onToggleManualTools(): void;
   onStartOrStopVoice(): void;
 }): React.JSX.Element {
-  const { store, onRefresh, keyboardInset, footerBottomPadding, toolSheetBottomPadding, manualToolsVisible, onOpenStart, onOpenUtility, onToggleManualTools, onStartOrStopVoice } = props;
+  const { store, onRefresh, footerBottomPadding, toolSheetBottomPadding, manualToolsVisible, onOpenStart, onOpenUtility, onToggleManualTools, onStartOrStopVoice } = props;
   const selectedSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? null;
   const stopTargetSession = findStopTargetSession(store.selectedSessionId, store.sessions);
   const hasSelectedSession = Boolean(store.selectedSessionId);

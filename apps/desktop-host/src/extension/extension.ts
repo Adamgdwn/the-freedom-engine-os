@@ -5,7 +5,7 @@ const runtime = new DesktopHostRuntime();
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   context.subscriptions.push(
-    vscode.commands.registerCommand("adamConnect.showHostStatus", async () => {
+    vscode.commands.registerCommand("freedomDesktop.showHostStatus", async () => {
       const state = await runtime.getLocalState();
       void vscode.window.showInformationMessage(
         `Host: ${state.hostId ?? "not registered"} | Pairing code: ${state.pairingCode ?? "not available"} | Codex: ${state.codexAuthStatus ?? "unknown"} | Tailscale URL: ${state.tailscaleSuggestedUrl ?? "not available"}`
@@ -14,7 +14,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("adamConnect.copyPairingCode", async () => {
+    vscode.commands.registerCommand("freedomDesktop.copyPairingCode", async () => {
       const state = await runtime.getLocalState();
       if (!state.pairingCode) {
         void vscode.window.showWarningMessage("Pairing code is not available. Start the desktop host first.");

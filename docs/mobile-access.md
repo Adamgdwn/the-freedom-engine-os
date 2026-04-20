@@ -1,26 +1,26 @@
-# Mobile Access Via Freedom Connect
+# Mobile Access Via Freedom Desktop
 
 ## Decision
 
 Freedom Engine should present a single `Freedom` identity on desktop and phone while
-reusing the existing Connect runtime for pairing, transport, and session delivery
-instead of building a second mobile bridge.
+using the integrated desktop-host, gateway, and mobile runtime in this monorepo for
+pairing, transport, and session delivery instead of depending on a second checkout.
 
-No migration of Adam Connect is required just to test this repo.
-
-Connect already handles:
+The current repo now handles:
 
 - phone pairing
 - Codex login dependency on the desktop
 - approved-root workspace constraints
 - realtime message streaming between phone and desktop
+- premium mobile voice handoff through LiveKit plus OpenAI Realtime when the paired
+  desktop has the required runtime credentials
 
 ## Existing Companion
 
 - Repo:
   `/home/adamgoodwin/code/agents/the-freedom-engine-os`
 - Current supported desktop GUI:
-  Freedom Desktop shell launched from Connect, with a browser fallback at
+  Freedom Desktop shell launched from this repo, with a browser fallback at
   `http://127.0.0.1:43111/`
 - Current phone companion:
   Freedom Android app built from this monorepo at `apps/mobile`
@@ -40,7 +40,7 @@ surface than a one-shot relay:
 - task-aware routing so Freedom can answer side questions or start a safe parallel
   subtask instead of defaulting to a single blocking "busy" response
 - Freedom-owned chat/build surfaces so the phone stays pointed at Freedom even
-  though Connect still carries the runtime and transport
+  though the integrated runtime still carries the transport
 - compact top bar plus menu sheet so navigation and session controls stay available
   without taking over the whole screen
 - sparse `Start` launch surface, dedicated `Talk` voice canvas, and a hidden utility
@@ -48,7 +48,7 @@ surface than a one-shot relay:
 
 ## What To Configure
 
-In Connect's `.env`, set `DESKTOP_APPROVED_ROOTS` as a comma-separated list of
+In this repo's `.env`, set `DESKTOP_APPROVED_ROOTS` as a comma-separated list of
 absolute roots. Include Freedom Engine's repo root:
 
 `/home/adamgoodwin/code/agents/the-freedom-engine-os`
@@ -59,10 +59,20 @@ Example:
 
 Current local check:
 
-- Connect is installed and provisioned
-- Freedom Engine is present in Connect's `DESKTOP_APPROVED_ROOTS`
+- the integrated Freedom desktop-host and gateway can run from this repo
+- Freedom Engine is present in this repo's `DESKTOP_APPROVED_ROOTS`
 
-That means the next clean step is real-device acceptance, not migration.
+That means the next clean step is real-device acceptance, not repo-to-repo migration.
+
+For premium mobile voice, repo-root `.env` must also contain:
+
+- `LIVEKIT_URL`
+- `LIVEKIT_API_KEY`
+- `LIVEKIT_API_SECRET`
+- `OPENAI_API_KEY`
+
+Keep `.env.example` as placeholders only. The live runtime does not read secrets from the
+template file.
 
 ## Launch Path
 
@@ -73,6 +83,9 @@ That means the next clean step is real-device acceptance, not migration.
 5. Open the Freedom desktop shell and create or restore the primary Freedom session.
 6. Install the latest Freedom Android APK from this repo or the dashboard.
 7. Chat with the local Freedom Engine workspace from the Freedom phone companion.
+8. For premium voice, prefer the `Talk` canvas. The current realtime lane defaults to
+   `gpt-realtime-mini` and normalizes legacy unsupported voice ids such as `nova` back
+   to a supported voice like `marin`.
 
 ## APK Download
 
@@ -100,17 +113,22 @@ The companion install page remains:
   artifact by size or checksum. The publish script performs that verification automatically.
 - If a phone appears to "start where it left off" after reinstalling, check for
   preserved app storage or a restored paired device token before assuming the APK is stale.
+- If premium voice connects but stalls without hearing your speech, verify the paired
+  desktop worker is reading secrets from repo-root `.env`, confirm only one LiveKit
+  worker is running, and reinstall the latest APK so the Android speech-service filter fix
+  is present on the phone.
 
 ## What This Means
 
 This gives you phone access to the repo through a Freedom-branded shell and phone
-companion while Connect stays underneath as the runtime bridge. It does not yet mean
+companion while the integrated Freedom desktop runtime stays underneath as the bridge.
+It does not yet mean
 Freedom Engine has its own independent hosted mobile backend. For "anytime" use, the
-desktop or workstation running Connect must stay online and reachable.
+desktop or workstation running Freedom Desktop must stay online and reachable.
 
 ## Next Improvements
 
-- keep Freedom as the visible product identity while Connect remains the runtime layer
+- keep Freedom as the visible product identity while the integrated runtime remains the transport layer
 - connect the modeled parallel-skill and self-evolving-function registry to the
   live runtime so Freedom can branch governed work in practice
 - add clearer builder-first actions from the desktop shell into Freedom-governed

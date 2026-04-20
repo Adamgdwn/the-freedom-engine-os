@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-04-19 (mobile voice runtime recovery + release 0.2.36)
+
+- fixed the Android fallback recognizer picker so the phone no longer treats the
+  Google text-to-speech package as a valid speech-recognition service, which was
+  leaving some installs stuck on silent or non-starting voice capture
+- configured the LiveKit OpenAI Realtime worker to enable explicit input transcription,
+  semantic turn detection, and supported realtime voice normalization so spoken mobile
+  turns promote into real assistant responses instead of hanging after the room connects
+- scrubbed `.env.example` back to template placeholders and aligned its voice defaults
+  with the live runtime: repo-root `.env` for real secrets, `gpt-realtime-mini`, and
+  `marin`
+- bumped the Android release metadata to `versionCode 43` / `versionName 0.2.36` so this
+  voice-recovery pass ships as a distinct installable build
+
+## 2026-04-19 (android startup DOMException fix + release 0.2.35)
+
+- added a mobile startup `DOMException` polyfill before app bootstrap so the Android
+  companion no longer aborts during bundle load on devices where Hermes does not expose
+  that web global by default
+- kept the fix at the earliest mobile entrypoint so runtime libraries that assume a web-like
+  `DOMException` can initialize without crashing the app before the React error boundary mounts
+- bumped the Android release metadata to `versionCode 42` / `versionName 0.2.35` so this
+  startup-fix pass ships as a distinct installable build
+
 ## 2026-04-17 (mobile realtime voice runtime slice + Android release 0.2.34)
 
 - added a first shared mobile realtime voice path so the Android companion can request a

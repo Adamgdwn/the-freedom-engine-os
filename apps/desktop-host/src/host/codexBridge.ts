@@ -72,7 +72,7 @@ export class CodexBridge {
       const message = error instanceof Error ? error.message : "Failed to read Codex login status.";
       const detail =
         /ENOENT/i.test(message) && !process.env.CODEX_BIN?.trim()
-          ? `${message}. Adam Connect could not find the Codex CLI automatically. Set CODEX_BIN to the full desktop codex path.`
+          ? `${message}. Freedom Desktop could not find the Codex CLI automatically. Set CODEX_BIN to the full desktop codex path.`
           : message;
       return {
         status: "error",

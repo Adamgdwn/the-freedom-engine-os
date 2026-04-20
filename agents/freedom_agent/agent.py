@@ -11,12 +11,13 @@ Required env vars (set in .env at repo root or export in shell):
     LIVEKIT_API_KEY
     LIVEKIT_API_SECRET
     OPENAI_API_KEY
-    NEXT_PUBLIC_VOICE_ID   (optional, defaults to "nova")
+    NEXT_PUBLIC_VOICE_ID   (optional, defaults to "marin")
 """
 import asyncio
 import json
 import os
 from dotenv import load_dotenv
+from openai.types import realtime
 
 # Load from repo root .env first, then local .env fallback
 load_dotenv(dotenv_path="../../.env", override=False)
@@ -53,6 +54,28 @@ SYSTEM_PROMPT = "\n\n".join([
     load_freedom_runtime_policy_prompt(),
 ]).strip()
 
+SUPPORTED_REALTIME_VOICES = {
+    "alloy",
+    "ash",
+    "ballad",
+    "cedar",
+    "coral",
+    "echo",
+    "marin",
+    "sage",
+    "shimmer",
+    "verse",
+}
+LEGACY_REALTIME_VOICE_ALIASES = {
+    "nova": "marin",
+}
+
+
+def resolve_realtime_voice() -> str:
+    requested = os.getenv("NEXT_PUBLIC_VOICE_ID", "marin").strip().lower()
+    normalized = LEGACY_REALTIME_VOICE_ALIASES.get(requested, requested)
+    return normalized if normalized in SUPPORTED_REALTIME_VOICES else "marin"
+
 
 async def entrypoint(ctx: agents.JobContext) -> None:
     await ctx.connect()
@@ -63,7 +86,17 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
             model="gpt-realtime-mini",
-            voice=os.getenv("NEXT_PUBLIC_VOICE_ID", "nova"),
+            voice=resolve_realtime_voice(),
+            input_audio_transcription=realtime.AudioTranscription(
+                model="gpt-4o-transcribe",
+            ),
+            input_audio_noise_reduction="near_field",
+            turn_detection=realtime.realtime_audio_input_turn_detection.SemanticVad(
+                type="semantic_vad",
+                create_response=True,
+                eagerness="auto",
+                interrupt_response=True,
+            ),
         ),
     )
 

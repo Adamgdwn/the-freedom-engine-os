@@ -15,9 +15,13 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   inspect evidence freshness, blocked approvals, and score-weight drift.
 - Workflow or execution state looks wrong:
   review the seed data or future persistence source before changing priorities.
-- Phone access fails through Adam Connect:
+- Phone access fails through Freedom Desktop:
   verify Codex login, Tailscale reachability, and that Freedom Engine's repo root is
   present in `DESKTOP_APPROVED_ROOTS`.
+- Premium mobile voice connects but does not answer:
+  verify repo-root `.env` contains the LiveKit and OpenAI keys, confirm only one
+  `python agent.py dev` worker is running, and reinstall the latest Android build so
+  the speech-service selection fix is on-device.
 - Freedom memory looks missing or stale:
   verify `SUPABASE_SERVICE_ROLE_KEY`, confirm the latest memory migration is applied, and
   restore from the latest local backup if needed.
@@ -29,7 +33,7 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Supabase migration files for future database setup
 - Supabase service-role access for durable Freedom memory persistence and restore
 - GitHub workflow access for future code-control integration
-- Adam Connect for paired mobile access to the local workstation
+- Freedom desktop-host and gateway for paired mobile access to the local workstation
 
 ## Recovery
 
@@ -43,7 +47,10 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 5. If the issue is architectural, document the change in `docs/architecture.md` and add
    or update an ADR before re-releasing.
 6. If phone access breaks, fall back to direct desktop use of the web app and recover the
-   Adam Connect host separately.
+   Freedom desktop-host and gateway separately.
+7. If premium mobile voice still stalls after reconnecting, stop stale LiveKit workers,
+   restart one clean worker from `agents/freedom_agent`, and start a fresh room from the
+   phone instead of reusing an already-stuck session.
 
 ## Escalation
 

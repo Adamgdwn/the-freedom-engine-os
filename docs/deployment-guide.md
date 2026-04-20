@@ -17,13 +17,15 @@
    `npm run typecheck`
    `npm test`
    `npm run build`
-3. Confirm `.env.local` points at the linked Supabase project
-   `basbwglynuyfxcqxfyur`.
-4. Confirm `SUPABASE_SERVICE_ROLE_KEY` is available for server-side Freedom memory persistence.
-5. Run `npm run backup:freedom-memory` before promoting schema or memory-behavior changes.
-6. For local development, start with `npm run dev`.
-7. Apply new Supabase migrations before promoting any environment changes.
-8. Keep live desktop-host and gateway `.local-data` state out of source control; only the
+3. Confirm repo-root `.env` contains the desktop, gateway, and mobile runtime secrets.
+   Keep `.env.example` as placeholders only.
+4. Confirm `.env.local` points at the linked Supabase project
+   `basbwglynuyfxcqxfyur` when web-only overrides are needed.
+5. Confirm `SUPABASE_SERVICE_ROLE_KEY` is available for server-side Freedom memory persistence.
+6. Run `npm run backup:freedom-memory` before promoting schema or memory-behavior changes.
+7. For local development, start with `npm run dev`.
+8. Apply new Supabase migrations before promoting any environment changes.
+9. Keep live desktop-host and gateway `.local-data` state out of source control; only the
    sanitized `*.example.json` bootstrap fixtures should be versioned.
 
 ## Android Companion Release
@@ -39,7 +41,7 @@ When publishing a new Freedom Android APK:
 4. If you need to publish without rebuilding, run:
    `npm run publish:android-release`
 5. By default the publish script syncs the built APK and `output-metadata.json` into the currently live desktop install stack at:
-   `/home/adamgoodwin/code/agents/codex_adam_connect/apps/mobile/android/app/build/outputs/apk/release`
+   `apps/mobile/android/app/build/outputs/apk/release`
    override with:
    `ANDROID_PUBLISH_TARGET_DIR=/absolute/path/to/release npm run publish:android-release`
 6. The publish step also verifies the live gateway download at:

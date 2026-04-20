@@ -30,8 +30,8 @@ Freedom in this system is tracked as outcomes, not slogans:
 - Supabase:
   linked hosted project `basbwglynuyfxcqxfyur` in West US (Oregon), with the V1 schema applied
 - Phone access:
-  reuse the existing Connect stack as the runtime bridge, while keeping `Freedom` as the
-  user-facing desktop and phone identity
+  use the integrated Freedom desktop-host, gateway, and mobile companion from this
+  monorepo
 
 ## What V1 Includes
 
@@ -53,8 +53,9 @@ Freedom in this system is tracked as outcomes, not slogans:
 3. Start the app:
    `npm run dev`
 4. Copy environment defaults if needed:
-   `.env.example` to `.env.local`
-4. Validate changes:
+   `.env.example` to `.env` for desktop, gateway, and mobile runtime secrets
+   `.env.local` only when you need separate web-only overrides
+5. Validate changes:
    `npm run lint`
    `npm run typecheck`
    `npm test`
@@ -73,9 +74,9 @@ Freedom in this system is tracked as outcomes, not slogans:
 ## Mobile Access
 
 Freedom Engine can already be reached from your phone through the Freedom desktop shell
-and Freedom mobile companion backed by the existing Connect runtime at
-`/home/adamgoodwin/code/agents/codex_adam_connect`. See `docs/mobile-access.md` for the
-exact approved-root setup and launch path.
+and Freedom mobile companion shipped from this monorepo. See `docs/mobile-access.md`
+for the current launch path, pairing flow, realtime voice requirements, and APK install
+surface.
 
 ## Documentation
 

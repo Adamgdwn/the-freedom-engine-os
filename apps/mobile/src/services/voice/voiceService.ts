@@ -109,6 +109,11 @@ function formatLocaleLabel(localeTag: string | null): string {
   return localeTag ?? "your phone's current language";
 }
 
+function isUnsupportedAndroidRecognitionService(packageName: string | null | undefined): boolean {
+  const normalized = packageName?.trim();
+  return !normalized || normalized === TTS_ANDROID_SERVICE_PACKAGE;
+}
+
 async function promptAndroidOfflineModelDownload(localeTag: string | null): Promise<string> {
   const speechRecognitionModule = getSpeechRecognitionModule();
   const locale = localeTag ?? "en-US";
@@ -165,7 +170,7 @@ async function chooseAndroidRecognitionService(): Promise<AndroidRecognitionSele
       const defaultFallbackService =
         defaultService &&
         defaultService !== ON_DEVICE_ANDROID_SERVICE_PACKAGE &&
-        defaultService !== TTS_ANDROID_SERVICE_PACKAGE &&
+        !isUnsupportedAndroidRecognitionService(defaultService) &&
         availableSet.has(defaultService)
           ? defaultService
           : undefined;
@@ -179,7 +184,12 @@ async function chooseAndroidRecognitionService(): Promise<AndroidRecognitionSele
       }
     }
 
-    if (defaultService && availableSet.has(defaultService) && defaultService !== ON_DEVICE_ANDROID_SERVICE_PACKAGE) {
+    if (
+      defaultService &&
+      availableSet.has(defaultService) &&
+      defaultService !== ON_DEVICE_ANDROID_SERVICE_PACKAGE &&
+      !isUnsupportedAndroidRecognitionService(defaultService)
+    ) {
       return {
         packageName: defaultService,
         localeTag: deviceLocale,
@@ -190,10 +200,15 @@ async function chooseAndroidRecognitionService(): Promise<AndroidRecognitionSele
     return {
       packageName:
         PREFERRED_ANDROID_SERVICE_PACKAGES.find(
-        (service) => availableSet.has(service) && service !== ON_DEVICE_ANDROID_SERVICE_PACKAGE
+        (service) =>
+          availableSet.has(service) &&
+          service !== ON_DEVICE_ANDROID_SERVICE_PACKAGE &&
+          !isUnsupportedAndroidRecognitionService(service)
         ) ??
-        availableServices.find((service) => service !== ON_DEVICE_ANDROID_SERVICE_PACKAGE) ??
-        defaultService ??
+        availableServices.find(
+          (service) => service !== ON_DEVICE_ANDROID_SERVICE_PACKAGE && !isUnsupportedAndroidRecognitionService(service)
+        ) ??
+        (isUnsupportedAndroidRecognitionService(defaultService) ? undefined : defaultService) ??
         undefined,
       localeTag: deviceLocale,
       needsOfflineModelDownload: false

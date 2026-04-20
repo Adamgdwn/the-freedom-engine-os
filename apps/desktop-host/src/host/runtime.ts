@@ -76,7 +76,7 @@ export class DesktopHostRuntime {
 
   async start(): Promise<void> {
     const localState = await this.stateStore.read();
-    const hostName = process.env.DESKTOP_HOST_NAME ?? localState.hostName ?? "Adam Connect Desktop";
+    const hostName = process.env.DESKTOP_HOST_NAME ?? localState.hostName ?? "Freedom Desktop";
     const approvedRoots = await resolveApprovedRoots(parseRoots(process.env.DESKTOP_APPROVED_ROOTS));
 
     const auth = await this.codexBridge.getAuthState();
