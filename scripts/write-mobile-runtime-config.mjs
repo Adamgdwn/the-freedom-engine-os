@@ -6,6 +6,9 @@ const repoRoot = path.resolve(new URL(".", import.meta.url).pathname, "..");
 dotenv.config({ path: path.join(repoRoot, ".env") });
 
 const defaultBaseUrl = process.env.MOBILE_DEFAULT_BASE_URL?.trim() || "";
+const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED?.trim() === "true";
+const disconnectedAssistantBaseUrl = process.env.MOBILE_DISCONNECTED_ASSISTANT_BASE_URL?.trim() || "";
+const disconnectedAssistantMode = bundledOfflineEnabled ? "bundled_model" : disconnectedAssistantBaseUrl ? "cloud" : "notes_only";
 const requestedVoiceRuntimeMode = process.env.MOBILE_VOICE_RUNTIME_MODE?.trim();
 const voiceRuntimeMode = requestedVoiceRuntimeMode === "device_fallback" ? "device_fallback" : "realtime_primary";
 const voiceSessionEnabled = process.env.MOBILE_VOICE_SESSION_ENABLED?.trim() !== "false";
@@ -29,6 +32,8 @@ await fs.mkdir(path.dirname(targetPath), { recursive: true });
 await fs.writeFile(
   targetPath,
   `export const DEFAULT_BASE_URL = ${JSON.stringify(defaultBaseUrl)};\n` +
+    `export const DISCONNECTED_ASSISTANT_MODE = ${JSON.stringify(disconnectedAssistantMode)};\n` +
+    `export const DISCONNECTED_ASSISTANT_BASE_URL = ${JSON.stringify(disconnectedAssistantBaseUrl)};\n` +
     `export const FCM_ENABLED = ${JSON.stringify(fcmEnabled)};\n` +
     `export const MOBILE_APP_VERSION_NAME = ${JSON.stringify(mobileAppVersionName)};\n` +
     `export const MOBILE_APP_VERSION_CODE = ${Number.isFinite(mobileAppVersionCode) ? mobileAppVersionCode : 0};\n` +

@@ -19,6 +19,7 @@ import { isValidExternalEmail } from "../utils/externalSend";
 import { findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
 import { Banner, LabeledInput, MessageBubble, StatusChip, WorkingBubble } from "./components";
 import { styles } from "./mobileStyles";
+import { DISCONNECTED_ASSISTANT_MODE } from "../generated/runtimeConfig";
 
 const keyboardDismissMode: "interactive" | "on-drag" = Platform.OS === "ios" ? "interactive" : "on-drag";
 export const refreshScrollInteractionProps = {
@@ -27,6 +28,47 @@ export const refreshScrollInteractionProps = {
   keyboardDismissMode,
   overScrollMode: "always" as const
 };
+
+function disconnectedStatusLabel(): string {
+  switch (DISCONNECTED_ASSISTANT_MODE) {
+    case "bundled_model":
+      return "Offline / On-device";
+    case "cloud":
+      return "Disconnected / Cloud";
+    default:
+      return "Disconnected / Notes";
+  }
+}
+
+function disconnectedHint(fallbackTitle: string | null): string {
+  if (fallbackTitle) {
+    return fallbackTitle;
+  }
+  switch (DISCONNECTED_ASSISTANT_MODE) {
+    case "bundled_model":
+      return "Cached chats and on-device ideation are ready.";
+    case "cloud":
+      return "Cached chats and the web companion are ready.";
+    default:
+      return "Cached chats and saved ideas are ready.";
+  }
+}
+
+function disconnectedCompanionLabel(state: AppState): string {
+  if (DISCONNECTED_ASSISTANT_MODE === "bundled_model") {
+    return state.offlineModelState === "ready"
+      ? "Model ready"
+      : state.offlineModelState === "extracting"
+        ? "Preparing model"
+        : state.offlineModelState === "failed"
+          ? "Model attention"
+          : "Model bundled";
+  }
+  if (DISCONNECTED_ASSISTANT_MODE === "cloud") {
+    return "Web companion";
+  }
+  return "Notes only";
+}
 
 export function PairingScreen(props: {
   store: AppState;
@@ -45,7 +87,7 @@ export function PairingScreen(props: {
         <Text style={styles.heroTitle}>{FREEDOM_PRODUCT_NAME}</Text>
         <Text style={styles.heroBody}>
           Turn this phone into a private Freedom companion for your desktop. Pair once, keep API keys off the device,
-          and use voice or text from anywhere on your tailnet.
+          and use voice or text from anywhere your phone can reach the desktop.
         </Text>
       </View>
 
@@ -55,7 +97,7 @@ export function PairingScreen(props: {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Connect</Text>
         <LabeledInput label="Desktop URL" value={store.baseUrl} onChange={(value) => store.setField("baseUrl", value)} />
-        {store.baseUrl ? <Text style={styles.supportingText}>Desktop URL is pre-filled for this host.</Text> : null}
+        {store.baseUrl ? <Text style={styles.supportingText}>Use the exact desktop URL from the install page. It can be a local network URL or a Tailscale URL.</Text> : null}
         <LabeledInput label="Device Name" value={store.deviceName} onChange={(value) => store.setField("deviceName", value)} />
         <LabeledInput
           label="Pairing Code"
@@ -80,7 +122,7 @@ export function PairingScreen(props: {
         </Text>
         <Text style={styles.metric}>1. Install Tailscale on this phone and on your desktop.</Text>
         <Text style={styles.metric}>2. Sign both devices into the same Tailscale account.</Text>
-        <Text style={styles.metric}>3. Use the desktop Tailscale URL in the Desktop URL field.</Text>
+        <Text style={styles.metric}>3. Use the desktop URL shown on the install page in the Desktop URL field.</Text>
         <View style={styles.actions}>
           <Pressable
             style={styles.secondaryButton}
@@ -115,9 +157,9 @@ export function StartScreen(props: {
 }): React.JSX.Element {
   const { store, onRefresh, bottomPadding, onOpenTypedChat, onOpenActions, onOpenSettings, onStartTalk } = props;
   const currentSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
-  const voiceHeadline = store.offlineMode ? "Offline companion ready" : store.voiceAvailable ? "Start talking" : "Voice unavailable";
+  const voiceHeadline = store.offlineMode ? "Disconnected companion ready" : store.voiceAvailable ? "Start talking" : "Voice unavailable";
   const voiceHint = store.offlineMode
-    ? currentSession?.title ?? "Cached chats and on-device ideation are ready."
+    ? disconnectedHint(currentSession?.title ?? null)
     : currentSession?.title ?? "Freedom is ready when you are.";
   const surfaceMessage = store.error ?? store.notice;
   const surfaceMessageTone = store.error ? "error" : "info";
@@ -143,7 +185,7 @@ export function StartScreen(props: {
       </View>
 
       <View style={styles.statusRow}>
-        <StatusChip label={store.offlineMode ? "Offline / On-device" : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
+        <StatusChip label={store.offlineMode ? disconnectedStatusLabel() : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
       </View>
 
       <View style={styles.voiceSurfaceCenter}>
@@ -834,7 +876,7 @@ export function ChatScreen(props: {
   const shouldShowTranscript = showTranscript || showExternalDraftCard;
   const centerHeadline =
     store.offlineMode && !busy && !store.sendingMessage && !store.voiceSessionActive
-      ? "Offline companion"
+      ? "Disconnected companion"
       : busy || store.sendingMessage
       ? "Working"
       : store.voiceSessionActive
@@ -847,7 +889,7 @@ export function ChatScreen(props: {
     : store.voiceAssistantDraft
       ? store.voiceAssistantDraft
       : store.offlineMode
-        ? "Desktop unreachable. Cached chats and on-device ideation stay available on this phone."
+        ? disconnectedHint(null)
       : busy || store.sendingMessage
         ? `${FREEDOM_RUNTIME_NAME} is still working on the current request.`
         : selectedSession?.title ?? "Talk to Freedom";
@@ -938,17 +980,9 @@ export function ChatScreen(props: {
         </View>
 
         <View style={styles.statusRow}>
-          <StatusChip label={store.offlineMode ? "Offline / On-device" : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
+          <StatusChip label={store.offlineMode ? disconnectedStatusLabel() : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
           <StatusChip
-            label={
-              store.offlineModelState === "ready"
-                ? "Model ready"
-                : store.offlineModelState === "extracting"
-                  ? "Preparing model"
-                  : store.offlineModelState === "failed"
-                    ? "Model attention"
-                    : "Model bundled"
-            }
+            label={disconnectedCompanionLabel(store)}
             tone={store.offlineModelState === "ready" ? "teal" : "orange"}
           />
         </View>

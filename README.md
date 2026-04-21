@@ -85,7 +85,7 @@ surface.
 - `docs/manual.md`
 - `docs/roadmap.md`
 - `docs/deployment-guide.md`
-- `docs/runbook.md`
+- `docs/runbooks/operations.md`
 - `docs/CHANGELOG.md`
 - `docs/risks/risk-register.md`
 

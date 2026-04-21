@@ -1,5 +1,50 @@
 # Changelog
 
+## 2026-04-21 (desktop voice worker lock + durable logs)
+
+- hardened the desktop-host voice worker supervisor with a persisted lock under
+  `DESKTOP_DATA_DIR/voice-worker/worker.lock.json` so multiple desktop-host launches do
+  not silently stack duplicate LiveKit/OpenAI workers
+- taught the supervisor to recover stale locks from dead desktop-host processes and
+  terminate orphaned managed workers before relaunching a clean replacement
+- added a durable worker log at `DESKTOP_DATA_DIR/voice-worker/worker.log` so premium
+  mobile voice failures can be debugged after the fact instead of depending on a live
+  terminal session
+- stopped resolving the worker shell and `agents/freedom_agent` directory from brittle
+  hardcoded paths, so desktop-host autostart now uses the active shell path and the
+  supervisor module location instead of depending on a specific `/bin/bash` layout or
+  launch cwd
+
+## 2026-04-21 (slim Android release path, disconnected web companion path, and releases 0.2.71-0.2.73)
+
+- changed the default Android release path back to a slim APK by disabling the bundled
+  GGUF model unless `MOBILE_BUNDLED_OFFLINE_ENABLED=true` is explicitly requested
+- added separate offline release scripts so the heavy on-device model build is still
+  available intentionally instead of silently inflating every install
+- added a server-side `/api/mobile-companion` route on the live gateway plus mobile runtime
+  config hooks so disconnected turns can use the same `43111` install host instead of
+  requiring a second web server, while the slim default build still falls back to cached
+  chats plus saved ideas when that route is not configured
+- fixed the disconnected companion client so it now uses the phone's active paired host
+  URL first instead of always calling the baked-in fallback URL, which could stall
+  replies on LAN-only sessions
+- added explicit request timeouts to the mobile web companion path so stalled upstream
+  calls fail with a real error instead of leaving the phone waiting forever
+- added a realtime voice responder watchdog so `Talk` now surfaces a clear error if the
+  phone joins a LiveKit room but no desktop voice worker answers
+- published Android `0.2.73 (80)` to the live install surface
+
+## 2026-04-21 (install surface URL fix and release 0.2.69)
+
+- changed the install surface so it now prefers the exact host URL it was opened with
+  for pairing instructions, QR targets, and APK links, instead of always steering the
+  phone back to the Tailscale hostname even during same-LAN setup
+- kept the Tailscale URL visible as an explicit recovery path when it differs from the
+  active install-page URL, so local setup stays easy without losing the remote path
+- updated the Android pairing copy to say the desktop URL can be a local-network URL or
+  a Tailscale URL, as long as the phone can actually reach it
+- published Android `0.2.69 (76)` to the live install surface
+
 ## 2026-04-21 (offline mobile companion, voice recovery, and release 0.2.68)
 
 - expanded the live Freedom voice agent so it can inspect governed repo control files

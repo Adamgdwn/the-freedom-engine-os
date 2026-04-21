@@ -53,6 +53,11 @@ type PersonaOverlayRow = {
   updated_at: string;
 };
 
+type SupabaseResult<T> = {
+  data: T[] | null;
+  error: { code?: string } | null;
+};
+
 function toEpoch(value: string) {
   return new Date(value).getTime();
 }
@@ -108,6 +113,7 @@ function toBuildLaneDraft(request: SelfProgrammingRequest): ConversationBuildLan
   }
 
   return {
+    summary: request.buildLane.summary,
     objective: request.buildLane.objective,
     businessCase: request.buildLane.businessCase,
     operator: request.buildLane.operator,
@@ -137,6 +143,14 @@ function mapPersonaOverlay(row: PersonaOverlayRow): FreedomPersonaOverlay {
     createdAt: toEpoch(row.created_at),
     updatedAt: toEpoch(row.updated_at),
   };
+}
+
+function isMissingTableError(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'PGRST205';
+}
+
+function dataOrEmpty<T>(result: SupabaseResult<T>): T[] {
+  return isMissingTableError(result.error) ? [] : (result.data ?? []);
 }
 
 export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot> {
@@ -180,24 +194,24 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
       .limit(25),
   ]);
 
-  if (tasksResult.error) {
+  if (tasksResult.error && !isMissingTableError(tasksResult.error)) {
     throw tasksResult.error;
   }
-  if (learningSignalsResult.error) {
+  if (learningSignalsResult.error && !isMissingTableError(learningSignalsResult.error)) {
     throw learningSignalsResult.error;
   }
-  if (programmingRequestsResult.error) {
+  if (programmingRequestsResult.error && !isMissingTableError(programmingRequestsResult.error)) {
     throw programmingRequestsResult.error;
   }
-  if (personaOverlaysResult.error) {
+  if (personaOverlaysResult.error && !isMissingTableError(personaOverlaysResult.error)) {
     throw personaOverlaysResult.error;
   }
 
   return {
-    tasks:               (tasksResult.data ?? []).map(mapTask),
-    learningSignals:     (learningSignalsResult.data ?? []).map(mapLearningSignal),
-    programmingRequests: (programmingRequestsResult.data ?? []).map(mapProgrammingRequest),
-    personaOverlays:     (personaOverlaysResult.data ?? []).map(mapPersonaOverlay),
+    tasks:               dataOrEmpty(tasksResult).map(mapTask),
+    learningSignals:     dataOrEmpty(learningSignalsResult).map(mapLearningSignal),
+    programmingRequests: dataOrEmpty(programmingRequestsResult).map(mapProgrammingRequest),
+    personaOverlays:     dataOrEmpty(personaOverlaysResult).map(mapPersonaOverlay),
     configured:          true,
   };
 }

@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { createId, generatePairingCode, nowIso } from "@freedom/core";
+import { createId, generatePairingCode, nowIso } from "@freedom/shared";
 import { AccessToken } from "livekit-server-sdk";
 import type {
   AuditEvent,

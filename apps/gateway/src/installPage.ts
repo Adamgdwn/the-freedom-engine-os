@@ -100,7 +100,11 @@ export async function buildDesktopOverviewResponse(
 export function renderDesktopPage(model: InstallPageModel): string {
   const { overview, dashboardUrl, installUrl, publicBaseUrl, qrSvg, androidArtifact, desktopConsoleEnabled } = model;
   const hostStatus = overview.hostStatus;
-  const suggestedUrl = hostStatus?.tailscale.suggestedUrl ?? publicBaseUrl;
+  const connectUrl = publicBaseUrl;
+  const recoveryUrl =
+    hostStatus?.tailscale.suggestedUrl && stripTrailingSlash(hostStatus.tailscale.suggestedUrl) !== stripTrailingSlash(publicBaseUrl)
+      ? stripTrailingSlash(hostStatus.tailscale.suggestedUrl)
+      : null;
   const apkDownloadUrl = androidArtifact ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact) : null;
   const pairingCode = hostStatus?.host.pairingCode ?? "Waiting";
   const codexState = humanizeAuth(hostStatus?.auth.status ?? "logged_out");
@@ -210,7 +214,7 @@ export function renderDesktopPage(model: InstallPageModel): string {
                     </div>
                     <div class="glow-card">
                       <span class="glow-label">Companion URL</span>
-                      <strong>${escapeHtml(truncatePreview(suggestedUrl, 28))}</strong>
+                      <strong>${escapeHtml(truncatePreview(connectUrl, 28))}</strong>
                       <p>Shared mobile connection path.</p>
                     </div>
                     <div class="glow-card">
@@ -326,7 +330,12 @@ export function renderDesktopPage(model: InstallPageModel): string {
                 <details class="accordion-card" open>
                   <summary>Connect</summary>
                   <div class="accordion-body stack gap-sm">
-                    <div class="token-row"><code>${escapeHtml(suggestedUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(suggestedUrl)}">Copy URL</button></div>
+                    <div class="token-row"><code>${escapeHtml(connectUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(connectUrl)}">Copy URL</button></div>
+                    ${
+                      recoveryUrl
+                        ? `<div class="token-row"><code>${escapeHtml(recoveryUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(recoveryUrl)}">Copy Recovery</button></div>`
+                        : ""
+                    }
                     <div class="token-row emphasized"><strong class="pair-code">${escapeHtml(pairingCode)}</strong><button class="icon-button" type="button" data-copy="${escapeAttribute(pairingCode)}">Copy Code</button></div>
                     ${
                       apkDownloadUrl
@@ -356,12 +365,22 @@ export function renderDesktopPage(model: InstallPageModel): string {
                 "Phone pairing, APK delivery, and recovery",
                 `
                   <div class="stack gap-md">
-                    <div class="token-row"><code>${escapeHtml(suggestedUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(suggestedUrl)}">Copy URL</button></div>
+                    <div class="token-row"><code>${escapeHtml(connectUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(connectUrl)}">Copy URL</button></div>
+                    ${
+                      recoveryUrl
+                        ? `<div class="token-row"><code>${escapeHtml(recoveryUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(recoveryUrl)}">Copy Recovery</button></div>`
+                        : ""
+                    }
                     <div class="token-row emphasized"><strong class="pair-code">${escapeHtml(pairingCode)}</strong><button class="icon-button" type="button" data-copy="${escapeAttribute(pairingCode)}">Copy Code</button></div>
                     <details class="accordion-card" open>
                       <summary>Fast path</summary>
                       <div class="accordion-body">
-                        <p>Open the app on the phone, paste the URL or scan the QR, then enter the current pairing code.</p>
+                        <p>Open the app on the phone, use the URL from the page you opened or scan the QR, then enter the current pairing code.</p>
+                        ${
+                          recoveryUrl
+                            ? `<p>If you later move off this local network, the recovery URL above keeps the phone pointed at the same desktop over Tailscale.</p>`
+                            : ""
+                        }
                       </div>
                     </details>
                     <details class="accordion-card" open>
@@ -604,14 +623,18 @@ export function renderDesktopPage(model: InstallPageModel): string {
 export function renderInstallPage(model: InstallPageModel): string {
   const { overview, publicBaseUrl, installUrl, androidArtifact } = model;
   const hostStatus = overview.hostStatus;
-  const suggestedUrl = hostStatus?.tailscale.suggestedUrl ?? publicBaseUrl;
+  const connectUrl = publicBaseUrl;
+  const recoveryUrl =
+    hostStatus?.tailscale.suggestedUrl && stripTrailingSlash(hostStatus.tailscale.suggestedUrl) !== stripTrailingSlash(publicBaseUrl)
+      ? stripTrailingSlash(hostStatus.tailscale.suggestedUrl)
+      : null;
   const apkDownloadUrl = androidArtifact ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact) : null;
   const pairingCode = hostStatus?.host.pairingCode ?? "Waiting";
   const authLabel = humanizeAuth(hostStatus?.auth.status ?? "logged_out");
 
   return renderPage({
     title: "Install Freedom",
-    description: "Phone setup page for Freedom over Tailscale.",
+    description: "Phone setup page for Freedom over local network or Tailscale.",
     body: `
       <main class="shell narrow">
         <section class="hero panel compact-hero">
@@ -639,10 +662,21 @@ export function renderInstallPage(model: InstallPageModel): string {
             <span class="label">Step 1</span>
             <h2>Use this desktop URL in the app</h2>
             <div class="token-row">
-              <code>${escapeHtml(suggestedUrl)}</code>
-              <button class="icon-button" type="button" data-copy="${escapeAttribute(suggestedUrl)}">Copy</button>
+              <code>${escapeHtml(connectUrl)}</code>
+              <button class="icon-button" type="button" data-copy="${escapeAttribute(connectUrl)}">Copy</button>
             </div>
-            <p class="muted">Paste this into the Freedom companion app after installation.</p>
+            <p class="muted">Paste this exact URL into the Freedom companion app after installation. It matches the page you opened unless you are viewing this only on the desktop itself.</p>
+            ${
+              recoveryUrl
+                ? `
+                  <div class="token-row">
+                    <code>${escapeHtml(recoveryUrl)}</code>
+                    <button class="icon-button" type="button" data-copy="${escapeAttribute(recoveryUrl)}">Copy Recovery</button>
+                  </div>
+                  <p class="muted">Recovery URL for the same desktop over Tailscale when local network access is not available.</p>
+                `
+                : ""
+            }
           </article>
 
           <article class="panel section">
@@ -2578,7 +2612,7 @@ function renderAuditCard(event: DesktopOverviewResponse["overview"]["auditEvents
 
 function resolvePublicBaseUrl(req: IncomingMessage, overview: GatewayOverview): string {
   const suggestedUrl = overview.hostStatus?.tailscale.suggestedUrl;
-  if (suggestedUrl) {
+  if (isLoopbackRequest(req) && suggestedUrl) {
     return stripTrailingSlash(suggestedUrl);
   }
 

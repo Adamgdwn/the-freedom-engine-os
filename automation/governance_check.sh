@@ -41,6 +41,7 @@ require_file() {
 }
 
 require_file "README.md"
+require_file "AI_BOOTSTRAP.md"
 require_file "project-control.yaml"
 require_file "docs/architecture.md"
 require_file "docs/manual.md"
@@ -88,18 +89,18 @@ if [[ -f "${project_path}/project-control.yaml" ]]; then
       warn "Missing docs/deployment-guide.md"
     fi
 
-    if [[ -f "${project_path}/docs/runbook.md" ]]; then
-      pass "Found docs/runbook.md"
+    if [[ -f "${project_path}/docs/runbooks/operations.md" ]]; then
+      pass "Found docs/runbooks/operations.md"
     else
-      warn "Missing docs/runbook.md"
+      warn "Missing docs/runbooks/operations.md"
     fi
   fi
 fi
 
-if [[ -f "${project_path}/AGENTS.md" ]]; then
-  pass "Found AGENTS.md"
+if [[ -f "${project_path}/AI_BOOTSTRAP.md" ]]; then
+  pass "Found AI_BOOTSTRAP.md"
 else
-  warn "Missing AGENTS.md"
+  warn "Missing AI_BOOTSTRAP.md"
 fi
 
 if [[ -d "${project_path}/scripts" ]]; then

@@ -1,4 +1,4 @@
-# Runbook
+# Operations Runbook
 
 ## Purpose
 
@@ -24,7 +24,9 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   `[voice-worker] starting ...` and later worker room-join output. The desktop host now
   autostarts this worker; if those log lines are missing, check
   `DESKTOP_VOICE_WORKER_AUTOSTART` and `DESKTOP_VOICE_WORKER_COMMAND` before changing
-  the phone build.
+  the phone build. The desktop host now also keeps a durable worker log at
+  `DESKTOP_DATA_DIR/voice-worker/worker.log` plus a live ownership lock at
+  `DESKTOP_DATA_DIR/voice-worker/worker.lock.json`.
 - Premium mobile voice hears you but stays stuck on `Listening`:
   treat this as a desktop-side worker/runtime issue first, not a phone UI problem. Check
   that the LiveKit worker actually joined the room, then start a fresh `Talk` session.
@@ -82,7 +84,8 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
    first. The host should supervise the worker automatically. If needed, restart the host
    so it can relaunch the worker cleanly, or run the custom worker command from
    `DESKTOP_VOICE_WORKER_COMMAND` manually from `agents/freedom_agent` to isolate env or
-   dependency problems.
+   dependency problems. If the terminal is gone, inspect
+   `DESKTOP_DATA_DIR/voice-worker/worker.log` before rebuilding or reinstalling the phone app.
 8. If a desktop-host restart leaves queued or streaming turns in a bad state, refresh the
    host registration and let the gateway recover orphaned tasks before creating more
    duplicate turns from the phone.

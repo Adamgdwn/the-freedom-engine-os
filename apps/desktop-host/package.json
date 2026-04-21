@@ -32,8 +32,6 @@
     "start": "node dist/host/cli.js"
   },
   "dependencies": {
-    "@freedom/core": "0.2.0",
-    "@freedom/provider-adapters": "0.2.0",
     "@freedom/shared": "0.2.0",
     "dotenv": "^16.4.7",
     "ws": "^8.18.0"

@@ -100,7 +100,9 @@ that ties business outcomes back to freedom outcomes.
   when those env values are present. The default launch command is
   `uv run --with-requirements requirements.txt agent.py dev` from
   `agents/freedom_agent`. Use `DESKTOP_VOICE_WORKER_AUTOSTART=false` to disable that
-  behavior or `DESKTOP_VOICE_WORKER_COMMAND` to override the command explicitly.
+  behavior or `DESKTOP_VOICE_WORKER_COMMAND` to override the command explicitly. The
+  host records the worker log at `DESKTOP_DATA_DIR/voice-worker/worker.log` and the
+  current worker ownership lock at `DESKTOP_DATA_DIR/voice-worker/worker.lock.json`.
 - Those premium voice runtime secrets are read from repo-root `.env`. Keep `.env.example`
   as placeholders only so template commits never leak working credentials.
 - Freedom's default live web-research lane is now Perplexity when `PERPLEXITY_API_KEY`

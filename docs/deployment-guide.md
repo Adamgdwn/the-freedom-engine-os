@@ -34,8 +34,10 @@ When publishing a new Freedom Android APK:
 
 1. Bump `versionCode` in [apps/mobile/android/app/build.gradle](/home/adamgoodwin/code/agents/the-freedom-engine-os/apps/mobile/android/app/build.gradle:112). Every shared APK must have a unique build number.
 2. Bump `versionName` when you want the release to be visibly distinguishable in Android settings or install flows.
-3. Build the release artifact and publish it to the live install surface in one step.
+3. Build the default slim release artifact and publish it to the live install surface in one step.
    `npm run release:android-live`
+   if you intentionally want the larger bundled-model build instead:
+   `npm run release:android-live-offline`
    expected output:
    `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
 4. If you need to publish without rebuilding, run:
@@ -75,6 +77,9 @@ When publishing a new Freedom Android APK:
 - Confirm the linked Supabase project exists and the migration history is current
 - Confirm Freedom memory backup completes locally before release when memory behavior changed
 - Confirm build and lint remain clean
+- When premium mobile voice is enabled, confirm the desktop host can write
+  `DESKTOP_DATA_DIR/voice-worker/worker.log` and expose a current
+  `DESKTOP_DATA_DIR/voice-worker/worker.lock.json` during an active voice-worker run
 - Confirm the freshly built APK reports the intended `versionCode` / `versionName`
 - Confirm the gateway install page is serving the expected unique APK filename for that build,
   not just the generic `latest.apk` alias

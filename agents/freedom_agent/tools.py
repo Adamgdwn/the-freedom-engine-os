@@ -26,7 +26,6 @@ _MOBILE_RUNTIME_CONFIG_PATH = _REPO_ROOT / "apps/mobile/src/generated/runtimeCon
 _RUNTIME_CONFIG_EXPORT_RE = re.compile(r"^export const (?P<key>[A-Z0-9_]+) = (?P<value>.+);$")
 _MAX_GOVERNED_FILE_CHARS = 12_000
 _ALLOWED_GOVERNED_REPO_PATHS = {
-    "AGENTS.md",
     "AI_BOOTSTRAP.md",
     "README.md",
     "project-control.yaml",
@@ -39,7 +38,7 @@ _ALLOWED_GOVERNED_REPO_PATHS = {
     "docs/model-registry.md",
     "docs/prompt-register.md",
     "docs/roadmap.md",
-    "docs/runbook.md",
+    "docs/runbooks/operations.md",
     "docs/tool-permission-matrix.md",
 }
 

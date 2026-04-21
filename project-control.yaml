@@ -20,11 +20,12 @@ data_classification:
 controls:
   required_docs:
     - README.md
+    - AI_BOOTSTRAP.md
     - docs/architecture.md
     - docs/manual.md
     - docs/roadmap.md
     - docs/deployment-guide.md
-    - docs/runbook.md
+    - docs/runbooks/operations.md
     - docs/CHANGELOG.md
     - docs/risks/risk-register.md
   machine_enforcement:
@@ -38,4 +39,3 @@ agent_controls:
   autonomy_level: A1
   model_registry: []
   prompt_registry: []
-

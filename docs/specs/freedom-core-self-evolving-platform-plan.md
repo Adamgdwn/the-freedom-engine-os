@@ -162,7 +162,7 @@
   long-lived operating policy -> `docs/`
   architecture or boundary changes -> `docs/architecture.md` or a dedicated spec/ADR
   implementation plans -> `docs/specs/`
-  procedures and recurring operator actions -> `docs/manual.md` or `docs/runbook.md`
+  procedures and recurring operator actions -> `docs/manual.md` or `docs/runbooks/operations.md`
   temporary exploration or scratch work -> bounded working location, not the permanent docs set
   structured machine-usable records -> typed runtime/store layer, not ad hoc markdown
 - Freedom should recommend file structures that make retrieval easier:

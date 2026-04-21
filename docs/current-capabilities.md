@@ -47,6 +47,9 @@ or the boundary between modeled and fully operational capability.
 - Desktop-host now autostarts and supervises the Python LiveKit/OpenAI voice worker when
   those premium voice env values are present, so mobile `Talk` no longer depends on a
   separate manually launched worker process.
+- That desktop-host supervision path now keeps a persisted ownership lock plus a durable
+  worker log under `DESKTOP_DATA_DIR/voice-worker`, so stalled mobile `Talk` sessions can
+  be traced back to a concrete desktop worker state instead of a missing terminal window.
 - The mobile utility sheet now shows whether `Auto-send voice turns` is on, and legacy
   installs that picked up the temporary default-off state are migrated back to auto-send
   unless the user had explicitly changed that preference.
@@ -117,10 +120,11 @@ or the boundary between modeled and fully operational capability.
   sanitized example files while continuing to keep live machine-specific state local-only.
 - Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
   while preserving `latest.apk` as a compatibility alias.
-- The Android companion now has a safe offline companion posture:
-  cached sessions/messages survive desktop disconnects, offline ideation runs from a
-  bundled on-device model, and later sync imports those notes as non-executing history
-  instead of replaying them as live desktop tasks.
+- The Android companion now has a safe disconnected posture:
+  cached sessions/messages survive desktop disconnects, the default slim release keeps
+  local note capture and later sync imports those notes as non-executing history, and
+  optional builds can either route disconnected turns through a web companion or bundle
+  the old on-device model when explicitly requested.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.

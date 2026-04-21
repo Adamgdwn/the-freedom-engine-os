@@ -18,6 +18,7 @@ using the same operating rules.
 - Run the governance preflight before making substantial changes:
   `bash scripts/governance-preflight.sh`
 - Review `project-control.yaml` for risk tier and required controls.
+- Note any open exceptions relevant to the work before proceeding.
 - Record deviations as exceptions rather than ignoring them.
 
 ## Commands

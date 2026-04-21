@@ -38,6 +38,7 @@ import {
   OfflineAssistantService,
   type OfflineModelState
 } from "../services/offline/offlineAssistant";
+import { CloudCompanionService } from "../services/offline/cloudCompanion";
 import { AssistantSpeechRuntime } from "../services/voice/assistantSpeechRuntime";
 import { RealtimeVoiceService } from "../services/voice/realtimeVoiceService";
 import { TtsService, type TtsVoiceOption } from "../services/voice/ttsService";
@@ -46,6 +47,8 @@ import { WakeRelayClient } from "../services/wake/wakeRelayClient";
 import { normalizeBaseUrl, websocketUrlFromBase } from "../config";
 import {
   DEFAULT_BASE_URL,
+  DISCONNECTED_ASSISTANT_BASE_URL,
+  DISCONNECTED_ASSISTANT_MODE,
   VOICE_BACKCHANNEL_MAX_WORDS,
   VOICE_INTERRUPT_MIN_CHARS,
   VOICE_RUNTIME_MODE,
@@ -82,6 +85,7 @@ import {
 
 type View = "start" | "host" | "sessions" | "chat";
 type MobileVoiceRuntimeMode = "realtime_primary" | "device_fallback" | "on_device_offline";
+type DisconnectedAssistantMode = "bundled_model" | "cloud" | "notes_only";
 type EditableField =
   | "baseUrl"
   | "deviceName"
@@ -243,6 +247,7 @@ const fcm = new FcmService();
 const tts = new TtsService();
 const assistantSpeech = new AssistantSpeechRuntime(tts);
 const offlineAssistant = new OfflineAssistantService();
+const cloudCompanion = new CloudCompanionService();
 const wakeRelay = new WakeRelayClient();
 let socket: WebSocket | null = null;
 let unsubscribePushTokenRefresh: (() => void) | null = null;
@@ -267,6 +272,69 @@ function usesRealtimeVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voice
 
 function usesDeviceVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voiceSessionActive">): boolean {
   return state.voiceSessionActive && (state.voiceRuntimeMode === "device_fallback" || state.voiceRuntimeMode === "on_device_offline");
+}
+
+function getDisconnectedAssistantMode(): DisconnectedAssistantMode {
+  if (DISCONNECTED_ASSISTANT_MODE === "bundled_model" || DISCONNECTED_ASSISTANT_MODE === "cloud") {
+    return DISCONNECTED_ASSISTANT_MODE;
+  }
+  return "notes_only";
+}
+
+function getDisconnectedAssistantRuntimeMode(): MobileVoiceRuntimeMode {
+  return getDisconnectedAssistantMode() === "bundled_model" ? "on_device_offline" : "device_fallback";
+}
+
+function getDisconnectedAssistantReadyState(): { state: OfflineModelState; detail: string | null } {
+  switch (getDisconnectedAssistantMode()) {
+    case "bundled_model":
+      return offlineAssistant.getStatus();
+    case "cloud":
+      return {
+        state: "ready",
+        detail: DISCONNECTED_ASSISTANT_BASE_URL
+          ? `Web companion ready via ${DISCONNECTED_ASSISTANT_BASE_URL}.`
+          : "Web companion ready."
+      };
+    default:
+      return {
+        state: "missing",
+        detail: "This slim build keeps cached chats and saved ideas, but it does not bundle the old on-device model."
+      };
+  }
+}
+
+function getDisconnectedModeNotice(): string {
+  switch (getDisconnectedAssistantMode()) {
+    case "bundled_model":
+      return "Desktop unreachable. Cached chats and on-device ideation are still available.";
+    case "cloud":
+      return "Desktop unreachable. Cached chats and the web companion are still available.";
+    default:
+      return "Desktop unreachable. Cached chats and saved ideas are still available.";
+  }
+}
+
+function getDisconnectedTurnNotice(): string {
+  switch (getDisconnectedAssistantMode()) {
+    case "bundled_model":
+      return "Running on-device ideation while the desktop is unreachable.";
+    case "cloud":
+      return "Running the web companion while the desktop is unreachable.";
+    default:
+      return "Saving this idea locally while the desktop is unreachable.";
+  }
+}
+
+function getDisconnectedVoiceStartNotice(): string {
+  switch (getDisconnectedAssistantMode()) {
+    case "bundled_model":
+      return "Offline voice starting. Speak naturally and Freedom will answer from the on-device model.";
+    case "cloud":
+      return "Disconnected voice starting. Speak naturally and Freedom will answer through the web companion.";
+    default:
+      return "Disconnected voice starting. Speak naturally and Freedom will save your ideas for later sync.";
+  }
 }
 
 const defaultVoiceTelemetry = (): VoiceTelemetry => ({
@@ -459,9 +527,33 @@ function truncateOfflinePreview(text: string): string {
   return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
 }
 
+function buildNotesOnlyReply(): string {
+  return (
+    "Freedom saved that idea locally for later sync. " +
+    "This slim build does not bundle the old on-device model, and no web companion is configured yet."
+  );
+}
+
+function resolveDisconnectedAssistantBaseUrl(currentBaseUrl: string | null | undefined): string {
+  const normalizedCurrentBaseUrl = currentBaseUrl ? normalizeBaseUrl(currentBaseUrl) : "";
+  if (normalizedCurrentBaseUrl) {
+    return normalizedCurrentBaseUrl;
+  }
+  return normalizeBaseUrl(DISCONNECTED_ASSISTANT_BASE_URL);
+}
+
 async function ensureOfflineModelPrepared(
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
 ): Promise<void> {
+  if (getDisconnectedAssistantMode() !== "bundled_model") {
+    const status = getDisconnectedAssistantReadyState();
+    set({
+      offlineModelState: status.state,
+      offlineModelDetail: status.detail
+    });
+    return;
+  }
+
   const status = await offlineAssistant.ensureReady((state, detail) => {
     set({
       offlineModelState: state,
@@ -472,6 +564,49 @@ async function ensureOfflineModelPrepared(
     offlineModelState: status.state,
     offlineModelDetail: status.detail
   });
+}
+
+async function requestDisconnectedAssistantReply(messages: ChatMessage[], prompt: string, baseUrl: string): Promise<string> {
+  switch (getDisconnectedAssistantMode()) {
+    case "bundled_model":
+      return offlineAssistant.generateReply({
+        messages: buildOfflineContextMessages(messages, prompt)
+      });
+    case "cloud":
+      return cloudCompanion.generateReply(
+        resolveDisconnectedAssistantBaseUrl(baseUrl),
+        buildOfflineContextMessages(messages, prompt).map((message) => ({
+          role: message.role,
+          content: message.content
+        }))
+      );
+    default:
+      return buildNotesOnlyReply();
+  }
+}
+
+async function requestDisconnectedImportSummary(messages: ChatMessage[], draftTurns: string[], baseUrl: string): Promise<string> {
+  switch (getDisconnectedAssistantMode()) {
+    case "bundled_model":
+      return offlineAssistant.generateReply({
+        messages: [
+          {
+            role: "system",
+            content: "Summarize these offline mobile ideation notes for later desktop review. Keep it factual, concise, and focused on next steps."
+          },
+          {
+            role: "user",
+            content: draftTurns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")
+          }
+        ],
+        nPredict: 220,
+        temperature: 0.35
+      });
+    case "cloud":
+      return cloudCompanion.summarizeDraftTurns(resolveDisconnectedAssistantBaseUrl(baseUrl), draftTurns);
+    default:
+      return buildOfflineImportSummaryFallback(messages, draftTurns);
+  }
 }
 
 async function sendOfflineIdeationTurn(
@@ -494,7 +629,7 @@ async function sendOfflineIdeationTurn(
     sendingMessage: true,
     offlineMode: true,
     error: null,
-    notice: "Running on-device ideation while the desktop is unreachable."
+    notice: getDisconnectedTurnNotice()
   });
 
   await ensureOfflineModelPrepared(set);
@@ -562,22 +697,25 @@ async function sendOfflineIdeationTurn(
 
   try {
     const messages = get().messagesBySession[sessionId] ?? [];
-    const reply = await offlineAssistant.generateReply({
-      messages: buildOfflineContextMessages(messages, text),
-      onToken: (content) => {
-        const updatedAt = new Date().toISOString();
-        set((state) => ({
-          messagesBySession: pushLocalMessage(state, sessionId, {
-            ...((state.messagesBySession[sessionId] ?? []).find((item) => item.id === assistantMessageId) ?? assistantMessage),
-            content,
-            status: "streaming",
-            updatedAt
-          }),
-          voiceAssistantDraft: state.voiceSessionActive ? content : state.voiceAssistantDraft,
-          voiceSessionPhase: state.voiceSessionActive ? "processing" : state.voiceSessionPhase
-        }));
-      }
-    });
+    const reply =
+      getDisconnectedAssistantMode() === "bundled_model"
+        ? await offlineAssistant.generateReply({
+            messages: buildOfflineContextMessages(messages, text),
+            onToken: (content) => {
+              const updatedAt = new Date().toISOString();
+              set((state) => ({
+                messagesBySession: pushLocalMessage(state, sessionId, {
+                  ...((state.messagesBySession[sessionId] ?? []).find((item) => item.id === assistantMessageId) ?? assistantMessage),
+                  content,
+                  status: "streaming",
+                  updatedAt
+                }),
+                voiceAssistantDraft: state.voiceSessionActive ? content : state.voiceAssistantDraft,
+                voiceSessionPhase: state.voiceSessionActive ? "processing" : state.voiceSessionPhase
+              }));
+            }
+          })
+        : await requestDisconnectedAssistantReply(messages, text, get().baseUrl);
     const completedAt = new Date().toISOString();
     set((state) => ({
       sendingMessage: false,
@@ -661,8 +799,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   wakeControl: null,
   wakeRequesting: false,
   offlineMode: false,
-  offlineModelState: "missing",
-  offlineModelDetail: null,
+  offlineModelState: getDisconnectedAssistantReadyState().state,
+  offlineModelDetail: getDisconnectedAssistantReadyState().detail,
   offlineImportDrafts: {},
   offlineSummarizing: false,
   offlineImporting: false,
@@ -823,8 +961,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       pushAvailable: fcm.isAvailable(),
       realtimeConnected: false,
       offlineMode: false,
-      offlineModelState: offlineAssistant.getStatus().state,
-      offlineModelDetail: offlineAssistant.getStatus().detail,
+      offlineModelState: getDisconnectedAssistantReadyState().state,
+      offlineModelDetail: getDisconnectedAssistantReadyState().detail,
       notice: token ? "Restoring the saved desktop link." : null,
       booting: false
     });
@@ -932,8 +1070,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       wakeControl: null,
       wakeRequesting: false,
       offlineMode: false,
-      offlineModelState: "missing",
-      offlineModelDetail: null,
+      offlineModelState: getDisconnectedAssistantReadyState().state,
+      offlineModelDetail: getDisconnectedAssistantReadyState().detail,
       offlineImportDrafts: {},
       offlineSummarizing: false,
       offlineImporting: false,
@@ -1045,7 +1183,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({
           offlineMode: true,
           realtimeConnected: false,
-          notice: "Desktop unreachable. Cached chats and on-device ideation are still available.",
+          notice: getDisconnectedModeNotice(),
           error: null
         });
         await persistOfflineSnapshot(get);
@@ -1113,7 +1251,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             selectedSessionId: sessionId,
             view: "chat",
             offlineMode: true,
-            notice: "Desktop unreachable. Showing cached chat and offline ideation tools.",
+            notice: "Desktop unreachable. Showing cached chat and disconnected companion tools.",
             error: null
           });
           await persistOfflineSnapshot(get);
@@ -1350,7 +1488,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({
           offlineMode: true,
           realtimeConnected: false,
-          notice: "Desktop unreachable. Switching this turn to the on-device offline companion.",
+          notice: getDisconnectedTurnNotice(),
           error: null
         });
         await sendOfflineIdeationTurn(get, set);
@@ -1376,21 +1514,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ offlineSummarizing: true, notice: "Summarizing offline ideation for import review.", error: null });
     try {
       await ensureOfflineModelPrepared(set);
-      const summary = await offlineAssistant.generateReply({
-        messages: [
-          {
-            role: "system",
-            content:
-              "Summarize these offline mobile ideation notes for later desktop review. Keep it factual, concise, and focused on next steps."
-          },
-          {
-            role: "user",
-            content: draft.draftTurns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")
-          }
-        ],
-        nPredict: 220,
-        temperature: 0.35
-      });
+      const summary = await requestDisconnectedImportSummary(get().messagesBySession[sessionId] ?? [], draft.draftTurns, get().baseUrl);
       set((state) => ({
         offlineSummarizing: false,
         offlineImportDrafts: {
@@ -1999,7 +2123,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       view: "chat",
       notice: get().offlineMode
-        ? "Offline voice starting. Speak naturally and Freedom will answer from the on-device model."
+        ? getDisconnectedVoiceStartNotice()
         : prefersRealtimePrimaryVoice()
           ? `Realtime voice starting. ${FREEDOM_RUNTIME_NAME} is switching this phone onto the primary LiveKit voice path.`
           : `Voice loop starting. Speak naturally and ${FREEDOM_RUNTIME_NAME} will keep listening between turns.`,
@@ -2008,7 +2132,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       voiceTargetSessionId: targetSessionId,
       voiceMuted: false,
       listening: true,
-      voiceRuntimeMode: get().offlineMode ? "on_device_offline" : prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
+      voiceRuntimeMode: get().offlineMode ? getDisconnectedAssistantRuntimeMode() : prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
       voiceRuntimeBinding: null,
       voiceSessionPhase: "connecting",
       liveTranscript: "",
@@ -2863,7 +2987,7 @@ function connectSocket(
           realtimeConnected: false,
           offlineMode: state.sessions.length > 0,
           voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
-          notice: state.sessions.length > 0 ? "Realtime dropped. Cached chats and offline ideation stay available while reconnecting." : state.notice,
+          notice: state.sessions.length > 0 ? getDisconnectedModeNotice() : state.notice,
           error: state.sessions.length > 0 ? null : "Realtime connection dropped. Reconnecting now. Pull to refresh, tap Refresh Host, or reopen the app if it does not recover."
         }));
         scheduleReconnect(baseUrl, token, set, get);
@@ -2876,7 +3000,7 @@ function connectSocket(
         realtimeConnected: false,
         offlineMode: state.sessions.length > 0,
         voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
-        notice: state.sessions.length > 0 ? "Realtime is unavailable. Cached chats and offline ideation remain available." : state.notice,
+        notice: state.sessions.length > 0 ? getDisconnectedModeNotice() : state.notice,
         error: state.sessions.length > 0 ? null : error instanceof Error ? error.message : "Realtime connection setup failed."
       }));
       scheduleReconnect(baseUrl, token, set, get);
@@ -3319,7 +3443,7 @@ async function enterRepairMode(
     realtimeConnected: false,
     offlineMode: get().sessions.length > 0,
     listening: false,
-    voiceRuntimeMode: get().sessions.length > 0 ? "on_device_offline" : prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
+    voiceRuntimeMode: get().sessions.length > 0 ? getDisconnectedAssistantRuntimeMode() : prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
     voiceRuntimeBinding: null,
     voiceSessionActive: false,
     voiceTargetSessionId: null,
@@ -3333,7 +3457,7 @@ async function enterRepairMode(
     pendingExternalRequest: null,
     notice:
       get().sessions.length > 0
-        ? "Saved desktop settings were kept. Cached chats and offline ideation are still available while you repair the link."
+        ? "Saved desktop settings were kept. Cached chats and saved ideas are still available while you repair the link."
         : "Saved desktop settings were kept so you can repair this link quickly.",
     error: message,
     view: get().sessions.length > 0 ? "chat" : "start"

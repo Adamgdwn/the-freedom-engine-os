@@ -1,9 +1,9 @@
 import path from "node:path";
 import dotenv from "dotenv";
-import { createId } from "@freedom/core";
 import {
   buildThreadInstructions,
   buildTurnPrompt,
+  createId,
   getModelRouterConfig,
   planHostExecution,
   type HostAuthState,
@@ -49,8 +49,9 @@ const HOST_INTERRUPT_WAIT_MS = 2_000;
 
 export class DesktopHostRuntime {
   private readonly gatewayUrl = process.env.DESKTOP_GATEWAY_URL ?? "http://127.0.0.1:43111";
+  private readonly desktopDataDir = process.env.DESKTOP_DATA_DIR ?? ".local-data/desktop";
   private readonly gateway = new HttpGatewayClient(this.gatewayUrl);
-  private readonly stateStore = new HostStateStore(process.env.DESKTOP_DATA_DIR ?? ".local-data/desktop");
+  private readonly stateStore = new HostStateStore(this.desktopDataDir);
   private readonly codexBridge = new CodexBridge();
   private readonly routerConfig = getModelRouterConfig(process.env);
   private readonly localBridge = new CommandBridge(
@@ -75,7 +76,7 @@ export class DesktopHostRuntime {
   private ticking = false;
   private running = false;
   private workLoopPromise: Promise<void> | null = null;
-  private readonly voiceWorkerSupervisor = new VoiceWorkerSupervisor();
+  private readonly voiceWorkerSupervisor = new VoiceWorkerSupervisor(this.desktopDataDir);
 
   async start(): Promise<void> {
     const localState = await this.stateStore.read();
@@ -113,7 +114,7 @@ export class DesktopHostRuntime {
       void this.syncHeartbeat();
     }, 5000);
     this.running = true;
-    this.voiceWorkerSupervisor.start();
+    await this.voiceWorkerSupervisor.start();
     this.startWorkLoop();
 
     process.stdout.write(

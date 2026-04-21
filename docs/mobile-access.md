@@ -49,8 +49,12 @@ surface than a one-shot relay:
   final transcripts back into the shared session history, so ending and restarting Talk
   no longer wipes the current conversational context
 - if the paired desktop becomes unreachable after the app has cached chats, the phone can
-  stay in `Offline / On-device` mode for local ideation, drafting, summaries, and queued
-  import review instead of only throwing a connection error
+  stay usable in a disconnected mode instead of only throwing a connection error:
+  the normal slim release keeps cached chats plus saved-idea capture, builds with
+  `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` can route those turns through a web
+  companion, the phone prefers its current paired host URL before falling back to that
+  configured companion URL, and only explicitly requested builds bundle the heavy
+  on-device model
 - offline mobile work is now review-first and safe by design:
   importing it writes non-executing `system` notes into canonical history and drafts one
   explicit `Continue with Freedom` follow-up instead of auto-replaying offline turns into
@@ -105,6 +109,9 @@ Optional control knobs:
 
 - `DESKTOP_VOICE_WORKER_AUTOSTART=false` disables automatic worker launch
 - `DESKTOP_VOICE_WORKER_COMMAND=<custom command>` overrides the default worker command
+- `DESKTOP_DATA_DIR/voice-worker/worker.log` keeps the durable worker log
+- `DESKTOP_DATA_DIR/voice-worker/worker.lock.json` shows which desktop-host instance
+  currently owns the managed worker
 
 ## Launch Path
 
@@ -136,13 +143,20 @@ The companion install page remains:
 
 `http://pop-os.taildcb5c5.ts.net:43111/install`
 
+When the install page is opened from a reachable LAN URL instead of the Tailscale
+hostname, it now prefers the URL you actually opened for the pairing instructions,
+QR target, and APK link. The Tailscale URL remains the recovery path when local
+network routing is unavailable.
+
 ## APK Release Hygiene
 
 - Every distributed Android build must use a unique `versionCode`.
 - Bump `versionName` whenever you want the human-visible release label to change.
-- Use `npm run release:android-live` for the normal release path. It builds the Android APK,
-  publishes it to the currently live website-backed release directory, and verifies the
-  served `latest.apk` matches the local artifact.
+- Use `npm run release:android-live` for the normal slim release path. It builds the
+  Android APK, publishes it to the currently live website-backed release directory,
+  and verifies the served `latest.apk` matches the local artifact.
+- Use `npm run release:android-live-offline` only when you intentionally want the
+  separate heavy build that bundles the on-device model.
 - If the APK is already built and only the live website needs to be refreshed, run
   `npm run publish:android-release`.
 - The live install page should expose a build-specific APK identifier and filename so you
@@ -152,6 +166,10 @@ The companion install page remains:
   artifact by size or checksum. The publish script performs that verification automatically.
 - If a phone appears to "start where it left off" after reinstalling, check for
   preserved app storage or a restored paired device token before assuming the APK is stale.
+- If the phone says it is offline while both devices are on the same Wi-Fi, verify the
+  app is paired against the same LAN or Tailscale URL that the install page showed when
+  you opened it. The URL the phone stores matters more than the fact that both devices
+  are on the same network.
 - If premium voice connects but stalls without hearing your speech, verify the paired
   desktop worker is reading secrets from repo-root `.env`, confirm the desktop-host logs
   show `[voice-worker] starting ...`, and reinstall the latest APK so the latest Android

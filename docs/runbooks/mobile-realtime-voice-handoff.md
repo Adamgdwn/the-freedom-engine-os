@@ -32,18 +32,24 @@ offline fallback behavior:
 
 ## Critical Truth
 
-The premium path is implemented in code but it is not fully live on this machine yet
- because the required realtime credentials are still missing from this repo runtime:
+The premium path is live in code and depends on the paired desktop actually owning a
+healthy Python LiveKit/OpenAI worker at runtime.
+
+The required repo-root `.env` values are still:
 
 - `LIVEKIT_URL`
 - `LIVEKIT_API_KEY`
 - `LIVEKIT_API_SECRET`
 - `OPENAI_API_KEY`
 
-Without those values, the new APK will fall back to the older device voice loop or
-on-device offline ideation when the desktop is unreachable.
+Without those values, the APK falls back to the older device voice loop or the
+disconnected companion path when the desktop is unreachable.
 
-That is the main blocker now. It is no longer primarily a code blocker.
+With those values present, the most common failure is now desktop-side worker
+ownership or startup health, not missing mobile code. Check:
+
+- `DESKTOP_DATA_DIR/voice-worker/worker.log`
+- `DESKTOP_DATA_DIR/voice-worker/worker.lock.json`
 
 ## Files To Know First
 
@@ -141,6 +147,18 @@ Expected desktop-host log line:
 
 ```text
 [voice-worker] starting uv run --with-requirements requirements.txt agent.py dev
+```
+
+The desktop host also now writes a durable worker log at:
+
+```text
+DESKTOP_DATA_DIR/voice-worker/worker.log
+```
+
+and the current worker ownership lock at:
+
+```text
+DESKTOP_DATA_DIR/voice-worker/worker.lock.json
 ```
 
 ### 3. Confirm the gateway health endpoint

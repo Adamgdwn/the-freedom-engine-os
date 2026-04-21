@@ -78,10 +78,13 @@ function formatRealtimeVoiceError(error: unknown): string {
 }
 
 export class RealtimeVoiceService {
+  private static readonly responderTimeoutMs = 12_000;
   private room: Room | null = null;
   private callbacks: RealtimeVoiceCallbacks | null = null;
   private disconnectExpected = false;
   private audioSessionStarted = false;
+  private responderWatchdog: ReturnType<typeof setTimeout> | null = null;
+  private receivedWorkerSignal = false;
 
   async isAvailable(): Promise<boolean> {
     return true;
@@ -128,6 +131,7 @@ export class RealtimeVoiceService {
         if (this.room !== room) {
           return;
         }
+        this.clearResponderWatchdog();
         const expected = this.disconnectExpected;
         this.room = null;
         this.callbacks = null;
@@ -138,12 +142,16 @@ export class RealtimeVoiceService {
         if (this.room !== room) {
           return;
         }
+        this.receivedWorkerSignal = true;
+        this.clearResponderWatchdog();
         this.handleDataMessage(payloadBuffer);
       });
 
       await room.prepareConnection(payload.wsUrl, payload.token).catch(() => undefined);
       await room.connect(payload.wsUrl, payload.token);
       await room.localParticipant.setMicrophoneEnabled(true, MIC_CAPTURE_OPTIONS);
+      this.receivedWorkerSignal = false;
+      this.startResponderWatchdog(room, callbacks);
 
       callbacks.onConnected(payload.binding);
       callbacks.onStateChange("listening");
@@ -179,6 +187,8 @@ export class RealtimeVoiceService {
     const room = this.room;
     this.room = null;
     this.callbacks = null;
+    this.clearResponderWatchdog();
+    this.receivedWorkerSignal = false;
     if (room) {
       room.disconnect();
     }
@@ -210,5 +220,26 @@ export class RealtimeVoiceService {
         final: payload.final !== false
       });
     }
+  }
+
+  private startResponderWatchdog(room: Room, callbacks: RealtimeVoiceCallbacks): void {
+    this.clearResponderWatchdog();
+    this.responderWatchdog = setTimeout(() => {
+      if (this.room !== room || this.receivedWorkerSignal) {
+        return;
+      }
+      callbacks.onError(
+        "Freedom joined the voice room, but the desktop voice worker did not answer. Stop Talk and try again."
+      );
+      void this.stopSession();
+    }, RealtimeVoiceService.responderTimeoutMs);
+  }
+
+  private clearResponderWatchdog(): void {
+    if (!this.responderWatchdog) {
+      return;
+    }
+    clearTimeout(this.responderWatchdog);
+    this.responderWatchdog = null;
   }
 }

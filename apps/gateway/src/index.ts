@@ -45,6 +45,13 @@ const host = process.env.GATEWAY_HOST ?? "0.0.0.0";
 const dataDir = process.env.GATEWAY_DATA_DIR ?? ".local-data/gateway";
 const store = new GatewayStore(dataDir);
 const subscriptions = new Map<string, Set<import("ws").WebSocket>>();
+const mobileCompanionReplyPrompt =
+  "You are Freedom's internet-backed mobile companion when the desktop link is unavailable. " +
+  "You can chat, brainstorm ideas, answer questions, and help the operator save notes for later sync. " +
+  "Do not claim live desktop access, tool execution, or canonical sync. Keep replies concise and practical.";
+const mobileCompanionSummaryPrompt =
+  "Summarize these disconnected mobile notes for later desktop review. Keep the summary factual, concise, and focused on next steps.";
+const mobileCompanionUpstreamTimeoutMs = 20_000;
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
   res.statusCode = statusCode;
@@ -70,6 +77,53 @@ async function readJson<T>(req: IncomingMessage): Promise<T> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return chunks.length ? (JSON.parse(Buffer.concat(chunks).toString("utf8")) as T) : ({} as T);
+}
+
+async function requestMobileCompanionCompletion(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>, temperature: number): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is not configured for the mobile web companion.");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), mobileCompanionUpstreamTimeoutMs);
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: process.env.MOBILE_DISCONNECTED_ASSISTANT_MODEL?.trim() || "gpt-4.1-mini",
+        temperature,
+        messages
+      }),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Mobile companion request timed out after ${Math.round(mobileCompanionUpstreamTimeoutMs / 1000)} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const payload = (await response.json()) as {
+    error?: { message?: string };
+    choices?: Array<{ message?: { content?: string | null } }>;
+  };
+  if (!response.ok) {
+    throw new Error(payload.error?.message || `Mobile companion request failed (${response.status}).`);
+  }
+
+  const text = payload.choices?.[0]?.message?.content?.trim();
+  if (!text) {
+    throw new Error("The mobile web companion returned an empty reply.");
+  }
+  return text;
 }
 
 function readBearer(req: IncomingMessage): string {
@@ -158,6 +212,58 @@ const server = createServer(async (req, res) => {
     if (method === "GET" && url.pathname === "/api/desktop/overview") {
       const overview = await store.getOverview();
       sendJson(res, 200, await buildDesktopOverviewResponse(req, overview));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/api/mobile-companion") {
+      const parsed = await readJson<{
+        kind?: unknown;
+        messages?: Array<{ role?: unknown; content?: unknown }>;
+        draftTurns?: unknown;
+      }>(req);
+
+      if (parsed.kind === "reply" && Array.isArray(parsed.messages)) {
+        const text = await requestMobileCompanionCompletion(
+          [
+            { role: "system", content: mobileCompanionReplyPrompt },
+            ...parsed.messages.flatMap((message) => {
+              const role = message.role;
+              const content = typeof message.content === "string" ? message.content.trim() : "";
+              if (role === "system" || role === "user" || role === "assistant") {
+                return content ? [{ role: role as "system" | "user" | "assistant", content }] : [];
+              }
+              return [];
+            })
+          ],
+          0.55
+        );
+        sendJson(res, 200, { text });
+        return;
+      }
+
+      if (parsed.kind === "summary" && Array.isArray(parsed.draftTurns)) {
+        const draftTurns = parsed.draftTurns
+          .flatMap((turn) => (typeof turn === "string" ? [turn.trim()] : []))
+          .filter(Boolean);
+        if (!draftTurns.length) {
+          sendJson(res, 400, { error: "No draft turns were provided." });
+          return;
+        }
+        const text = await requestMobileCompanionCompletion(
+          [
+            { role: "system", content: mobileCompanionSummaryPrompt },
+            {
+              role: "user",
+              content: draftTurns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")
+            }
+          ],
+          0.35
+        );
+        sendJson(res, 200, { text });
+        return;
+      }
+
+      sendJson(res, 400, { error: "Unsupported mobile companion request." });
       return;
     }
 

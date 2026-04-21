@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 dotenv.config({ path: path.join(repoRoot, ".env"), override: false });
+const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED?.trim() === "true";
 
 const defaultModelFile = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
 const defaultModelUrl =
@@ -19,6 +20,13 @@ const legacyTargetPath = path.join(legacyAssetDirectory, modelFileName);
 const sourcePath = process.env.MOBILE_OFFLINE_MODEL_LOCAL_PATH?.trim() || "";
 const modelUrl = process.env.MOBILE_OFFLINE_MODEL_URL?.trim() || defaultModelUrl;
 const huggingFaceToken = process.env.HF_TOKEN?.trim() || process.env.HUGGINGFACE_TOKEN?.trim() || "";
+
+if (!bundledOfflineEnabled) {
+  await removeIfPresent(targetPath);
+  await removeIfPresent(`${targetPath}.download`);
+  process.stdout.write("Bundled offline model disabled for this Android build.\n");
+  process.exit(0);
+}
 
 await fsp.mkdir(assetDirectory, { recursive: true });
 
@@ -98,6 +106,14 @@ async function fileExists(filePath) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function removeIfPresent(filePath) {
+  try {
+    await fsp.rm(filePath, { force: true });
+  } catch {
+    // Ignore cleanup failures for optional assets.
   }
 }
 

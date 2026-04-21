@@ -13,74 +13,20 @@ For a fast operator-facing view of what is actually live right now, use
 
 ## Components
 
-- App shell:
-  Next.js App Router interface for Portfolio Home, Venture Detail, Workflow Lab,
-  Agent Control, Governance Console, Evidence Room, and Weekly Review.
-- Domain seed layer:
-  Typed portfolio, workflow, governance, and execution entities in `src/lib/seed-data.ts`.
-- Scoring engine:
-  Weighted venture scoring plus freedom metrics in `src/lib/scoring.ts`.
-- Recommendation layer:
-  Evidence-backed heuristics that translate scores, workflow state, and governance state
-  into next-step recommendations.
-- Governance fabric:
-  Policies, approvals, overrides, human registry, tool registry, and execution logs
-  surfaced in the UI and represented in the schema.
-- Freedom Connect:
-  Desktop shell and phone companion session identity, connect events, outbound policy,
-  and governed builder routing surfaced as Freedom-owned runtime state.
-- Freedom email layer:
-  Trusted outbound recipient registry, confirmation-gated draft flow, and delivery audit
-  now surfaced directly in the Next.js control plane at `/communications`.
-- Learning Registry:
-  Capability internalization tracking — state, validation records, builder dependencies,
-  safety notes, and learning history at `/learning-registry`.
-- Personality:
-  Stable Freedom persona artifact, pending persona-adjustment approvals, active overlays,
-  revision/retirement requests, and resolved persona history at `/personality`.
-- Model Router:
-  Local-first model tier policy, escalation request queue, provider recommendation,
-  operator-selectable provider choices, and resolved decision audit trail at `/model-router`.
-- Web voice layer:
-  Shared React voice session context, LiveKit room session, interrupt/task data channel,
-  and Python Realtime worker coordination surfaced in the Next.js operator workbench
-  voice console and mobile voice action surfaces.
-- Desktop voice-worker supervision:
-  the desktop host now launches and supervises the Python LiveKit/OpenAI worker from
-  `agents/freedom_agent` when premium voice env is present, instead of relying on a
-  separately managed manual terminal session.
-- Conversation-to-build lane:
-  governed intake path that turns app conversations into roadmap candidates, business
-  cases, approval-bearing Pop!_OS build sessions, and explicit report-back artifacts.
-- Voice partner autonomy layer:
-  The Python Freedom worker carries an explicit operating-policy prompt plus read/write
-  coordination tools for open tasks, durable learning, pending programming requests,
-  trusted recipients, approved persona overlays, parked-task updates, and approval-gated
-  email, programming, persona-adjustment, overlay-revision, and overlay-retirement actions.
-  It can now also inspect governed repo control files and tool manifests from approved
-  roots, and hand approved programming work into the desktop shell/Codex lane.
-- Persistence boundary:
-  Supabase migrations under `supabase/migrations/` mirror both the original control-plane
-  entities and the Freedom Connect runtime entities.
-- Local runtime state bootstrap:
-  desktop-host and gateway seed missing local `.local-data` state files from committed,
-  sanitized `*.example.json` fixtures, then continue writing live machine-specific state
-  outside version control.
-- Durable memory layer:
-  Server-only Supabase admin client, memory API routes, and local backup/restore scripts
-  preserve learning signals, parked voice tasks, approval-gated self-programming requests,
-  and approval-gated persona overlays.
-- Outbound communication layer:
-  Server-side Resend delivery, Supabase-backed trusted recipients, and recent delivery
-  audit records bridge the current web/voice Freedom surface to explicit external email.
-- Native runtime surfaces (npm workspace packages):
-  `apps/mobile` — React Native Android companion (`@freedom/mobile`);
-  `apps/gateway` — Node.js pairing and wake gateway (`@freedom/gateway`);
-  `apps/desktop` — Electron shell (`@freedom/desktop`);
-  `apps/desktop-host` — routed desktop execution host / VS Code extension with local
-  command lane plus Codex bridge fallback (`@freedom/desktop-host`);
-  `apps/wake-relay` — Wake-on-LAN relay server (`@freedom/wake-relay`);
-  `packages/shared`, `packages/core`, `packages/provider-adapters` — shared runtime contracts.
+- Web control plane:
+  Next.js App Router UI and server routes under `src/`; feature-level behavior is tracked
+  in `docs/current-capabilities.md` and the per-feature specs under `docs/specs/`.
+- Voice runtime:
+  React voice surfaces plus the Python LiveKit/OpenAI worker under `agents/freedom_agent`;
+  see `docs/voice-realtime-architecture.md` and `docs/specs/voice-layer-v1-spec.md`.
+- Device and host runtime:
+  `apps/mobile`, `apps/gateway`, `apps/desktop`, `apps/desktop-host`, and
+  `apps/wake-relay` provide the phone, pairing, desktop-shell, host, and wake surfaces.
+- Shared runtime contracts:
+  `packages/shared` holds shared contracts, runtime helpers, and cross-surface utility code.
+- Persistence and governance:
+  Supabase migrations live under `supabase/migrations/`; governed operating rules live in
+  `project-control.yaml`, `AI_BOOTSTRAP.md`, `docs/manual.md`, and `docs/runbooks/operations.md`.
 
 ## Data Flow
 

@@ -8,6 +8,8 @@ coverage
 dist
 npm-debug.log*
 *.tsbuildinfo
+__pycache__/
+*.pyc
 
 # Mobile build artifacts
 apps/mobile/android/app/build/

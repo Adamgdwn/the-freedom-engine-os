@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import path from "node:path";
-import { isPathInsideRoots } from "@freedom/core";
+import { isPathInsideRoots } from "@freedom/shared/security/paths";
 
 export async function resolveApprovedRoots(roots: string[]): Promise<string[]> {
   const resolvedRoots = await Promise.all(roots.map((root) => realpath(root)));
