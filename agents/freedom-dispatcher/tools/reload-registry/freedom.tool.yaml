@@ -1,0 +1,74 @@
+schema_version: 1
+id: dispatcher-reload-registry
+name: "Dispatcher: reload registry"
+description: |
+  Rescans ~/code/** for freedom.tool.yaml files and reloads the dispatcher's
+  in-memory tool registry without restarting the daemon. Use after adding or
+  editing a manifest so Freedom picks it up in the current session.
+version: "1.0.0"
+owner: adamgoodwin@shaw.ca
+tags: [meta, dispatcher, self-management]
+
+intent:
+  summary: "Make the dispatcher pick up new or edited tool manifests."
+  triggers:
+    - "reload tools"
+    - "rescan manifests"
+    - "refresh the dispatcher"
+    - "pick up the new tool"
+  categories: [self-management, meta]
+
+invocation:
+  kind: subprocess
+  command:
+    - "/usr/bin/curl"
+    - "-sS"
+    - "-X"
+    - "POST"
+    - "http://127.0.0.1:4317/admin/reload"
+  cwd: "/home/adamgoodwin/code/agents/the-freedom-engine-os/agents/freedom-dispatcher"
+  params_transport: argv
+  env_passthrough: []
+  timeout_seconds: 10
+  streaming: false
+
+parameters:
+  required: []
+  properties: {}
+
+output:
+  kind: json_stdout
+  schema:
+    type: object
+    required: [ok, tool_count]
+    properties:
+      ok:
+        type: boolean
+      tool_count:
+        type: integer
+        description: "Number of tools now registered."
+      errors:
+        type: array
+        items:
+          type: string
+
+governance:
+  autonomy:
+    level: A2
+    upgrade_policy: operator-verbal
+    last_changed_by: operator
+    last_changed_at: "2026-04-20T00:00:00Z"
+    last_changed_reason: "Read-only meta-tool. Safe to fire silently."
+  preconditions: []
+  notes: "Only mutates the dispatcher's in-memory registry. No disk writes."
+
+side_effects:
+  filesystem_writes: []
+  network_egress:
+    - "http://127.0.0.1:4317 (loopback only)"
+  database_writes: []
+  process_spawn: []
+
+audit:
+  correlation_id_param: audit_correlation_id
+  log_sink: stderr

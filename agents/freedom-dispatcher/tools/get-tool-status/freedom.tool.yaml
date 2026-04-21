@@ -1,0 +1,86 @@
+schema_version: 1
+id: dispatcher-get-tool-status
+name: "Dispatcher: tool status"
+description: |
+  Returns the dispatcher's current view of all registered tools or a specific
+  tool: id, name, autonomy level, manifest path. Use when asked what tools
+  Freedom has, or to check if a newly added tool was picked up.
+version: "1.0.0"
+owner: adamgoodwin@shaw.ca
+tags: [meta, dispatcher, observability]
+
+intent:
+  summary: "List what tools Freedom has available right now."
+  triggers:
+    - "what tools do you have"
+    - "is that tool registered"
+    - "show me the tool registry"
+    - "what can you call"
+  categories: [self-management, observability]
+
+invocation:
+  kind: subprocess
+  command:
+    - "python3"
+    - "-c"
+    - |
+      import sys, json
+      from urllib import request as r
+      tool_id = sys.argv[1] if len(sys.argv) > 1 else ""
+      url = "http://127.0.0.1:4317/admin/tools" + (f"?id={tool_id}" if tool_id else "")
+      with r.urlopen(r.Request(url), timeout=5) as resp:
+          print(resp.read().decode())
+    - ""
+  cwd: "/home/adamgoodwin/code/agents/the-freedom-engine-os/agents/freedom-dispatcher"
+  params_transport: argv
+  env_passthrough: []
+  timeout_seconds: 5
+  streaming: false
+
+parameters:
+  required: []
+  properties:
+    tool_id:
+      type: string
+      description: "Specific tool id to inspect. Omit to list all tools."
+      default: ""
+
+output:
+  kind: json_stdout
+  schema:
+    type: object
+    required: [ok, tools]
+    properties:
+      ok:
+        type: boolean
+      tools:
+        type: array
+        items:
+          type: object
+          properties:
+            id: {type: string}
+            name: {type: string}
+            autonomy_level: {type: string}
+            manifest_path: {type: string}
+            tags: {type: array, items: {type: string}}
+
+governance:
+  autonomy:
+    level: A2
+    upgrade_policy: operator-verbal
+    last_changed_by: operator
+    last_changed_at: "2026-04-20T00:00:00Z"
+    last_changed_reason: "Pure read-only inspection."
+  preconditions: []
+  notes: "Read-only. No disk writes, no side effects."
+
+side_effects:
+  filesystem_writes: []
+  network_egress:
+    - "http://127.0.0.1:4317 (loopback only)"
+  database_writes: []
+  process_spawn: []
+
+audit:
+  correlation_id_param: audit_correlation_id
+  log_sink: stderr

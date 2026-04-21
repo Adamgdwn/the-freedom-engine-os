@@ -1,0 +1,104 @@
+schema_version: 1
+id: dispatcher-update-tool-autonomy
+name: "Dispatcher: update tool autonomy"
+description: |
+  Rewrites the governance.autonomy.level in a target tool's freedom.tool.yaml,
+  records the operator's reason and a timestamp, then reloads the registry.
+  This is how Freedom honors "always do this without asking" or "start asking
+  me again before doing X."
+version: "1.0.0"
+owner: adamgoodwin@shaw.ca
+tags: [meta, dispatcher, autonomy, self-evolving]
+
+intent:
+  summary: "Change a tool's autonomy level based on what the operator said."
+  triggers:
+    - "always do this without asking"
+    - "stop asking me about"
+    - "just do it automatically"
+    - "require approval for"
+    - "ask me before you"
+  categories: [self-management, autonomy]
+
+invocation:
+  kind: subprocess
+  command:
+    - "python3"
+    - "-c"
+    - |
+      import sys, json
+      from urllib import request as r
+      payload = json.loads(sys.stdin.read())
+      data = json.dumps(payload).encode()
+      req = r.Request(
+          "http://127.0.0.1:4317/admin/autonomy",
+          data=data,
+          headers={"Content-Type": "application/json"},
+          method="POST",
+      )
+      with r.urlopen(req, timeout=10) as resp:
+          print(resp.read().decode())
+  cwd: "/home/adamgoodwin/code/agents/the-freedom-engine-os/agents/freedom-dispatcher"
+  params_transport: stdin_json
+  env_passthrough: []
+  timeout_seconds: 10
+  streaming: false
+
+parameters:
+  required:
+    - tool_id
+    - new_level
+    - reason
+  properties:
+    tool_id:
+      type: string
+      description: "Id of the tool whose autonomy level should change."
+    new_level:
+      type: string
+      description: "New autonomy level to set."
+      enum: [A0, A1, A2]
+    reason:
+      type: string
+      description: "Operator's exact words or paraphrase explaining why the level is changing."
+      minLength: 4
+
+output:
+  kind: json_stdout
+  schema:
+    type: object
+    required: [ok, tool_id, previous_level, new_level]
+    properties:
+      ok: {type: boolean}
+      tool_id: {type: string}
+      previous_level: {type: string}
+      new_level: {type: string}
+
+governance:
+  autonomy:
+    level: A2
+    upgrade_policy: locked
+    last_changed_by: operator
+    last_changed_at: "2026-04-20T00:00:00Z"
+    last_changed_reason: |
+      Locked A2 so Freedom can honor operator autonomy changes in-conversation.
+      Locked against further auto-change to prevent recursive autonomy escalation.
+  preconditions:
+    - kind: tool_manifest_upgrade_policy_allows
+      tool_id_param: tool_id
+      on_fail: "That tool's manifest has upgrade_policy: locked. Edit it manually in the control plane."
+  notes: |
+    This is the self-evolving hinge of the tool system. A2 so Freedom can act
+    immediately when the operator says "stop asking." The target tool's own
+    upgrade_policy is the authoritative gate — this tool cannot override locked.
+
+side_effects:
+  filesystem_writes:
+    - "The target tool's freedom.tool.yaml (governance.autonomy block)"
+  network_egress:
+    - "http://127.0.0.1:4317 (loopback only)"
+  database_writes: []
+  process_spawn: []
+
+audit:
+  correlation_id_param: audit_correlation_id
+  log_sink: stderr

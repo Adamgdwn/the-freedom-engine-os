@@ -1614,7 +1614,7 @@ async def scaffold_new_project(
     if tool_info is None:
         return (
             "The Freedom Dispatcher is not running. "
-            "Start it with: bash ~/code/agents/freedom-dispatcher/start.sh"
+            "Start it with: bash ~/code/agents/the-freedom-engine-os/agents/freedom-dispatcher/start.sh"
         )
 
     tools_list = tool_info.get("tools", [])
