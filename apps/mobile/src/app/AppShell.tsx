@@ -87,7 +87,7 @@ export function AppShell(): React.JSX.Element {
     );
   }
 
-  if (!store.token) {
+  if (!store.token && store.sessions.length === 0) {
     return (
       <SafeAreaView style={styles.root} edges={["top", "left", "right", "bottom"]}>
         <PairingScreen store={store} keyboardHeight={keyboardHeight} insetBottom={insets.bottom} />
@@ -109,7 +109,11 @@ export function AppShell(): React.JSX.Element {
 
   const handleTalkPress = () => {
     if (store.view !== "chat") {
-      handleNavPress("chat");
+      const targetSessionId = store.selectedSessionId ?? store.sessions[0]?.id ?? null;
+      store.setView("chat");
+      if (targetSessionId && store.selectedSessionId !== targetSessionId) {
+        store.selectSession(targetSessionId).catch((error) => console.warn(error));
+      }
     }
     store.toggleListening().catch((error) => console.warn(error));
   };
@@ -526,8 +530,8 @@ function voiceActionCopy(store: AppState): { label: string; hint: string } {
   switch (store.voiceSessionPhase) {
     case "assistant-speaking":
       return {
-        label: "Interrupt Freedom",
-        hint: "Stop the reply and jump back into the conversation."
+        label: "End Voice",
+        hint: "End the live voice loop, or speak over Freedom to interrupt naturally."
       };
     case "processing":
       return {

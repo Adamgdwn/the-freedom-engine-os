@@ -26,6 +26,7 @@
     "expo-modules-core": "^56.0.0-canary-20260409-6fc2991",
     "expo-speech": "^56.0.0-canary-20260409-6fc2991",
     "livekit-client": "^2.18.2",
+    "llama.rn": "^0.12.0-rc.9",
     "react": "19.2.3",
     "react-native": "0.84.1",
     "react-native-keychain": "^10.0.0",

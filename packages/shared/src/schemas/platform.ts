@@ -40,7 +40,7 @@ export const transportSecuritySchema = z.enum(["secure", "insecure", "unknown"])
 export const outboundProviderSchema = z.enum(["none", "resend"]);
 export const outboundChannelSchema = z.enum(["email"]);
 export const wakeRequestStatusSchema = z.enum(["sent", "awake", "timeout", "error"]);
-export const voiceRuntimeModeSchema = z.enum(["realtime_primary", "device_fallback"]);
+export const voiceRuntimeModeSchema = z.enum(["realtime_primary", "device_fallback", "on_device_offline"]);
 export const voiceTransportSchema = z.enum(["livekit_webrtc", "device_local"]);
 export const assistantVoicePresetSchema = z.enum(assistantVoicePresetIds);
 export const voiceGenderPresentationSchema = z.enum(voiceGenderPresentationIds);
@@ -220,6 +220,7 @@ export const chatMessageSchema = z.object({
   content: z.string(),
   status: chatMessageStatusSchema,
   errorMessage: z.string().nullable(),
+  clientRequestId: z.string().min(1).max(160).nullable().optional(),
   inputMode: inputModeSchema.nullable().optional(),
   responseStyle: responseStyleSchema.nullable().optional(),
   transcriptPolished: z.boolean().nullable().optional(),
@@ -349,6 +350,20 @@ export const postMessageRequestSchema = z.object({
   inputMode: inputModeSchema.optional(),
   responseStyle: responseStyleSchema.optional(),
   transcriptPolished: z.boolean().optional()
+});
+
+export const offlineImportRequestSchema = z.object({
+  clientImportId: z.string().min(1).max(160),
+  summary: z.string().min(1).max(16000),
+  draftTurns: z.array(z.string().min(1).max(8000)).min(1).max(50),
+  createdAt: z.string().datetime(),
+  source: z.literal("mobile_offline")
+});
+
+export const offlineImportResponseSchema = z.object({
+  session: chatSessionSchema,
+  messages: z.array(chatMessageSchema),
+  imported: z.boolean()
 });
 
 export const hostHeartbeatRequestSchema = z.object({
@@ -574,6 +589,8 @@ export type PairingCompleteResponse = z.infer<typeof pairingCompleteResponseSche
 export type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>;
 export type UpdateSessionRequest = z.infer<typeof updateSessionRequestSchema>;
 export type PostMessageRequest = z.infer<typeof postMessageRequestSchema>;
+export type OfflineImportRequest = z.infer<typeof offlineImportRequestSchema>;
+export type OfflineImportResponse = z.infer<typeof offlineImportResponseSchema>;
 export type HostHeartbeatRequest = z.infer<typeof hostHeartbeatRequestSchema>;
 export type HostWorkMessage = z.infer<typeof hostWorkMessageSchema>;
 export type HostWorkInterrupt = z.infer<typeof hostWorkInterruptSchema>;

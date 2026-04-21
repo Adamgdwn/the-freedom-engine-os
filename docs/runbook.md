@@ -19,9 +19,24 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   verify Codex login, Tailscale reachability, and that Freedom Engine's repo root is
   present in `DESKTOP_APPROVED_ROOTS`.
 - Premium mobile voice connects but does not answer:
-  verify repo-root `.env` contains the LiveKit and OpenAI keys, confirm only one
-  `python agent.py dev` worker is running, and reinstall the latest Android build so
-  the speech-service selection fix is on-device.
+  verify repo-root `.env` contains `LIVEKIT_URL`, `LIVEKIT_API_KEY`,
+  `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY`, then confirm the desktop-host log shows
+  `[voice-worker] starting ...` and later worker room-join output. The desktop host now
+  autostarts this worker; if those log lines are missing, check
+  `DESKTOP_VOICE_WORKER_AUTOSTART` and `DESKTOP_VOICE_WORKER_COMMAND` before changing
+  the phone build.
+- Premium mobile voice hears you but stays stuck on `Listening`:
+  treat this as a desktop-side worker/runtime issue first, not a phone UI problem. Check
+  that the LiveKit worker actually joined the room, then start a fresh `Talk` session.
+- Two voices answer after an interrupt:
+  verify the phone is on Android `0.2.68 (75)` or later. That build suppresses the
+  phone-local auto-read path during active realtime sessions and clears any local speech
+  queue when realtime starts or is interrupted.
+- Offline mobile ideation is available but import looks unsafe:
+  verify the app is in `Offline / On-device`, confirm the session shows an offline
+  import draft, and use the review/import flow. The phone should import summary notes and
+  draft turns as non-executing `system` messages only; it must not batch replay offline
+  turns into live desktop execution.
 - Freedom memory looks missing or stale:
   verify `SUPABASE_SERVICE_ROLE_KEY`, confirm the latest memory migration is applied, and
   restore from the latest local backup if needed.
@@ -38,6 +53,8 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Supabase service-role access for durable Freedom memory persistence and restore
 - GitHub workflow access for future code-control integration
 - Freedom desktop-host and gateway for paired mobile access to the local workstation
+- LiveKit/OpenAI voice-worker runtime under `agents/freedom_agent` for premium mobile
+  realtime `Talk`
 
 ## Recovery
 
@@ -52,10 +69,18 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
    or update an ADR before re-releasing.
 6. If phone access breaks, fall back to direct desktop use of the web app and recover the
    Freedom desktop-host and gateway separately.
-7. If premium mobile voice still stalls after reconnecting, stop stale LiveKit workers,
-   restart one clean worker from `agents/freedom_agent`, and start a fresh room from the
-   phone instead of reusing an already-stuck session.
-8. If Freedom has been left to work between sessions, require a morning report that states:
+7. If premium mobile voice still stalls after reconnecting, inspect the desktop-host logs
+   first. The host should supervise the worker automatically. If needed, restart the host
+   so it can relaunch the worker cleanly, or run the custom worker command from
+   `DESKTOP_VOICE_WORKER_COMMAND` manually from `agents/freedom_agent` to isolate env or
+   dependency problems.
+8. If a desktop-host restart leaves queued or streaming turns in a bad state, refresh the
+   host registration and let the gateway recover orphaned tasks before creating more
+   duplicate turns from the phone.
+9. If the phone must continue while the desktop is unreachable, keep the conversation in
+   offline mode and import the notes later instead of trying to replay old offline turns
+   directly into a live session.
+10. If Freedom has been left to work between sessions, require a morning report that states:
    what moved in the Pop!_OS build lane,
    what was done autonomously,
    what approvals were assumed or used,

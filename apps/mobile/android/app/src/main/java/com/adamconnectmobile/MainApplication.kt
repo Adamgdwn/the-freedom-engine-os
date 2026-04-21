@@ -8,6 +8,7 @@ import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeHost
+import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.facebook.react.soloader.OpenSourceMergedSoMapping
@@ -16,16 +17,17 @@ import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ExpoReactHostFactory
 
 class MainApplication : Application(), ReactApplication {
+  private val appPackages: List<ReactPackage> by lazy {
+    PackageList(this).packages.apply {
+      add(OfflineModelPackage())
+    }
+  }
 
   override val reactNativeHost: ReactNativeHost =
       object : DefaultReactNativeHost(this) {
         override fun getUseDeveloperSupport(): Boolean = BuildConfig.DEBUG
 
-        override fun getPackages() =
-            PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
-            }
+        override fun getPackages() = appPackages
 
         override fun getJSMainModuleName(): String = "index"
 
@@ -35,7 +37,7 @@ class MainApplication : Application(), ReactApplication {
       }
 
   override val reactHost: ReactHost
-    get() = ExpoReactHostFactory.getDefaultReactHost(applicationContext, PackageList(this).packages)
+    get() = ExpoReactHostFactory.getDefaultReactHost(applicationContext, appPackages)
 
   override fun onCreate() {
     super.onCreate()

@@ -387,9 +387,8 @@ export class TtsService {
   }
 
   private defaultBackendOrder(): SpeechBackend[] {
-    // Android has been more reliable with the native TTS bridge than Expo speech
-    // for continuous companion-mode replies, so prefer it first and fall back only
-    // when the native engine is unavailable.
+    // Prefer Android's richer native TTS voices first, and keep Expo speech as
+    // the fallback when the native bridge is unavailable or fails to start.
     return Platform.OS === "android" ? ["react-native-tts", "expo-speech"] : ["react-native-tts", "expo-speech"];
   }
 
@@ -477,6 +476,7 @@ export class TtsService {
     if (this.lastAttemptedBackend) {
       this.lastSuccessfulBackend = this.lastAttemptedBackend;
     }
+    console.info(`[FreedomTTS] start backend=${this.lastAttemptedBackend ?? "unknown"}`);
     this.handlers.onStart?.();
   }
 
@@ -485,6 +485,7 @@ export class TtsService {
       throw new Error("Expo speech is unavailable.");
     }
 
+    console.info("[FreedomTTS] speak backend=expo-speech");
     this.expoSpeech.speak(text, {
       language: this.expoVoice?.language ?? "en-US",
       ...(this.expoVoice?.identifier ? { voice: this.expoVoice.identifier } : {}),
@@ -503,6 +504,7 @@ export class TtsService {
       throw new Error("Android text-to-speech is unavailable.");
     }
 
+    console.info("[FreedomTTS] speak backend=react-native-tts");
     this.reactNativeTts.speak(text, {
       androidParams: {
         KEY_PARAM_STREAM: "STREAM_MUSIC",

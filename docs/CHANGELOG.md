@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-04-21 (offline mobile companion, voice recovery, and release 0.2.68)
+
+- added an Android offline companion path that keeps cached chats available when the
+  paired desktop is unreachable, runs a bundled on-device GGUF ideation model, and
+  stores offline work as local-only transcripts plus reviewable import drafts instead of
+  pretending the phone can execute desktop work by itself
+- added a safe gateway `offline-import` path that writes imported offline summaries and
+  draft turns into canonical history as non-executing `system` notes, with explicit
+  `Continue with Freedom` drafting instead of automatic replay into live desktop tasks
+- hardened mobile voice handling across the fallback and realtime lanes: partial
+  transcript fallback commit, duplicate voice-turn suppression, better stale-busy thread
+  avoidance, safer direct TTS fallback, and Android speech null-guard handling
+- taught the desktop host to autostart and supervise the Python LiveKit/OpenAI voice
+  worker whenever the required `LIVEKIT_*` and `OPENAI_API_KEY` env is present, so
+  premium mobile `Talk` no longer depends on a second manually started process
+- added host-restart recovery for orphaned queued/running tasks and a fresh-thread retry
+  path when reused Codex threads stall without output
+- fixed the double-voice interrupt regression by suppressing phone-local auto-read during
+  active realtime voice sessions, clearing local speech spillover when realtime starts,
+  and stopping local playback immediately when the user interrupts
+- published Android `0.2.68 (75)` to the live install surface
+
 ## 2026-04-20 (realtime conversation continuity fix)
 
 - fixed the premium mobile realtime voice lane so new voice sessions now bootstrap from

@@ -115,8 +115,10 @@ export function StartScreen(props: {
 }): React.JSX.Element {
   const { store, onRefresh, bottomPadding, onOpenTypedChat, onOpenActions, onOpenSettings, onStartTalk } = props;
   const currentSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
-  const voiceHeadline = store.voiceAvailable ? "Start talking" : "Voice unavailable";
-  const voiceHint = currentSession?.title ?? "Freedom is ready when you are.";
+  const voiceHeadline = store.offlineMode ? "Offline companion ready" : store.voiceAvailable ? "Start talking" : "Voice unavailable";
+  const voiceHint = store.offlineMode
+    ? currentSession?.title ?? "Cached chats and on-device ideation are ready."
+    : currentSession?.title ?? "Freedom is ready when you are.";
   const surfaceMessage = store.error ?? store.notice;
   const surfaceMessageTone = store.error ? "error" : "info";
 
@@ -138,6 +140,10 @@ export function StartScreen(props: {
         <Pressable testID="settings-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenSettings}>
           <Text style={styles.voiceSurfaceIconGlyph}>⋮</Text>
         </Pressable>
+      </View>
+
+      <View style={styles.statusRow}>
+        <StatusChip label={store.offlineMode ? "Offline / On-device" : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
       </View>
 
       <View style={styles.voiceSurfaceCenter}>
@@ -291,6 +297,19 @@ export function HostScreen(props: {
           <Text style={styles.metric}>Voice available</Text>
           <Text style={styles.metric}>{store.voiceAvailable ? "yes" : "no"}</Text>
         </View>
+        <View style={styles.rowBetween}>
+          <Text style={styles.metric}>Offline model</Text>
+          <Text style={styles.metric}>
+            {store.offlineModelState === "ready"
+              ? "ready"
+              : store.offlineModelState === "extracting"
+                ? "preparing"
+                : store.offlineModelState === "failed"
+                  ? "attention"
+                  : "bundled"}
+          </Text>
+        </View>
+        {store.offlineModelDetail ? <Text style={styles.helperText}>{store.offlineModelDetail}</Text> : null}
         <View style={styles.rowBetween}>
           <Text style={styles.metric}>Auto-read replies</Text>
           <Switch value={store.autoSpeak} onValueChange={() => store.toggleAutoSpeak().catch((error) => console.warn(error))} />
@@ -807,12 +826,16 @@ export function ChatScreen(props: {
   const transcriptScrollRef = useRef<ScrollView | null>(null);
   const { height: windowHeight } = useWindowDimensions();
   const showExternalDraftCard = Boolean(store.externalDraft);
+  const offlineDraft = store.selectedSessionId ? store.offlineImportDrafts[store.selectedSessionId] ?? null : null;
+  const showOfflineImportReview = false;
   const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
   const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
   const transcriptPanelHeight = Math.max(240, Math.min(420, Math.round(windowHeight * 0.42)));
   const shouldShowTranscript = showTranscript || showExternalDraftCard;
   const centerHeadline =
-    busy || store.sendingMessage
+    store.offlineMode && !busy && !store.sendingMessage && !store.voiceSessionActive
+      ? "Offline companion"
+      : busy || store.sendingMessage
       ? "Working"
       : store.voiceSessionActive
         ? humanizeVoiceCenterState(store.voiceSessionPhase)
@@ -823,6 +846,8 @@ export function ChatScreen(props: {
     ? store.liveTranscript
     : store.voiceAssistantDraft
       ? store.voiceAssistantDraft
+      : store.offlineMode
+        ? "Desktop unreachable. Cached chats and on-device ideation stay available on this phone."
       : busy || store.sendingMessage
         ? `${FREEDOM_RUNTIME_NAME} is still working on the current request.`
         : selectedSession?.title ?? "Talk to Freedom";
@@ -875,6 +900,15 @@ export function ChatScreen(props: {
     return () => clearTimeout(timer);
   }, [showComposerPanel, showExternalDraftCard]);
 
+  useEffect(() => {
+    if (!store.offlineMode) {
+      return;
+    }
+    if (store.sendingMessage || lastMessage?.role === "assistant") {
+      setShowTranscript(true);
+    }
+  }, [lastMessage?.role, lastMessage?.status, store.offlineMode, store.sendingMessage]);
+
   return (
     <View style={styles.chatScreen}>
       <ScrollView
@@ -901,6 +935,22 @@ export function ChatScreen(props: {
           <Pressable testID="settings-toggle" style={styles.voiceSurfaceIconButton} onPress={onOpenSettings}>
             <Text style={styles.voiceSurfaceIconGlyph}>⋮</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.statusRow}>
+          <StatusChip label={store.offlineMode ? "Offline / On-device" : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
+          <StatusChip
+            label={
+              store.offlineModelState === "ready"
+                ? "Model ready"
+                : store.offlineModelState === "extracting"
+                  ? "Preparing model"
+                  : store.offlineModelState === "failed"
+                    ? "Model attention"
+                    : "Model bundled"
+            }
+            tone={store.offlineModelState === "ready" ? "teal" : "orange"}
+          />
         </View>
 
         <View style={styles.voiceSurfaceCenter}>
@@ -992,7 +1042,7 @@ export function ChatScreen(props: {
         )}
       </ScrollView>
 
-      {showExternalDraftCard ? (
+      {showExternalDraftCard || showOfflineImportReview ? (
         <View style={[styles.voiceToolSheet, { marginBottom: toolSheetBottomPadding }]}>
           {store.externalDraft ? (
             <View style={styles.insetCard}>
@@ -1081,6 +1131,72 @@ export function ChatScreen(props: {
                   <Text style={styles.primaryLabel}>{store.sendingExternalMessage ? "Sending..." : "Send Email"}</Text>
                 </Pressable>
               </View>
+            </View>
+          ) : null}
+          {showOfflineImportReview && offlineDraft ? (
+            <View style={styles.insetCard}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.sectionTitle}>Offline Import Review</Text>
+                <StatusChip label={offlineDraft.importedAt ? "Imported" : "Pending import"} tone={offlineDraft.importedAt ? "teal" : "orange"} />
+              </View>
+              <Text style={styles.supportingText}>
+                Import writes non-executing system notes only. Freedom will not start desktop work until you later send an explicit follow-up turn.
+              </Text>
+              <LabeledInput
+                label="Summary"
+                value={offlineDraft.summary}
+                onChange={(value) => store.updateOfflineImportSummary(offlineDraft.sessionId, value)}
+                autoCapitalize="sentences"
+                multiline
+              />
+              {offlineDraft.draftTurns.map((turn, index) => (
+                <View key={`${offlineDraft.sessionId}-${index}`} style={styles.insetCard}>
+                  <Text style={styles.inputLabel}>Draft Turn {index + 1}</Text>
+                  <TextInput
+                    value={turn}
+                    onChangeText={(value) => store.updateOfflineImportDraftTurn(offlineDraft.sessionId, index, value)}
+                    multiline
+                    autoCapitalize="sentences"
+                    textAlignVertical="top"
+                    style={[styles.input, styles.inputMultiline]}
+                  />
+                  <Pressable
+                    style={[styles.secondaryButton, styles.dangerButton]}
+                    onPress={() => store.removeOfflineImportDraftTurn(offlineDraft.sessionId, index)}
+                  >
+                    <Text style={[styles.secondaryLabel, styles.dangerButtonLabel]}>Remove Draft Turn</Text>
+                  </Pressable>
+                </View>
+              ))}
+              <View style={styles.actions}>
+                <Pressable
+                  style={styles.secondaryButton}
+                  onPress={() => store.generateOfflineImportSummary().catch((error) => console.warn(error))}
+                >
+                  <Text style={styles.secondaryLabel}>{store.offlineSummarizing ? "Summarizing..." : "Refresh Summary"}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.primaryButton, (!store.token || store.offlineImporting) ? styles.disabledButton : null]}
+                  disabled={!store.token || store.offlineImporting}
+                  onPress={() => store.importOfflineSession().catch((error) => console.warn(error))}
+                >
+                  <Text style={styles.primaryLabel}>{store.offlineImporting ? "Importing..." : "Import Notes"}</Text>
+                </Pressable>
+              </View>
+              <View style={styles.actions}>
+                <Pressable
+                  style={[styles.secondaryButton, !offlineDraft.importedAt ? styles.disabledButton : null]}
+                  disabled={!offlineDraft.importedAt}
+                  onPress={() => store.continueWithFreedom()}
+                >
+                  <Text style={styles.secondaryLabel}>Continue with Freedom</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.helperText}>
+                {store.token
+                  ? "Import when you want these notes added to canonical history. Continue with Freedom only drafts the next live turn."
+                  : "Repair the desktop link before importing these notes back into canonical history."}
+              </Text>
             </View>
           ) : null}
         </View>

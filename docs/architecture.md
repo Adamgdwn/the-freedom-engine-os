@@ -45,6 +45,10 @@ For a fast operator-facing view of what is actually live right now, use
   Shared React voice session context, LiveKit room session, interrupt/task data channel,
   and Python Realtime worker coordination surfaced in the Next.js operator workbench
   voice console and mobile voice action surfaces.
+- Desktop voice-worker supervision:
+  the desktop host now launches and supervises the Python LiveKit/OpenAI worker from
+  `agents/freedom_agent` when premium voice env is present, instead of relying on a
+  separately managed manual terminal session.
 - Conversation-to-build lane:
   governed intake path that turns app conversations into roadmap candidates, business
   cases, approval-bearing Pop!_OS build sessions, and explicit report-back artifacts.
@@ -99,13 +103,16 @@ For a fast operator-facing view of what is actually live right now, use
 10. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
 11. Desktop-host routes non-voice work through a shared model-router policy so routine
-   read-only turns can stay on a configured local command lane while escalated work can
-   use an operator-selected external lane such as `OpenAI / ChatGPT`, `Codex`, or
-   `Claude Code`.
-12. Significant ideas that arise in conversation are meant to be promoted into the
+    read-only turns can stay on a configured local command lane while escalated work can
+    use an operator-selected external lane such as `OpenAI / ChatGPT`, `Codex`, or
+    `Claude Code`.
+12. The desktop host now supervises the LiveKit/OpenAI voice worker, while the mobile
+    app can also continue in a bounded offline ideation posture with cached chats and a
+    bundled on-device model when the desktop is unreachable.
+13. Significant ideas that arise in conversation are meant to be promoted into the
     dedicated Pop!_OS build lane, where business case, approval posture, and execution
     evidence are made explicit before or during implementation.
-13. Future persistence will swap the seed layer for Supabase queries while preserving the
+14. Future persistence will swap the seed layer for Supabase queries while preserving the
     same entity boundaries.
 
 ## Dependencies

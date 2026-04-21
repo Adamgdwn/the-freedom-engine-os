@@ -13,9 +13,11 @@ import {
 import { HttpGatewayClient } from "../services/gatewayClient.js";
 import { resolveApprovedRoots } from "./approvedRoots.js";
 import { CodexBridge } from "./codexBridge.js";
+import { isStaleThreadNoOutputError } from "./codexBridge.js";
 import { CommandBridge } from "./commandBridge.js";
 import { HostStateStore } from "./store.js";
 import { getTailscaleStatus } from "./tailscale.js";
+import { VoiceWorkerSupervisor } from "./voiceWorkerSupervisor.js";
 
 for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "../../.env")]) {
   dotenv.config({ path: envPath, override: false });
@@ -73,6 +75,7 @@ export class DesktopHostRuntime {
   private ticking = false;
   private running = false;
   private workLoopPromise: Promise<void> | null = null;
+  private readonly voiceWorkerSupervisor = new VoiceWorkerSupervisor();
 
   async start(): Promise<void> {
     const localState = await this.stateStore.read();
@@ -110,6 +113,7 @@ export class DesktopHostRuntime {
       void this.syncHeartbeat();
     }, 5000);
     this.running = true;
+    this.voiceWorkerSupervisor.start();
     this.startWorkLoop();
 
     process.stdout.write(
@@ -136,6 +140,7 @@ export class DesktopHostRuntime {
 
   stop(): void {
     this.running = false;
+    this.voiceWorkerSupervisor.stop();
     if (this.heartbeatHandle) {
       clearInterval(this.heartbeatHandle);
       this.heartbeatHandle = null;
@@ -324,7 +329,12 @@ export class DesktopHostRuntime {
         result = await runTurn(work.session.threadId);
       } catch (error) {
         const message = error instanceof Error ? error.message : `${plan.provider} run failed.`;
-        if (plan.provider === "codex" && !started && work.session.threadId && isMissingThreadError(message)) {
+        if (
+          plan.provider === "codex" &&
+          !started &&
+          work.session.threadId &&
+          (isMissingThreadError(message) || isStaleThreadNoOutputError(message))
+        ) {
           result = await runTurn(null);
         } else {
           throw error;

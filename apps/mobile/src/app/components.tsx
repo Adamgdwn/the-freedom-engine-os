@@ -193,9 +193,11 @@ export function MessageBubble(props: {
 }): React.JSX.Element {
   const { message } = props;
   const blocks = splitMessageContent(message.content || message.errorMessage || "...");
+  const bubbleStyle =
+    message.role === "user" ? styles.userBubble : message.role === "system" ? styles.systemBubble : styles.assistantBubble;
 
   return (
-    <View style={[styles.messageBubble, message.role === "user" ? styles.userBubble : styles.assistantBubble]}>
+    <View style={[styles.messageBubble, bubbleStyle]}>
       <View style={styles.messageHeader}>
         <Text style={styles.messageRole}>{humanizeMessageRole(message)}</Text>
         <Text style={styles.messageTime}>{formatMessageTimestamp(message.createdAt)}</Text>

@@ -135,6 +135,10 @@ export class AssistantSpeechRuntime {
     return this.speaking || this.pendingStart || this.queue.length > 0;
   }
 
+  isActive(): boolean {
+    return this.speaking || this.pendingStart || this.queue.length > 0 || this.speechSpanActive;
+  }
+
   private flushQueue(): void {
     if (this.speaking || this.pendingStart || this.queue.length === 0) {
       return;

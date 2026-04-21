@@ -96,6 +96,11 @@ that ties business outcomes back to freedom outcomes.
 - Premium mobile voice now expects the paired desktop to have `LIVEKIT_URL`,
   `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY` configured. If those are
   absent, the Android companion falls back to the older device STT/TTS voice path.
+- The desktop host now supervises the Python LiveKit/OpenAI voice worker automatically
+  when those env values are present. The default launch command is
+  `uv run --with-requirements requirements.txt agent.py dev` from
+  `agents/freedom_agent`. Use `DESKTOP_VOICE_WORKER_AUTOSTART=false` to disable that
+  behavior or `DESKTOP_VOICE_WORKER_COMMAND` to override the command explicitly.
 - Those premium voice runtime secrets are read from repo-root `.env`. Keep `.env.example`
   as placeholders only so template commits never leak working credentials.
 - Freedom's default live web-research lane is now Perplexity when `PERPLEXITY_API_KEY`
@@ -117,6 +122,14 @@ that ties business outcomes back to freedom outcomes.
 - Premium mobile realtime voice sessions now restore recent thread context from the
   gateway-backed chat history at session start, and the worker persists final user and
   assistant transcripts back into that same thread so continuity survives session ends.
+- If the phone loses contact with the paired desktop but still has cached sessions, it
+  now stays usable in `Offline / On-device` mode instead of failing closed. That offline
+  path is intentionally limited to cached-context ideation, drafting, summaries, and
+  high-level reasoning from the bundled local model.
+- Offline mobile work is not replayed into live desktop execution automatically. The safe
+  handoff path is: review the offline summary and draft turns, import them into canonical
+  history as non-executing `system` notes, then use the explicit `Continue with Freedom`
+  draft if you want the desktop to act on that context later.
 - Freedom can now review its own runtime posture in conversation:
   published mobile build version/code, current live Freedom voice profile, desktop voice
   runtime provider/model, and whether Perplexity web search is configured. The one thing
@@ -152,6 +165,9 @@ that ties business outcomes back to freedom outcomes.
   module error seen on the current Expo 56 / RN 0.84 stack.
 - The Android companion also installs `TextEncoder` / `TextDecoder` polyfills at
   startup so Hermes-compatible builds do not abort before the voice runtime is ready.
+- Android `0.2.68 (75)` also closes the major interrupt regression from this round:
+  during active realtime `Talk`, phone-local auto-read no longer competes with the live
+  Freedom voice, so interruption should not fork into two different spoken answers.
 - The intended operating direction is a mostly autonomous business partner:
   Freedom should identify what deserves a real build session, develop the business and
   technical case, execute approved Pop!_OS work, and report clearly on what changed,

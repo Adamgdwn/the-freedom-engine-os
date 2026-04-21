@@ -15,6 +15,8 @@ import type {
   HostStatus,
   HostWorkItem,
   OutboundRecipient,
+  OfflineImportRequest,
+  OfflineImportResponse,
   PairingCompleteResponse,
   PairedDevice,
   PostMessageRequest,
@@ -50,6 +52,7 @@ export interface MobileApi {
   deleteSession(token: string, sessionId: string): Promise<{ ok: true; deletedSessionId: string }>;
   listMessages(token: string, sessionId: string): Promise<ChatMessage[]>;
   postMessage(token: string, sessionId: string, input: PostMessageRequest): Promise<ChatMessage>;
+  importOfflineSession(token: string, sessionId: string, input: OfflineImportRequest): Promise<OfflineImportResponse>;
   stopSession(token: string, sessionId: string): Promise<ChatSession>;
   createRealtimeTicket(token: string): Promise<RealtimeTicketResponse>;
   createVoiceRuntimeSession(token: string, input: CreateVoiceRuntimeSessionRequest): Promise<VoiceRuntimeSessionResponse>;

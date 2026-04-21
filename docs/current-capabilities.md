@@ -1,6 +1,6 @@
 # Current Capabilities
 
-Last updated: 2026-04-20
+Last updated: 2026-04-21
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -44,6 +44,9 @@ or the boundary between modeled and fully operational capability.
 - Mobile now prefers the realtime voice runtime first and only drops to the older chained
   device STT -> text agent -> device TTS loop when the paired desktop does not have
   `LIVEKIT_*` and `OPENAI_API_KEY` configured for the premium path.
+- Desktop-host now autostarts and supervises the Python LiveKit/OpenAI voice worker when
+  those premium voice env values are present, so mobile `Talk` no longer depends on a
+  separate manually launched worker process.
 - The mobile utility sheet now shows whether `Auto-send voice turns` is on, and legacy
   installs that picked up the temporary default-off state are migrated back to auto-send
   unless the user had explicitly changed that preference.
@@ -59,6 +62,9 @@ or the boundary between modeled and fully operational capability.
 - Premium mobile realtime voice now persists final user and assistant transcript turns
   into the threaded gateway history and restores recent thread context when a new voice
   session starts, so conversation continuity is no longer lost at session boundaries.
+- Realtime mobile interruption now suppresses the phone-local spoken-reply path during
+  the active LiveKit session, which prevents the old split-brain "two voices after
+  interrupt" behavior from replaying stale local transcript audio beside the live reply.
 
 ### Persistent Memory
 
@@ -107,6 +113,10 @@ or the boundary between modeled and fully operational capability.
   sanitized example files while continuing to keep live machine-specific state local-only.
 - Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
   while preserving `latest.apk` as a compatibility alias.
+- The Android companion now has a safe offline companion posture:
+  cached sessions/messages survive desktop disconnects, offline ideation runs from a
+  bundled on-device model, and later sync imports those notes as non-executing history
+  instead of replaying them as live desktop tasks.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.

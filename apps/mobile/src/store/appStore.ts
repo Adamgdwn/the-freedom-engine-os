@@ -5,7 +5,6 @@ import {
   getAssistantVoiceCatalogEntry,
   normalizeAssistantVoicePresetId,
   type AssistantVoicePresetId,
-  type VoiceRuntimeMode,
   type VoiceSessionBinding
 } from "@freedom/shared";
 import type {
@@ -21,12 +20,24 @@ import type {
   StreamEvent,
   WakeControl
 } from "@freedom/shared";
+import type { RNLlamaOAICompatibleMessage } from "llama.rn";
 import type { ProjectTemplateId } from "@freedom/shared";
 import { FREEDOM_PRIMARY_SESSION_TITLE, FREEDOM_PRODUCT_NAME, FREEDOM_RUNTIME_NAME } from "@freedom/shared";
 import { ApiClient } from "../services/api/client";
 import { clearSettings, loadSettings, saveSettings, type StoredSettings } from "../services/storage/settingsStorage";
+import {
+  clearOfflineState,
+  loadOfflineState,
+  saveOfflineState,
+  type OfflineImportDraft
+} from "../services/storage/offlineStorage";
 import { clearDeviceToken, loadDeviceToken, saveDeviceToken } from "../services/storage/tokenStorage";
 import { FcmService } from "../services/notifications/fcmService";
+import {
+  OFFLINE_ASSISTANT_SYSTEM_PROMPT,
+  OfflineAssistantService,
+  type OfflineModelState
+} from "../services/offline/offlineAssistant";
 import { AssistantSpeechRuntime } from "../services/voice/assistantSpeechRuntime";
 import { RealtimeVoiceService } from "../services/voice/realtimeVoiceService";
 import { TtsService, type TtsVoiceOption } from "../services/voice/ttsService";
@@ -70,6 +81,7 @@ import {
 } from "../services/voice/voiceSessionMachine";
 
 type View = "start" | "host" | "sessions" | "chat";
+type MobileVoiceRuntimeMode = "realtime_primary" | "device_fallback" | "on_device_offline";
 type EditableField =
   | "baseUrl"
   | "deviceName"
@@ -117,6 +129,8 @@ interface PendingExternalRequestState {
   requestedBody: string | null;
 }
 
+interface OfflineImportState extends OfflineImportDraft {}
+
 export interface AppState {
   booting: boolean;
   refreshing: boolean;
@@ -147,6 +161,12 @@ export interface AppState {
   selectedAssistantVoiceId: string | null;
   wakeControl: WakeControl | null;
   wakeRequesting: boolean;
+  offlineMode: boolean;
+  offlineModelState: OfflineModelState;
+  offlineModelDetail: string | null;
+  offlineImportDrafts: Record<string, OfflineImportState>;
+  offlineSummarizing: boolean;
+  offlineImporting: boolean;
   outboundRecipients: OutboundRecipient[];
   outboundRecipientLabelDraft: string;
   outboundRecipientEmailDraft: string;
@@ -158,7 +178,7 @@ export interface AppState {
   autoSendVoice: boolean;
   voiceAutoSendPreferenceTouched: boolean;
   voiceAvailable: boolean;
-  voiceRuntimeMode: VoiceRuntimeMode;
+  voiceRuntimeMode: MobileVoiceRuntimeMode;
   voiceRuntimeBinding: VoiceSessionBinding | null;
   pushAvailable: boolean;
   pushSyncing: boolean;
@@ -184,6 +204,12 @@ export interface AppState {
   renameSession(sessionId: string): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
   sendMessage(): Promise<void>;
+  generateOfflineImportSummary(): Promise<void>;
+  updateOfflineImportSummary(sessionId: string, value: string): void;
+  updateOfflineImportDraftTurn(sessionId: string, index: number, value: string): void;
+  removeOfflineImportDraftTurn(sessionId: string, index: number): void;
+  importOfflineSession(): Promise<void>;
+  continueWithFreedom(): void;
   stopSession(): Promise<void>;
   renameCurrentDevice(): Promise<void>;
   enablePushNotifications(): Promise<void>;
@@ -216,6 +242,7 @@ const realtimeVoice = new RealtimeVoiceService();
 const fcm = new FcmService();
 const tts = new TtsService();
 const assistantSpeech = new AssistantSpeechRuntime(tts);
+const offlineAssistant = new OfflineAssistantService();
 const wakeRelay = new WakeRelayClient();
 let socket: WebSocket | null = null;
 let unsubscribePushTokenRefresh: (() => void) | null = null;
@@ -225,11 +252,13 @@ let backendInterruptTurnId: string | null = null;
 // talking. Assistant echo filtering handles the self-hear suppression instead.
 const SHOULD_PAUSE_RECOGNITION_DURING_TTS = Platform.OS === "android";
 const VOICE_CONTINUATION_GRACE_MS = 450;
+const VOICE_PARTIAL_FALLBACK_COMMIT_MS = 1800;
 let pendingVoiceTranscript: string | null = null;
 let pendingVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingPartialVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
 
 function prefersRealtimePrimaryVoice(): boolean {
-  return VOICE_RUNTIME_MODE === "realtime_primary";
+  return (VOICE_RUNTIME_MODE as string) === "realtime_primary";
 }
 
 function usesRealtimeVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voiceSessionActive">): boolean {
@@ -237,7 +266,7 @@ function usesRealtimeVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voice
 }
 
 function usesDeviceVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voiceSessionActive">): boolean {
-  return state.voiceSessionActive && state.voiceRuntimeMode === "device_fallback";
+  return state.voiceSessionActive && (state.voiceRuntimeMode === "device_fallback" || state.voiceRuntimeMode === "on_device_offline");
 }
 
 const defaultVoiceTelemetry = (): VoiceTelemetry => ({
@@ -328,6 +357,279 @@ async function loadAssistantVoiceState(preferredVoiceId: string | null): Promise
   };
 }
 
+function createLocalMessageId(prefix: "msg" | "import"): string {
+  return `${prefix}-mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isDesktopUnreachableErrorMessage(message: string): boolean {
+  return message.includes("Could not reach the desktop host");
+}
+
+function buildOfflineImportSummaryFallback(messages: ChatMessage[], draftTurns: string[]): string {
+  const userPreview = draftTurns.slice(-3).map((turn, index) => `${index + 1}. ${turn}`).join("\n");
+  const assistantPreview = messages
+    .filter((item) => item.role === "assistant")
+    .slice(-2)
+    .map((item) => item.content.trim())
+    .filter(Boolean)
+    .join("\n\n");
+
+  return [
+    "Offline mobile ideation captured while the desktop was unreachable.",
+    draftTurns.length ? `Key user prompts:\n${userPreview}` : null,
+    assistantPreview ? `Recent offline reasoning:\n${assistantPreview}` : null
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildOfflineImportDraft(draft: OfflineImportDraft | undefined, messages: ChatMessage[], draftTurns: string[]): OfflineImportDraft {
+  return {
+    sessionId: draft?.sessionId ?? messages[0]?.sessionId ?? "",
+    summary: draft?.summary?.trim() || buildOfflineImportSummaryFallback(messages, draftTurns),
+    draftTurns,
+    importedAt: draft?.importedAt ?? null,
+    continueDraft: draft?.continueDraft ?? null,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+async function persistOfflineSnapshot(get: () => AppState): Promise<void> {
+  await saveOfflineState({
+    sessions: get().sessions,
+    messagesBySession: get().messagesBySession,
+    importsBySession: get().offlineImportDrafts,
+    selectedSessionId: get().selectedSessionId
+  });
+}
+
+function pushLocalMessage(
+  state: AppState,
+  sessionId: string,
+  message: ChatMessage
+): Record<string, ChatMessage[]> {
+  const currentMessages = state.messagesBySession[sessionId] ?? [];
+  const nextMessages = [...currentMessages.filter((item) => item.id !== message.id), message].sort((left, right) =>
+    left.createdAt.localeCompare(right.createdAt)
+  );
+
+  return {
+    ...state.messagesBySession,
+    [sessionId]: nextMessages
+  };
+}
+
+function updateSessionLocally(state: AppState, sessionId: string, overrides: Partial<ChatSession>): ChatSession[] {
+  return sortSessionsForDisplay(
+    state.sessions.map((session) =>
+      session.id === sessionId
+        ? {
+            ...session,
+            ...overrides
+          }
+        : session
+    )
+  );
+}
+
+function buildOfflineContextMessages(messages: ChatMessage[], prompt: string): RNLlamaOAICompatibleMessage[] {
+  const history = messages
+    .filter((item) => item.role === "user" || item.role === "assistant" || item.role === "system")
+    .slice(-10)
+    .map((item): RNLlamaOAICompatibleMessage => ({
+      role: item.role,
+      content: item.content
+    }));
+
+  return [
+    {
+      role: "system",
+      content: OFFLINE_ASSISTANT_SYSTEM_PROMPT
+    },
+    ...history,
+    {
+      role: "user",
+      content: prompt
+    }
+  ];
+}
+
+function truncateOfflinePreview(text: string): string {
+  const compact = text.trim().replace(/\s+/g, " ");
+  return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
+}
+
+async function ensureOfflineModelPrepared(
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  const status = await offlineAssistant.ensureReady((state, detail) => {
+    set({
+      offlineModelState: state,
+      offlineModelDetail: detail
+    });
+  });
+  set({
+    offlineModelState: status.state,
+    offlineModelDetail: status.detail
+  });
+}
+
+async function sendOfflineIdeationTurn(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  clearPendingVoiceTranscript();
+  const text = get().composer.trim();
+  if (!text) {
+    return;
+  }
+
+  const sessionId = requireValue(get().voiceTargetSessionId ?? get().selectedSessionId ?? get().sessions[0]?.id, "Open a cached chat before sending offline.");
+  const targetSession = get().sessions.find((item) => item.id === sessionId) ?? null;
+  if (!targetSession) {
+    throw new Error("Open a cached chat before sending offline.");
+  }
+
+  set({
+    sendingMessage: true,
+    offlineMode: true,
+    error: null,
+    notice: "Running on-device ideation while the desktop is unreachable."
+  });
+
+  await ensureOfflineModelPrepared(set);
+  const now = new Date().toISOString();
+  const userMessage: ChatMessage = {
+    id: createLocalMessageId("msg"),
+    sessionId,
+    role: "user",
+    content: text,
+    status: "completed",
+    errorMessage: null,
+    clientRequestId: null,
+    inputMode: get().composerInputMode,
+    responseStyle: get().responseStyle,
+    transcriptPolished: get().composerInputMode === "voice_polished",
+    createdAt: now,
+    updatedAt: now
+  };
+  const assistantMessageId = createLocalMessageId("msg");
+  const assistantMessage: ChatMessage = {
+    id: assistantMessageId,
+    sessionId,
+    role: "assistant",
+    content: "",
+    status: "streaming",
+    errorMessage: null,
+    clientRequestId: null,
+    inputMode: null,
+    responseStyle: get().responseStyle,
+    transcriptPolished: null,
+    createdAt: now,
+    updatedAt: now
+  };
+
+  set((state) => {
+    const nextMessages = pushLocalMessage(
+      {
+        ...state,
+        messagesBySession: pushLocalMessage(state, sessionId, userMessage)
+      } as AppState,
+      sessionId,
+      assistantMessage
+    );
+    const draftTurns = [...(state.offlineImportDrafts[sessionId]?.draftTurns ?? []), text];
+    return {
+      composer: "",
+      composerInputMode: "text",
+      messagesBySession: nextMessages,
+      sessions: updateSessionLocally(state, sessionId, {
+        lastPreview: truncateOfflinePreview(text),
+        lastActivityAt: now,
+        updatedAt: now
+      }),
+      selectedSessionId: sessionId,
+      view: "chat",
+      voiceSessionPhase: state.voiceSessionActive ? "processing" : state.voiceSessionPhase,
+      voiceAssistantDraft: "",
+      offlineImportDrafts: {
+        ...state.offlineImportDrafts,
+        [sessionId]: buildOfflineImportDraft(state.offlineImportDrafts[sessionId], nextMessages[sessionId] ?? [], draftTurns)
+      }
+    };
+  });
+  await persistOfflineSnapshot(get);
+
+  try {
+    const messages = get().messagesBySession[sessionId] ?? [];
+    const reply = await offlineAssistant.generateReply({
+      messages: buildOfflineContextMessages(messages, text),
+      onToken: (content) => {
+        const updatedAt = new Date().toISOString();
+        set((state) => ({
+          messagesBySession: pushLocalMessage(state, sessionId, {
+            ...((state.messagesBySession[sessionId] ?? []).find((item) => item.id === assistantMessageId) ?? assistantMessage),
+            content,
+            status: "streaming",
+            updatedAt
+          }),
+          voiceAssistantDraft: state.voiceSessionActive ? content : state.voiceAssistantDraft,
+          voiceSessionPhase: state.voiceSessionActive ? "processing" : state.voiceSessionPhase
+        }));
+      }
+    });
+    const completedAt = new Date().toISOString();
+    set((state) => ({
+      sendingMessage: false,
+      messagesBySession: pushLocalMessage(state, sessionId, {
+        ...assistantMessage,
+        content: reply,
+        status: "completed",
+        updatedAt: completedAt
+      }),
+      sessions: updateSessionLocally(state, sessionId, {
+        lastPreview: truncateOfflinePreview(reply || text),
+        lastActivityAt: completedAt,
+        updatedAt: completedAt
+      }),
+      voiceAssistantDraft: state.voiceSessionActive ? reply : null,
+      voiceSessionPhase: state.voiceSessionActive ? "assistant-speaking" : state.voiceSessionPhase,
+      notice: "Offline ideation captured. Review and import notes when the desktop comes back.",
+      error: null,
+      voiceTelemetry:
+        state.voiceSessionActive
+          ? {
+              ...state.voiceTelemetry,
+              turnsStarted: state.voiceTelemetry.turnsStarted + 1,
+              turnsCompleted: state.voiceTelemetry.turnsCompleted + 1,
+              lastRoundTripMs: state.voiceTelemetry.lastHeardAt ? Date.now() - new Date(state.voiceTelemetry.lastHeardAt).getTime() : null
+            }
+          : state.voiceTelemetry
+    }));
+    if (get().voiceSessionActive || get().autoSpeak) {
+      assistantSpeech.ingest(assistantMessageId, reply, "completed", VOICE_TTS_MIN_CHARS);
+    }
+    await persistOfflineSnapshot(get);
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    set((state) => ({
+      sendingMessage: false,
+      messagesBySession: pushLocalMessage(state, sessionId, {
+        ...assistantMessage,
+        content: "",
+        status: "failed",
+        errorMessage: error instanceof Error ? error.message : "Offline ideation failed.",
+        updatedAt: failedAt
+      }),
+      voiceAssistantDraft: null,
+      voiceSessionPhase: state.voiceSessionActive ? "error" : state.voiceSessionPhase,
+      error: error instanceof Error ? error.message : "Offline ideation failed."
+    }));
+    await persistOfflineSnapshot(get);
+    throw error;
+  }
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   booting: true,
   refreshing: false,
@@ -358,6 +660,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedAssistantVoiceId: null,
   wakeControl: null,
   wakeRequesting: false,
+  offlineMode: false,
+  offlineModelState: "missing",
+  offlineModelDetail: null,
+  offlineImportDrafts: {},
+  offlineSummarizing: false,
+  offlineImporting: false,
   outboundRecipients: [],
   outboundRecipientLabelDraft: "",
   outboundRecipientEmailDraft: "",
@@ -436,9 +744,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     });
 
-    const [settings, token, deviceVoiceAvailable, realtimeVoiceAvailable] = await Promise.all([
+    const [settings, token, cachedOfflineState, deviceVoiceAvailable, realtimeVoiceAvailable] = await Promise.all([
       settleWithin(loadSettings(), 1200, null),
       settleWithin(loadDeviceToken(), 1200, null),
+      settleWithin(loadOfflineState(), 1200, null),
       settleWithin(voice.isAvailable(), 1200, false),
       settleWithin(realtimeVoice.isAvailable(), 1200, false)
     ]);
@@ -480,7 +789,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     }
 
-    const resolvedVoiceRuntimeMode: VoiceRuntimeMode =
+    const resolvedVoiceRuntimeMode: MobileVoiceRuntimeMode =
       prefersRealtimePrimaryVoice() && realtimeVoiceAvailable
         ? "realtime_primary"
         : deviceVoiceAvailable
@@ -504,11 +813,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       wakeControl: settings?.wakeControl ?? null,
       outboundRecipients: [],
       token,
+      sessions: cachedOfflineState?.sessions ?? [],
+      selectedSessionId: cachedOfflineState?.selectedSessionId ?? null,
+      messagesBySession: cachedOfflineState?.messagesBySession ?? {},
+      offlineImportDrafts: cachedOfflineState?.importsBySession ?? {},
       voiceAvailable: realtimeVoiceAvailable || deviceVoiceAvailable,
       voiceRuntimeMode: resolvedVoiceRuntimeMode,
       voiceRuntimeBinding: null,
       pushAvailable: fcm.isAvailable(),
       realtimeConnected: false,
+      offlineMode: false,
+      offlineModelState: offlineAssistant.getStatus().state,
+      offlineModelDetail: offlineAssistant.getStatus().detail,
       notice: token ? "Restoring the saved desktop link." : null,
       booting: false
     });
@@ -590,7 +906,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     tts.stop();
     unsubscribePushTokenRefresh?.();
     unsubscribePushTokenRefresh = null;
-    await Promise.all([clearSettings(), clearDeviceToken()]);
+    await Promise.all([clearSettings(), clearDeviceToken(), clearOfflineState()]);
     set({
       baseUrl: DEFAULT_BASE_URL,
       pairingCode: "",
@@ -615,6 +931,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedAssistantVoiceId: null,
       wakeControl: null,
       wakeRequesting: false,
+      offlineMode: false,
+      offlineModelState: "missing",
+      offlineModelDetail: null,
+      offlineImportDrafts: {},
+      offlineSummarizing: false,
+      offlineImporting: false,
       outboundRecipients: [],
       outboundRecipientLabelDraft: "",
       outboundRecipientEmailDraft: "",
@@ -688,6 +1010,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           accumulator[session.id] = get().renameDraftBySession[session.id] ?? session.title;
           return accumulator;
         }, {}),
+        offlineMode: false,
         notice: null,
         error: null
       });
@@ -715,9 +1038,20 @@ export const useAppStore = create<AppState>((set, get) => ({
         connectSocket(baseUrl, token, set, get);
       }
 
+      await persistOfflineSnapshot(get);
       maybeAutoSendVoiceResult(get, set).catch(() => undefined);
     } catch (error) {
-      await handleStoreError(error, set, get, "Could not refresh this phone's desktop state.");
+      if (error instanceof Error && isDesktopUnreachableErrorMessage(error.message)) {
+        set({
+          offlineMode: true,
+          realtimeConnected: false,
+          notice: "Desktop unreachable. Cached chats and on-device ideation are still available.",
+          error: null
+        });
+        await persistOfflineSnapshot(get);
+      } else {
+        await handleStoreError(error, set, get, "Could not refresh this phone's desktop state.");
+      }
     } finally {
       set({ refreshing: false });
     }
@@ -736,9 +1070,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   async selectSession(sessionId: string) {
     try {
-      const token = requireValue(get().token, "Pair this phone with the desktop first.");
-      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
-      const messages = await api.listMessages(token, baseUrl, sessionId);
+      const token = get().token;
+      const baseUrl = get().baseUrl;
+      if (!token || !baseUrl) {
+        const cachedMessages = get().messagesBySession[sessionId] ?? [];
+        set({
+          selectedSessionId: sessionId,
+          view: "chat",
+          offlineMode: true,
+          notice: "Showing cached chat while this phone is disconnected from the desktop link.",
+          error: null
+        });
+        if (cachedMessages.length) {
+          await persistOfflineSnapshot(get);
+          return;
+        }
+      }
+
+      const requiredToken = requireValue(token, "Pair this phone with the desktop first.");
+      const requiredBaseUrl = requireValue(baseUrl, "Desktop URL is required.");
+      const messages = await api.listMessages(requiredToken, requiredBaseUrl, sessionId);
       const pinnedVoiceTitle =
         get().voiceSessionActive && get().voiceTargetSessionId && get().voiceTargetSessionId !== sessionId
           ? get().sessions.find((item) => item.id === get().voiceTargetSessionId)?.title ?? null
@@ -753,7 +1104,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         notice: pinnedVoiceTitle ? `Voice loop stays attached to ${pinnedVoiceTitle} until you stop it.` : null,
         error: null
       }));
+      await persistOfflineSnapshot(get);
     } catch (error) {
+      if (error instanceof Error && isDesktopUnreachableErrorMessage(error.message)) {
+        const cachedMessages = get().messagesBySession[sessionId];
+        if (cachedMessages) {
+          set({
+            selectedSessionId: sessionId,
+            view: "chat",
+            offlineMode: true,
+            notice: "Desktop unreachable. Showing cached chat and offline ideation tools.",
+            error: null
+          });
+          await persistOfflineSnapshot(get);
+          return;
+        }
+      }
+
       await handleStoreError(error, set, get, "Could not open that chat.");
     }
   },
@@ -886,17 +1253,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    clearPendingVoiceTranscript();
+    const text = get().composer.trim();
+    if (!text) {
+      return;
+    }
+
+    if (tryHandleExternalDraftVoiceCommand(text, get, set)) {
+      return;
+    }
+
+    if (get().offlineMode) {
+      await sendOfflineIdeationTurn(get, set);
+      return;
+    }
+
     try {
-      clearPendingVoiceTranscript();
-      const text = get().composer.trim();
-      if (!text) {
-        return;
-      }
-
-      if (tryHandleExternalDraftVoiceCommand(text, get, set)) {
-        return;
-      }
-
       const token = requireValue(get().token, "Pair this phone with the desktop first.");
       const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
 
@@ -951,7 +1323,10 @@ export const useAppStore = create<AppState>((set, get) => ({
               : "idle",
         messagesBySession: {
           ...state.messagesBySession,
-          [resolvedSessionId]: [...(state.messagesBySession[resolvedSessionId] ?? []), message]
+          [resolvedSessionId]: [
+            ...(state.messagesBySession[resolvedSessionId] ?? []).filter((item) => item.id !== message.id),
+            message
+          ]
         },
         voiceTelemetry:
           state.voiceSessionActive && isVoiceTurn
@@ -968,12 +1343,210 @@ export const useAppStore = create<AppState>((set, get) => ({
           error: null
         });
       }
+      await persistOfflineSnapshot(get);
       await get().refresh();
     } catch (error) {
+      if (error instanceof Error && isDesktopUnreachableErrorMessage(error.message)) {
+        set({
+          offlineMode: true,
+          realtimeConnected: false,
+          notice: "Desktop unreachable. Switching this turn to the on-device offline companion.",
+          error: null
+        });
+        await sendOfflineIdeationTurn(get, set);
+        return;
+      }
+
       await handleStoreError(error, set, get, "Could not send that message.");
     } finally {
       set({ sendingMessage: false });
     }
+  },
+  async generateOfflineImportSummary() {
+    const sessionId = requireValue(get().selectedSessionId, "Open a cached chat before preparing an import summary.");
+    const draft = get().offlineImportDrafts[sessionId];
+    if (!draft || !draft.draftTurns.length) {
+      set({
+        error: "No offline ideation turns are waiting for import in this chat.",
+        notice: null
+      });
+      return;
+    }
+
+    set({ offlineSummarizing: true, notice: "Summarizing offline ideation for import review.", error: null });
+    try {
+      await ensureOfflineModelPrepared(set);
+      const summary = await offlineAssistant.generateReply({
+        messages: [
+          {
+            role: "system",
+            content:
+              "Summarize these offline mobile ideation notes for later desktop review. Keep it factual, concise, and focused on next steps."
+          },
+          {
+            role: "user",
+            content: draft.draftTurns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")
+          }
+        ],
+        nPredict: 220,
+        temperature: 0.35
+      });
+      set((state) => ({
+        offlineSummarizing: false,
+        offlineImportDrafts: {
+          ...state.offlineImportDrafts,
+          [sessionId]: {
+            ...state.offlineImportDrafts[sessionId],
+            summary,
+            updatedAt: new Date().toISOString()
+          }
+        },
+        notice: "Offline import summary is ready to review.",
+        error: null
+      }));
+      await persistOfflineSnapshot(get);
+    } catch (error) {
+      set({
+        offlineSummarizing: false,
+        error: error instanceof Error ? error.message : "Could not summarize offline ideation."
+      });
+    }
+  },
+  updateOfflineImportSummary(sessionId, value) {
+    set((state) => ({
+      offlineImportDrafts: state.offlineImportDrafts[sessionId]
+        ? {
+            ...state.offlineImportDrafts,
+            [sessionId]: {
+              ...state.offlineImportDrafts[sessionId],
+              summary: value,
+              updatedAt: new Date().toISOString()
+            }
+          }
+        : state.offlineImportDrafts
+    }));
+    void persistOfflineSnapshot(get);
+  },
+  updateOfflineImportDraftTurn(sessionId, index, value) {
+    set((state) => {
+      const draft = state.offlineImportDrafts[sessionId];
+      if (!draft) {
+        return {};
+      }
+      const nextDraftTurns = draft.draftTurns.map((turn, draftIndex) => (draftIndex === index ? value : turn));
+      return {
+        offlineImportDrafts: {
+          ...state.offlineImportDrafts,
+          [sessionId]: {
+            ...draft,
+            draftTurns: nextDraftTurns,
+            updatedAt: new Date().toISOString()
+          }
+        }
+      };
+    });
+    void persistOfflineSnapshot(get);
+  },
+  removeOfflineImportDraftTurn(sessionId, index) {
+    set((state) => {
+      const draft = state.offlineImportDrafts[sessionId];
+      if (!draft) {
+        return {};
+      }
+      const nextDraftTurns = draft.draftTurns.filter((_, draftIndex) => draftIndex !== index);
+      return {
+        offlineImportDrafts: {
+          ...state.offlineImportDrafts,
+          [sessionId]: {
+            ...draft,
+            draftTurns: nextDraftTurns,
+            updatedAt: new Date().toISOString()
+          }
+        }
+      };
+    });
+    void persistOfflineSnapshot(get);
+  },
+  async importOfflineSession() {
+    const sessionId = requireValue(get().selectedSessionId, "Open the chat you want to import first.");
+    const draft = get().offlineImportDrafts[sessionId];
+    if (!draft || !draft.draftTurns.length) {
+      set({
+        notice: null,
+        error: "No offline ideation notes are ready to import from this chat."
+      });
+      return;
+    }
+
+    const token = requireValue(get().token, "Pair this phone with the desktop first.");
+    const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+    set({
+      offlineImporting: true,
+      notice: "Importing offline notes into canonical history without starting desktop work.",
+      error: null
+    });
+
+    try {
+      const response = await api.importOfflineSession(token, baseUrl, sessionId, {
+        clientImportId: `mobile-offline-${sessionId}-${new Date().toISOString()}`,
+        summary: draft.summary.trim(),
+        draftTurns: draft.draftTurns.map((turn) => turn.trim()).filter(Boolean),
+        createdAt: draft.updatedAt,
+        source: "mobile_offline"
+      });
+      const continueDraft =
+        "I imported mobile offline ideation notes into this chat. Please review those imported notes and continue from them.";
+      set((state) => ({
+        offlineMode: false,
+        offlineImporting: false,
+        sessions: sortSessionsForDisplay([response.session, ...state.sessions.filter((item) => item.id !== response.session.id)]),
+        messagesBySession: {
+          ...state.messagesBySession,
+          [sessionId]: [
+            ...(state.messagesBySession[sessionId] ?? []),
+            ...response.messages.filter(
+              (message: ChatMessage) =>
+                !(state.messagesBySession[sessionId] ?? []).some((existingMessage) => existingMessage.id === message.id)
+            )
+          ].sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+        },
+        offlineImportDrafts: {
+          ...state.offlineImportDrafts,
+          [sessionId]: {
+            ...state.offlineImportDrafts[sessionId],
+            importedAt: new Date().toISOString(),
+            continueDraft,
+            updatedAt: new Date().toISOString()
+          }
+        },
+        notice: "Offline notes imported safely. Review them, then continue only when you are ready.",
+        error: null
+      }));
+      await persistOfflineSnapshot(get);
+    } catch (error) {
+      set({
+        offlineImporting: false,
+        error: error instanceof Error ? error.message : "Could not import offline notes."
+      });
+    }
+  },
+  continueWithFreedom() {
+    const sessionId = get().selectedSessionId;
+    const continueDraft = sessionId ? get().offlineImportDrafts[sessionId]?.continueDraft : null;
+    if (!continueDraft) {
+      set({
+        notice: null,
+        error: "Import offline notes first so Freedom has a canonical summary to continue from."
+      });
+      return;
+    }
+
+    set({
+      composer: continueDraft,
+      composerInputMode: "text",
+      notice: "Drafted a follow-up turn. Review it and send when you want the desktop to act.",
+      error: null
+    });
   },
   async stopSession() {
     try {
@@ -986,6 +1559,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       } else {
         clearPendingVoiceTranscript();
         assistantSpeech.stop();
+      }
+      await offlineAssistant.stop().catch(() => undefined);
+
+      if (get().offlineMode) {
+        set({
+          sendingMessage: false,
+          notice: "Offline voice loop stopped on this phone.",
+          error: null
+        });
+        return;
       }
 
       const token = get().token;
@@ -1398,11 +1981,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     if (get().voiceSessionActive) {
-      if (get().voiceSessionPhase === "assistant-speaking") {
-        await requestImmediateVoiceInterrupt(get, set);
-        return;
-      }
-
       stopActiveVoiceLoop(set, {
         notice: null,
         error: null
@@ -1419,24 +1997,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set({
-      notice: prefersRealtimePrimaryVoice()
-        ? `Realtime voice starting. ${FREEDOM_RUNTIME_NAME} is switching this phone onto the primary LiveKit voice path.`
-        : `Voice loop starting. Speak naturally and ${FREEDOM_RUNTIME_NAME} will keep listening between turns.`,
+      view: "chat",
+      notice: get().offlineMode
+        ? "Offline voice starting. Speak naturally and Freedom will answer from the on-device model."
+        : prefersRealtimePrimaryVoice()
+          ? `Realtime voice starting. ${FREEDOM_RUNTIME_NAME} is switching this phone onto the primary LiveKit voice path.`
+          : `Voice loop starting. Speak naturally and ${FREEDOM_RUNTIME_NAME} will keep listening between turns.`,
       error: null,
       voiceSessionActive: true,
       voiceTargetSessionId: targetSessionId,
       voiceMuted: false,
       listening: true,
-      voiceRuntimeMode: prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
+      voiceRuntimeMode: get().offlineMode ? "on_device_offline" : prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
       voiceRuntimeBinding: null,
       voiceSessionPhase: "connecting",
       liveTranscript: "",
       voiceAudioLevel: -2,
       voiceAssistantDraft: null
     });
+    assistantSpeech.reset();
     voiceInterruptRequested = false;
 
-    if (prefersRealtimePrimaryVoice()) {
+    if (!get().offlineMode && prefersRealtimePrimaryVoice()) {
       try {
         await startRealtimeVoiceSession(get, set, targetSessionId);
         return;
@@ -1584,7 +2166,16 @@ function buildVoiceSessionCallbacks(
     onListening: () => {
       set((state) => ({
         listening: state.voiceMuted ? false : true,
-        voiceSessionPhase: state.voiceMuted ? "muted" : state.voiceSessionPhase === "assistant-speaking" ? state.voiceSessionPhase : "listening",
+        voiceSessionPhase:
+          state.voiceMuted
+            ? "muted"
+            : state.voiceSessionPhase === "assistant-speaking" ||
+                state.voiceSessionPhase === "processing" ||
+                state.voiceSessionPhase === "review" ||
+                Boolean(pendingVoiceTranscript)
+              ? state.voiceSessionPhase
+              : "listening",
+        notice: null,
         error: null
       }));
     },
@@ -1599,6 +2190,9 @@ function buildVoiceSessionCallbacks(
       }));
     },
     onSpeechEnd: () => {
+      if (pendingVoiceTranscript) {
+        schedulePartialVoiceFallbackCommit(get, set);
+      }
       set((state) => {
         if (!state.voiceSessionActive) {
           return {};
@@ -1632,6 +2226,7 @@ function buildVoiceSessionCallbacks(
       pendingVoiceTranscript = merged;
 
       if (isVoiceAssistantActive(get) && isLikelyAssistantEcho(merged, get().voiceAssistantDraft ?? "")) {
+        clearPendingPartialVoiceCommitTimer();
         set({
           liveTranscript: "",
           voiceAudioLevel: -2,
@@ -1648,6 +2243,7 @@ function buildVoiceSessionCallbacks(
           lastHeardAt: new Date().toISOString()
         }
       }));
+      schedulePartialVoiceFallbackCommit(get, set);
 
       if (!voiceInterruptRequested && isVoiceAssistantActive(get) && shouldInterruptAssistant(merged, VOICE_INTERRUPT_MIN_CHARS, VOICE_BACKCHANNEL_MAX_WORDS)) {
         voiceInterruptRequested = true;
@@ -1675,6 +2271,7 @@ function buildVoiceSessionCallbacks(
 
       const merged = pendingVoiceTranscript ? mergeVoiceTranscriptSegments(pendingVoiceTranscript, normalized) : normalized;
       pendingVoiceTranscript = merged;
+      clearPendingPartialVoiceCommitTimer();
 
       if (isVoiceAssistantActive(get) && isLikelyAssistantEcho(merged, get().voiceAssistantDraft ?? "")) {
         clearPendingVoiceTranscript();
@@ -1752,7 +2349,7 @@ function buildRealtimeVoiceCallbacks(
         voiceSessionPhase: get().voiceMuted ? "muted" : "listening",
         liveTranscript: "",
         voiceAudioLevel: -2,
-        notice: `Realtime voice is live. ${binding.assistantName} is now speaking over the primary LiveKit voice runtime.`,
+        notice: null,
         error: null,
         view: "chat"
       });
@@ -1872,7 +2469,7 @@ async function startRealtimeVoiceSession(
     assistantName: FREEDOM_PRODUCT_NAME
   });
 
-  await realtimeVoice.startSession(runtime, buildRealtimeVoiceCallbacks(get, set));
+  await realtimeVoice.startSession(runtime as Parameters<RealtimeVoiceService["startSession"]>[0], buildRealtimeVoiceCallbacks(get, set));
 }
 
 async function startVoiceLoopRecognition(
@@ -2053,8 +2650,18 @@ function clearPendingVoiceCommitTimer(): void {
   pendingVoiceCommitTimer = null;
 }
 
+function clearPendingPartialVoiceCommitTimer(): void {
+  if (!pendingPartialVoiceCommitTimer) {
+    return;
+  }
+
+  clearTimeout(pendingPartialVoiceCommitTimer);
+  pendingPartialVoiceCommitTimer = null;
+}
+
 function clearPendingVoiceTranscript(): void {
   clearPendingVoiceCommitTimer();
+  clearPendingPartialVoiceCommitTimer();
   pendingVoiceTranscript = null;
 }
 
@@ -2069,11 +2676,28 @@ function schedulePendingVoiceCommit(
   }, VOICE_CONTINUATION_GRACE_MS);
 }
 
+function schedulePartialVoiceFallbackCommit(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): void {
+  clearPendingPartialVoiceCommitTimer();
+  pendingPartialVoiceCommitTimer = setTimeout(() => {
+    pendingPartialVoiceCommitTimer = null;
+    if (!pendingVoiceTranscript || get().voiceMuted || !get().voiceSessionActive) {
+      return;
+    }
+
+    console.info(`[FreedomVoice] fallback committing partial transcript=${pendingVoiceTranscript}`);
+    commitPendingVoiceTranscript(get, set).catch(() => undefined);
+  }, VOICE_PARTIAL_FALLBACK_COMMIT_MS);
+}
+
 async function commitPendingVoiceTranscript(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
 ): Promise<void> {
   const transcript = normalizeVoiceTranscript(pendingVoiceTranscript ?? "");
+  clearPendingPartialVoiceCommitTimer();
   pendingVoiceTranscript = null;
   if (!transcript) {
     return;
@@ -2237,8 +2861,10 @@ function connectSocket(
         socket = null;
         set((state) => ({
           realtimeConnected: false,
+          offlineMode: state.sessions.length > 0,
           voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
-          error: "Realtime connection dropped. Reconnecting now. Pull to refresh, tap Refresh Host, or reopen the app if it does not recover."
+          notice: state.sessions.length > 0 ? "Realtime dropped. Cached chats and offline ideation stay available while reconnecting." : state.notice,
+          error: state.sessions.length > 0 ? null : "Realtime connection dropped. Reconnecting now. Pull to refresh, tap Refresh Host, or reopen the app if it does not recover."
         }));
         scheduleReconnect(baseUrl, token, set, get);
       };
@@ -2248,8 +2874,10 @@ function connectSocket(
     } catch (error) {
       set((state) => ({
         realtimeConnected: false,
+        offlineMode: state.sessions.length > 0,
         voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
-        error: error instanceof Error ? error.message : "Realtime connection setup failed."
+        notice: state.sessions.length > 0 ? "Realtime is unavailable. Cached chats and offline ideation remain available." : state.notice,
+        error: state.sessions.length > 0 ? null : error instanceof Error ? error.message : "Realtime connection setup failed."
       }));
       scheduleReconnect(baseUrl, token, set, get);
     }
@@ -2362,6 +2990,7 @@ function applyStreamEvent(
           payload.message.content
         )
       : null;
+  let shouldDirectFallbackSpeak = false;
 
   set((state) => {
     const currentMessages = state.messagesBySession[payload.sessionId] ?? [];
@@ -2375,13 +3004,15 @@ function applyStreamEvent(
         ? preparedExternalDraft
         : state.externalDraft;
     const voiceSessionUsesDeviceSpeech = usesDeviceVoicePath(state) && isVoiceTargetSession;
+    const voiceSessionUsesRealtimeSpeech = usesRealtimeVoicePath(state) && isVoiceTargetSession;
     const shouldVoiceSpeak =
       payload.message.role === "assistant" &&
       tts.isAvailable() &&
-      ((state.autoSpeak && isSelectedSession) || voiceSessionUsesDeviceSpeech);
+      (voiceSessionUsesDeviceSpeech || (state.autoSpeak && isSelectedSession && !voiceSessionUsesRealtimeSpeech));
     const speechQueued =
       shouldVoiceSpeak &&
       assistantSpeech.ingest(payload.message.id, payload.message.content, payload.message.status, VOICE_TTS_MIN_CHARS);
+    shouldDirectFallbackSpeak = shouldDirectlyFallbackSpeech(payload.message, voiceSessionUsesDeviceSpeech, Boolean(speechQueued));
     const voiceTelemetry =
       payload.message.role === "assistant" &&
       payload.message.status === "completed" &&
@@ -2425,9 +3056,15 @@ function applyStreamEvent(
               pendingExternalRequest &&
               (payload.message.status === "failed" || payload.message.status === "interrupted")
             ? `The assistant reply was interrupted, so ${FREEDOM_RUNTIME_NAME} did not prepare the email draft.`
+            : shouldDirectFallbackSpeak
+              ? "Freedom replied, and the phone is retrying spoken playback directly."
             : state.notice
     };
   });
+
+  if (shouldDirectFallbackSpeak) {
+    tts.speak(payload.message.content);
+  }
 
   if (preparedExternalDraft && pendingExternalRequest && get().voiceSessionActive && get().voiceTargetSessionId === payload.sessionId) {
     assistantSpeech.queuePrompt(buildExternalDraftConfirmationPrompt(pendingExternalRequest, preparedExternalDraft));
@@ -2448,10 +3085,11 @@ async function ensureOperatorSession(
     token?: string | null;
     baseUrl?: string | null;
     hostStatus?: HostStatus | null;
+    preferFreshIfBusy?: boolean;
   }
 ): Promise<ChatSession | null> {
   const existing = findOperatorSession(get().sessions);
-  if (existing) {
+  if (existing && !(options?.preferFreshIfBusy && isSessionBusy(existing))) {
     return existing;
   }
 
@@ -2509,7 +3147,22 @@ async function resolveVoiceTargetSessionId(
 ): Promise<string> {
   const existing = get().voiceTargetSessionId ?? get().selectedSessionId;
   if (existing) {
-    return existing;
+    const existingSession = get().sessions.find((session) => session.id === existing) ?? null;
+    if (existingSession && !isSessionBusy(existingSession)) {
+      return existing;
+    }
+  }
+
+  const reusableIdleSession = sortSessionsForDisplay(get().sessions).find((session) => !isSessionBusy(session)) ?? null;
+  if (reusableIdleSession) {
+    return reusableIdleSession.id;
+  }
+
+  if (existing) {
+    set({
+      notice: "The current chat is still busy, so Freedom is opening a fresh thread for voice.",
+      error: null
+    });
   }
 
   const token = requireValue(get().token, "Pair this phone with the desktop first.");
@@ -2517,10 +3170,21 @@ async function resolveVoiceTargetSessionId(
   const operatorSession = await ensureOperatorSession(get, set, {
     token,
     baseUrl,
-    hostStatus: get().hostStatus
+    hostStatus: get().hostStatus,
+    preferFreshIfBusy: true
   });
   const sessionId = operatorSession?.id ?? pickPreferredSessionId(null, get().sessions);
   return requireValue(sessionId, "Open or start a chat before starting the voice loop.");
+}
+
+function shouldDirectlyFallbackSpeech(payload: ChatMessage, voiceSessionUsesDeviceSpeech: boolean, speechQueued: boolean): boolean {
+  return (
+    voiceSessionUsesDeviceSpeech &&
+    payload.role === "assistant" &&
+    payload.status === "completed" &&
+    !speechQueued &&
+    payload.content.trim().length > 0
+  );
 }
 
 async function requestImmediateVoiceInterrupt(
@@ -2528,6 +3192,7 @@ async function requestImmediateVoiceInterrupt(
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
 ): Promise<void> {
   if (usesRealtimeVoicePath(get())) {
+    assistantSpeech.stop();
     try {
       await realtimeVoice.interrupt();
       set((state) => ({
@@ -2550,6 +3215,22 @@ async function requestImmediateVoiceInterrupt(
   const token = get().token;
   const baseUrl = get().baseUrl;
   const sessionId = get().voiceTargetSessionId;
+  const stoppedLocalSpeech = isVoiceAssistantActive(get());
+  if (stoppedLocalSpeech) {
+    assistantSpeech.stop();
+    set((state) => ({
+      voiceSessionPhase: state.voiceMuted ? "muted" : "interrupted",
+      notice: "Interrupt heard. Freedom stopped speaking and is ready for your next turn.",
+      error: null,
+      voiceTelemetry: {
+        ...state.voiceTelemetry,
+        interruptions: state.voiceTelemetry.interruptions + 1
+      }
+    }));
+    if (!get().voiceMuted) {
+      ensureVoiceLoopListening(get, set).catch(() => undefined);
+    }
+  }
   if (!token || !baseUrl || !sessionId) {
     return;
   }
@@ -2563,6 +3244,17 @@ async function requestImmediateVoiceInterrupt(
   backendInterruptTurnId = activeTurnId;
   try {
     await api.stopSession(token, baseUrl, session.id);
+    set((state) => ({
+      voiceSessionPhase: state.voiceMuted ? "muted" : "interrupted",
+      notice: "Interrupt sent. Freedom should stop the current reply and hand the turn back to you.",
+      error: null,
+      voiceTelemetry: stoppedLocalSpeech
+        ? state.voiceTelemetry
+        : {
+            ...state.voiceTelemetry,
+            interruptions: state.voiceTelemetry.interruptions + 1
+          }
+    }));
   } catch (error) {
     backendInterruptTurnId = null;
     set((state) => ({
@@ -2614,9 +3306,6 @@ async function enterRepairMode(
     token: null,
     hostStatus: null,
     buildLaneSummary: null,
-    sessions: [],
-    selectedSessionId: null,
-    messagesBySession: {},
     composer: "",
     composerInputMode: "text",
     newSessionRootPath: "",
@@ -2625,12 +3314,12 @@ async function enterRepairMode(
     projectInstructions: "",
     projectOutputType: "implementation plan",
     projectTemplateId: "greenfield",
-    renameDraftBySession: {},
     refreshing: false,
     sendingMessage: false,
     realtimeConnected: false,
+    offlineMode: get().sessions.length > 0,
     listening: false,
-    voiceRuntimeMode: prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
+    voiceRuntimeMode: get().sessions.length > 0 ? "on_device_offline" : prefersRealtimePrimaryVoice() ? "realtime_primary" : "device_fallback",
     voiceRuntimeBinding: null,
     voiceSessionActive: false,
     voiceTargetSessionId: null,
@@ -2642,10 +3331,14 @@ async function enterRepairMode(
     lastSpokenMessageId: null,
     externalDraft: null,
     pendingExternalRequest: null,
-    notice: "Saved desktop settings were kept so you can repair this link quickly.",
+    notice:
+      get().sessions.length > 0
+        ? "Saved desktop settings were kept. Cached chats and offline ideation are still available while you repair the link."
+        : "Saved desktop settings were kept so you can repair this link quickly.",
     error: message,
-    view: "start"
+    view: get().sessions.length > 0 ? "chat" : "start"
   });
+  await persistOfflineSnapshot(get);
   voiceInterruptRequested = false;
   backendInterruptTurnId = null;
 }

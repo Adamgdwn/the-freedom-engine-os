@@ -1072,6 +1072,7 @@ export const styles = StyleSheet.create({
   },
   userBubble: { backgroundColor: "#f2e7d7" },
   assistantBubble: { backgroundColor: "rgba(255,255,255,0.96)" },
+  systemBubble: { backgroundColor: "#eef6ff", borderColor: "rgba(15, 118, 110, 0.16)" },
   messageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 },
   messageRole: { fontWeight: "700", color: "#10233e" },
   messageTime: { color: "#6b7d95", fontSize: 12 },

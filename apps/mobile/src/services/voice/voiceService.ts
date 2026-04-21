@@ -1,10 +1,11 @@
-import Voice, { type SpeechErrorEvent, type SpeechResultsEvent } from "@react-native-voice/voice";
 import { I18nManager, PermissionsAndroid, Platform } from "react-native";
+import Voice, { type SpeechErrorEvent, type SpeechResultsEvent } from "./nativeVoice";
 
 const NO_SPEECH_MESSAGE = "No speech was captured. Try again and speak after tapping the mic.";
 const RECOVERABLE_RESTART_DELAY_MS = 180;
 const SESSION_END_RESTART_DELAY_MS = 120;
-const TTS_ANDROID_SERVICE_PACKAGE = "com.google.android.tts";
+const FINAL_TRANSCRIPT_DEDUPE_WINDOW_MS = 2500;
+const PARTIAL_TRANSCRIPT_FINALIZE_DELAY_MS = 1400;
 
 type VoiceCallbacks = {
   onListening?(): void;
@@ -43,11 +44,6 @@ function formatLocaleLabel(localeTag: string | null): string {
   return localeTag ?? "your phone's current language";
 }
 
-function isUnsupportedAndroidRecognitionService(packageName: string | null | undefined): boolean {
-  const normalized = packageName?.trim();
-  return !normalized || normalized === TTS_ANDROID_SERVICE_PACKAGE;
-}
-
 async function ensureMicrophonePermission(): Promise<void> {
   if (Platform.OS !== "android") {
     return;
@@ -66,7 +62,7 @@ async function getAndroidRecognitionServices(): Promise<string[]> {
 
   try {
     const services = await Voice.getSpeechRecognitionServices();
-    return Array.isArray(services) ? services : [];
+    return Array.isArray(services) ? services.map((service) => service?.trim()).filter(Boolean) : [];
   } catch {
     return [];
   }
@@ -74,7 +70,7 @@ async function getAndroidRecognitionServices(): Promise<string[]> {
 
 async function hasSupportedAndroidRecognitionService(): Promise<boolean> {
   const services = await getAndroidRecognitionServices();
-  return services.some((service) => !isUnsupportedAndroidRecognitionService(service));
+  return services.length > 0;
 }
 
 async function ensureSupportedAndroidRecognitionService(): Promise<void> {
@@ -83,14 +79,9 @@ async function ensureSupportedAndroidRecognitionService(): Promise<void> {
   }
 
   const services = await getAndroidRecognitionServices();
-  if (services.some((service) => !isUnsupportedAndroidRecognitionService(service))) {
+  if (services.length > 0) {
     return;
   }
-
-  const localeLabel = formatLocaleLabel(getDeviceLocaleTag());
-  throw new Error(
-    `Android voice input is not ready using the current speech service. Switch the phone to a supported recognizer for ${localeLabel} and try again.`
-  );
 }
 
 function getPreferredRecognitionLanguage(): string {
@@ -129,6 +120,7 @@ function formatVoiceError(event: SpeechErrorEvent): string {
       return "Microphone permission is required for voice input.";
     case "6":
     case "7":
+    case "11":
       return NO_SPEECH_MESSAGE;
     case "8":
       return "Voice recognition is busy right now. Try again in a moment.";
@@ -139,7 +131,7 @@ function formatVoiceError(event: SpeechErrorEvent): string {
       if (message.includes("busy")) {
         return "Voice recognition is busy right now. Try again in a moment.";
       }
-      if (message.includes("no match") || message.includes("no speech")) {
+      if (message.includes("no match") || message.includes("no speech") || message.includes("didn't understand")) {
         return NO_SPEECH_MESSAGE;
       }
       return getVoiceErrorMessage(event);
@@ -148,7 +140,7 @@ function formatVoiceError(event: SpeechErrorEvent): string {
 
 function isRecoverableSessionError(event: SpeechErrorEvent): boolean {
   const code = getVoiceErrorCode(event);
-  return code === "6" || code === "7" || code === "8";
+  return code === "6" || code === "7" || code === "8" || code === "11";
 }
 
 async function resetNativeRecognizer(): Promise<void> {
@@ -171,31 +163,37 @@ function firstTranscript(event?: SpeechResultsEvent): string {
 
 export class VoiceService {
   private latestTranscript = "";
+  private lastCommittedTranscript = "";
+  private lastCommittedAt = 0;
   private sessionActive = false;
   private manualStopRequested = false;
   private suppressUnexpectedEndReconnect = false;
   private callbacks: VoiceCallbacks | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private forceAbortTimer: ReturnType<typeof setTimeout> | null = null;
+  private partialFinalizeTimer: ReturnType<typeof setTimeout> | null = null;
 
   async isAvailable(): Promise<boolean> {
-    try {
-      if (Boolean(await Voice.isAvailable())) {
-        return true;
-      }
-
-      if (Platform.OS === "android") {
-        return hasSupportedAndroidRecognitionService();
-      }
-
-      return false;
-    } catch {
-      return false;
+    if (Platform.OS === "android") {
+      return true;
     }
+
+    let voiceAvailable = false;
+    try {
+      voiceAvailable = Boolean(await Voice.isAvailable());
+    } catch {
+      voiceAvailable = false;
+    }
+
+    if (voiceAvailable) {
+      return true;
+    }
+
+    return false;
   }
 
   async startStreamingSession(callbacks: VoiceCallbacks): Promise<void> {
-    if (!(await this.isAvailable())) {
+    if (Platform.OS !== "android" && !(await this.isAvailable())) {
       throw new Error("Speech recognition is not available in this build.");
     }
 
@@ -209,6 +207,8 @@ export class VoiceService {
     this.manualStopRequested = false;
     this.suppressUnexpectedEndReconnect = false;
     this.latestTranscript = "";
+    this.lastCommittedTranscript = "";
+    this.lastCommittedAt = 0;
     this.attachListeners();
     void this.startRecognition();
   }
@@ -219,6 +219,7 @@ export class VoiceService {
     this.suppressUnexpectedEndReconnect = true;
     this.clearReconnectTimer();
     this.clearForceAbortTimer();
+    this.clearPartialFinalizeTimer();
 
     try {
       void Voice.stop();
@@ -259,11 +260,12 @@ export class VoiceService {
       this.callbacks?.onSpeechStart?.();
     };
     Voice.onSpeechEnd = () => {
+      this.clearPartialFinalizeTimer();
       this.callbacks?.onSpeechEnd?.();
 
       if (this.latestTranscript) {
         console.info(`[FreedomVoice] end promoted transcript=${this.latestTranscript}`);
-        this.callbacks?.onFinalTranscript?.(this.latestTranscript);
+        this.emitFinalTranscript(this.latestTranscript);
         this.latestTranscript = "";
       }
 
@@ -284,8 +286,10 @@ export class VoiceService {
       console.info(`[FreedomVoice] partial transcript=${transcript}`);
       this.latestTranscript = transcript;
       this.callbacks?.onPartialTranscript?.(transcript);
+      this.schedulePartialTranscriptFinalize();
     };
     Voice.onSpeechResults = (event) => {
+      this.clearPartialFinalizeTimer();
       const transcript = firstTranscript(event);
       if (!transcript) {
         return;
@@ -293,12 +297,13 @@ export class VoiceService {
 
       console.info(`[FreedomVoice] final transcript=${transcript}`);
       this.latestTranscript = transcript;
-      this.callbacks?.onFinalTranscript?.(transcript);
+      this.emitFinalTranscript(transcript);
       this.latestTranscript = "";
     };
     Voice.onSpeechError = (event) => {
+      this.clearPartialFinalizeTimer();
       if (this.latestTranscript && isRecoverableSessionError(event)) {
-        this.callbacks?.onFinalTranscript?.(this.latestTranscript);
+        this.emitFinalTranscript(this.latestTranscript);
         this.latestTranscript = "";
         return;
       }
@@ -372,14 +377,58 @@ export class VoiceService {
     this.forceAbortTimer = null;
   }
 
+  private clearPartialFinalizeTimer(): void {
+    if (!this.partialFinalizeTimer) {
+      return;
+    }
+
+    clearTimeout(this.partialFinalizeTimer);
+    this.partialFinalizeTimer = null;
+  }
+
   private cleanup(): void {
     this.clearReconnectTimer();
+    this.clearPartialFinalizeTimer();
     try {
       Voice.removeAllListeners();
     } catch {
       // Ignore listener cleanup failures.
     }
     this.latestTranscript = "";
+    this.lastCommittedTranscript = "";
+    this.lastCommittedAt = 0;
     this.callbacks = null;
+  }
+
+  private emitFinalTranscript(text: string): void {
+    const normalized = firstTranscript({ value: [text] });
+    if (!normalized) {
+      return;
+    }
+
+    const now = Date.now();
+    if (normalized === this.lastCommittedTranscript && now - this.lastCommittedAt < FINAL_TRANSCRIPT_DEDUPE_WINDOW_MS) {
+      console.info(`[FreedomVoice] deduped transcript=${normalized}`);
+      return;
+    }
+
+    this.lastCommittedTranscript = normalized;
+    this.lastCommittedAt = now;
+    this.callbacks?.onFinalTranscript?.(normalized);
+  }
+
+  private schedulePartialTranscriptFinalize(): void {
+    this.clearPartialFinalizeTimer();
+    this.partialFinalizeTimer = setTimeout(() => {
+      this.partialFinalizeTimer = null;
+      const transcript = firstTranscript({ value: [this.latestTranscript] });
+      if (!transcript || !this.sessionActive || this.manualStopRequested) {
+        return;
+      }
+
+      console.info(`[FreedomVoice] auto-finalized partial transcript=${transcript}`);
+      this.emitFinalTranscript(transcript);
+      this.latestTranscript = "";
+    }, PARTIAL_TRANSCRIPT_FINALIZE_DELAY_MS);
   }
 }

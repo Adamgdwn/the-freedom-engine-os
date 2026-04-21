@@ -28,6 +28,8 @@ import type {
   InterruptType,
   NotificationEvent,
   NotificationPrefs,
+  OfflineImportRequest,
+  OfflineImportResponse,
   OutboundRecipient,
   PairingCompleteResponse,
   PairedDevice,
@@ -167,6 +169,7 @@ const defaultNotificationPrefs: NotificationPrefs = {
 const INTERRUPT_RECLAIM_MS = 5_000;
 const STALE_STOP_RECOVERY_MS = 20_000;
 const STALE_QUEUE_CLAIM_MS = 15_000;
+const DUPLICATE_VOICE_MESSAGE_WINDOW_MS = 3_000;
 const MAX_PARALLEL_SESSION_TASKS = 2;
 const DEFERRED_WRITE_MS = 200;
 const MAX_WORK_WAIT_MS = 20_000;
@@ -234,6 +237,7 @@ export class GatewayStore {
       host.pairingCodeIssuedAt = host.pairingCodeIssuedAt || issuedAt;
       host.lastSeenAt = issuedAt;
       host.isOnline = true;
+      recoverOrphanedHostTasks(state, host.id, issuedAt);
       host.hostToken = createId("hosttoken");
       host.voiceProfile = host.voiceProfile ?? null;
     }
@@ -975,6 +979,10 @@ export class GatewayStore {
     if (!targetSession) {
       throw new Error("Session not found.");
     }
+    const recentDuplicateVoiceMessage = findRecentDuplicateVoiceMessage(state, session.id, input);
+    if (recentDuplicateVoiceMessage) {
+      return recentDuplicateVoiceMessage;
+    }
     const message: ChatMessage = {
       id: createId("msg"),
       sessionId: session.id,
@@ -1078,6 +1086,100 @@ export class GatewayStore {
     this.emitMessage(principal.host.id, message);
     this.emitSession(targetSession);
     return message;
+  }
+
+  async importOfflineSession(token: string, sessionId: string, input: OfflineImportRequest): Promise<OfflineImportResponse> {
+    const principal = await this.requireDevice(token);
+    const session = await this.requireSessionForDevice(sessionId, principal.device.id);
+    const state = await this.readState();
+    const targetSession = state.sessions.find((item) => item.id === session.id);
+    if (!targetSession) {
+      throw new Error("Session not found.");
+    }
+
+    const summaryRequestId = `${input.clientImportId.trim()}:summary`;
+    const draftsRequestId = `${input.clientImportId.trim()}:drafts`;
+    const existingMessages = state.messages.filter(
+      (item) =>
+        item.sessionId === session.id &&
+        item.role === "system" &&
+        (item.clientRequestId === summaryRequestId || item.clientRequestId === draftsRequestId)
+    );
+    if (existingMessages.length === 2) {
+      return {
+        session: toPublicSession(targetSession),
+        messages: existingMessages.sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+        imported: false
+      };
+    }
+
+    const baseTime = Date.now();
+    const summaryCreatedAt = new Date(baseTime).toISOString();
+    const draftsCreatedAt = new Date(baseTime + 1).toISOString();
+    const importedMessages: ChatMessage[] = [];
+    const summaryMessage =
+      existingMessages.find((item) => item.clientRequestId === summaryRequestId) ??
+      ({
+        id: createId("msg"),
+        sessionId: session.id,
+        role: "system",
+        content: `[Mobile offline ideation summary]\n${input.summary.trim()}`,
+        status: "completed",
+        errorMessage: null,
+        clientRequestId: summaryRequestId,
+        inputMode: null,
+        responseStyle: null,
+        transcriptPolished: null,
+        createdAt: summaryCreatedAt,
+        updatedAt: summaryCreatedAt
+      } satisfies ChatMessage);
+
+    const draftTurnsMessage =
+      existingMessages.find((item) => item.clientRequestId === draftsRequestId) ??
+      ({
+        id: createId("msg"),
+        sessionId: session.id,
+        role: "system",
+        content: `[Mobile offline draft turns]\n${input.draftTurns.map((turn, index) => `${index + 1}. ${turn.trim()}`).join("\n")}`,
+        status: "completed",
+        errorMessage: null,
+        clientRequestId: draftsRequestId,
+        inputMode: null,
+        responseStyle: null,
+        transcriptPolished: null,
+        createdAt: draftsCreatedAt,
+        updatedAt: draftsCreatedAt
+      } satisfies ChatMessage);
+
+    for (const message of [summaryMessage, draftTurnsMessage]) {
+      if (!state.messages.some((item) => item.id === message.id)) {
+        state.messages.push(message);
+      }
+      importedMessages.push(message);
+    }
+
+    targetSession.lastError = null;
+    targetSession.lastPreview = truncatePreview(input.summary.trim());
+    targetSession.lastActivityAt = draftsCreatedAt;
+    targetSession.updatedAt = draftsCreatedAt;
+
+    this.addAuditEvent(state, {
+      hostId: principal.host.id,
+      deviceId: principal.device.id,
+      sessionId: targetSession.id,
+      type: "offline_imported",
+      detail: `${input.source}:${input.draftTurns.length}`
+    });
+    await this.writeState(state);
+    for (const message of importedMessages) {
+      this.emitMessage(principal.host.id, message);
+    }
+    this.emitSession(targetSession);
+    return {
+      session: toPublicSession(targetSession),
+      messages: importedMessages.sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+      imported: true
+    };
   }
 
   async stopSession(token: string, sessionId: string): Promise<ChatSession> {
@@ -1607,6 +1709,10 @@ export class GatewayStore {
     }
 
     const now = nowIso();
+    const recentDuplicateVoiceMessage = findRecentDuplicateVoiceMessage(state, session.id, input);
+    if (recentDuplicateVoiceMessage) {
+      return recentDuplicateVoiceMessage;
+    }
     const message: ChatMessage = {
       id: createId("msg"),
       sessionId: session.id,
@@ -2419,6 +2525,132 @@ function truncatePreview(value: string, maxLength = 140): string {
     return trimmed;
   }
   return `${trimmed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function normalizeMessageText(value: string | null | undefined): string {
+  return value?.trim().replace(/\s+/g, " ") ?? "";
+}
+
+function isVoiceInputMode(inputMode: PostMessageRequest["inputMode"] | ChatMessage["inputMode"]): boolean {
+  return inputMode === "voice" || inputMode === "voice_polished";
+}
+
+function findRecentDuplicateVoiceMessage(
+  state: GatewayState,
+  sessionId: string,
+  input: PostMessageRequest
+): ChatMessage | null {
+  if (!isVoiceInputMode(input.inputMode)) {
+    return null;
+  }
+
+  const normalizedInput = normalizeMessageText(input.text);
+  if (!normalizedInput) {
+    return null;
+  }
+
+  const cutoff = Date.now() - DUPLICATE_VOICE_MESSAGE_WINDOW_MS;
+  const recentUserMessages = [...state.messages]
+    .reverse()
+    .filter((message) => {
+      if (message.sessionId !== sessionId || message.role !== "user" || !isVoiceInputMode(message.inputMode)) {
+        return false;
+      }
+
+      const createdAtMs = Date.parse(message.createdAt);
+      if (!Number.isFinite(createdAtMs) || createdAtMs < cutoff) {
+        return false;
+      }
+
+      return normalizeMessageText(message.content) === normalizedInput;
+    });
+
+  return recentUserMessages[0] ?? null;
+}
+
+function recoverOrphanedHostTasks(state: GatewayState, hostId: string, recoveredAt: string): void {
+  const hostSessionIds = new Set(state.sessions.filter((session) => session.hostId === hostId).map((session) => session.id));
+  if (!hostSessionIds.size) {
+    return;
+  }
+
+  let changed = false;
+  for (const task of state.tasks) {
+    if (!hostSessionIds.has(task.sessionId)) {
+      continue;
+    }
+
+    if (task.status === "queued" && task.claimedAt) {
+      task.claimedAt = null;
+      task.updatedAt = recoveredAt;
+      changed = true;
+      continue;
+    }
+
+    if (!isTaskRunning(task)) {
+      continue;
+    }
+
+    const assistantMessage = task.assistantMessageId
+      ? state.messages.find((message) => message.id === task.assistantMessageId && message.sessionId === task.sessionId)
+      : [...state.messages]
+          .reverse()
+          .find((message) => message.sessionId === task.sessionId && message.role === "assistant" && message.status === "streaming");
+
+    if (task.stopRequested) {
+      task.status = "cancelled";
+      task.stopRequested = false;
+      task.claimedAt = null;
+      task.interruptClaimedAt = null;
+      task.lastError = "Recovered after the desktop host restarted while stopping a run.";
+      task.updatedAt = recoveredAt;
+      if (assistantMessage && assistantMessage.status === "streaming") {
+        assistantMessage.status = "interrupted";
+        assistantMessage.errorMessage = "Recovered after the desktop host restarted while stopping a run.";
+        assistantMessage.updatedAt = recoveredAt;
+      }
+      changed = true;
+      continue;
+    }
+
+    task.status = "queued";
+    task.claimedAt = null;
+    task.stopRequested = false;
+    task.interruptClaimedAt = null;
+    task.lastError = null;
+    task.updatedAt = recoveredAt;
+
+    if (assistantMessage && assistantMessage.status === "streaming") {
+      assistantMessage.status = "interrupted";
+      assistantMessage.errorMessage = "Recovered after the desktop host restarted. Retrying this turn.";
+      assistantMessage.updatedAt = recoveredAt;
+    }
+
+    changed = true;
+  }
+
+  if (!changed) {
+    return;
+  }
+
+  for (const session of state.sessions) {
+    if (hostSessionIds.has(session.id)) {
+      syncSessionFromTasks(state, session);
+    }
+  }
+
+  state.auditEvents.unshift({
+    id: createId("audit"),
+    hostId,
+    deviceId: null,
+    sessionId: null,
+    type: "repair_needed",
+    originSurface: null,
+    auditCorrelationId: null,
+    detail: "Recovered orphaned host tasks after desktop host registration.",
+    createdAt: recoveredAt
+  });
+  state.auditEvents = state.auditEvents.slice(0, 200);
 }
 
 function notificationTitleForEvent(event: NotificationEvent): string {

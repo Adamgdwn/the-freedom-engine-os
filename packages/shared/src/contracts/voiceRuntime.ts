@@ -1,4 +1,6 @@
-export type VoiceRuntimeMode = "realtime_primary" | "device_fallback";
+export type VoiceRuntimeMode = "realtime_primary" | "device_fallback" | "on_device_offline";
+
+export type VoiceRuntimeState = "listening" | "processing" | "speaking";
 
 export type VoiceTransport = "livekit_webrtc" | "device_local";
 

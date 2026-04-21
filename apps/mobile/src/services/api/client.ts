@@ -8,6 +8,8 @@ import type {
   HostBuildLaneResponse,
   HostStatus,
   NotificationEvent,
+  OfflineImportRequest,
+  OfflineImportResponse,
   OutboundRecipient,
   PairingCompleteResponse,
   PairedDevice,
@@ -73,6 +75,15 @@ export class ApiClient {
 
   postMessage(token: string, baseUrl: string, sessionId: string, input: PostMessageRequest): Promise<ChatMessage> {
     return this.request("POST", `${baseUrl}/sessions/${encodeURIComponent(sessionId)}/messages`, token, input);
+  }
+
+  importOfflineSession(
+    token: string,
+    baseUrl: string,
+    sessionId: string,
+    input: OfflineImportRequest
+  ): Promise<OfflineImportResponse> {
+    return this.request("POST", `${baseUrl}/sessions/${encodeURIComponent(sessionId)}/offline-import`, token, input);
   }
 
   stopSession(token: string, baseUrl: string, sessionId: string): Promise<ChatSession> {

@@ -1,6 +1,6 @@
 # Mobile Realtime Voice Handoff
 
-Last updated: 2026-04-17
+Last updated: 2026-04-21
 
 ## Purpose
 
@@ -12,13 +12,20 @@ Use this document before doing any more mobile voice work.
 
 ## What Shipped
 
-The repo now contains a first end-to-end mobile realtime voice slice:
+The repo now contains a live mobile voice stack with both premium realtime and bounded
+offline fallback behavior:
 
 - the paired gateway can mint a mobile voice runtime session through
   `POST /voice/runtime/session`
 - the mobile app can request that session and connect directly to LiveKit
 - the mobile app now prefers realtime voice first and degrades to the older device
   STT/TTS path only when the premium path is unavailable
+- the desktop host now autostarts and supervises the Python LiveKit/OpenAI worker when
+  the required voice env is present
+- when the paired desktop is unreachable but cached chats exist, the mobile app can stay
+  usable in `Offline / On-device` mode for local ideation
+- offline mobile work can be imported later through `POST /sessions/:id/offline-import`
+  as non-executing `system` notes, followed by one explicit drafted continuation turn
 - Android native bootstrap now initializes the LiveKit React Native SDK
 - iOS bootstrap is also prepared for the same SDK
 - the mobile menu shows the active voice runtime so testers can tell which lane they are on
@@ -33,7 +40,8 @@ The premium path is implemented in code but it is not fully live on this machine
 - `LIVEKIT_API_SECRET`
 - `OPENAI_API_KEY`
 
-Without those values, the new APK will fall back to the older device voice loop.
+Without those values, the new APK will fall back to the older device voice loop or
+on-device offline ideation when the desktop is unreachable.
 
 That is the main blocker now. It is no longer primarily a code blocker.
 
@@ -57,6 +65,8 @@ Read these first if you are continuing the work:
 - Default runtime mode is now `realtime_primary`.
 - If the gateway returns a valid LiveKit session, the phone should connect to the realtime room.
 - If that setup fails, the app falls back to the older device STT/TTS loop.
+- During an active realtime session, phone-local auto-read is now suppressed so the old
+  "two different voices after interrupt" split no longer competes with the live reply.
 - The menu shows:
   - app version
   - build code
@@ -65,17 +75,33 @@ Read these first if you are continuing the work:
 ### Gateway
 
 - Mobile device tokens can now request a voice runtime session.
+- Mobile device tokens can now import offline session notes through
+  `POST /sessions/:id/offline-import`.
 - The response includes:
   - LiveKit room token
   - websocket URL
   - room name
   - participant identity
   - shared voice binding metadata
+- The gateway now also:
+  - deduplicates near-identical voice user turns that arrive inside the short duplicate window
+  - recovers orphaned queued/running tasks when the desktop host restarts and registers again
 
 ### Agent
 
 - The Python LiveKit agent now publishes transcript data with `source` metadata so the
   mobile client can distinguish assistant transcript from user transcript cleanly.
+
+### Desktop Host
+
+- The desktop host should now launch the worker automatically with:
+
+```bash
+uv run --with-requirements requirements.txt agent.py dev
+```
+
+- Use `DESKTOP_VOICE_WORKER_AUTOSTART=false` to disable that behavior when debugging.
+- Use `DESKTOP_VOICE_WORKER_COMMAND` if you need a different worker launch command.
 
 ## Required Environment Setup
 
@@ -109,6 +135,12 @@ In a second terminal:
 
 ```bash
 npm run dev:desktop
+```
+
+Expected desktop-host log line:
+
+```text
+[voice-worker] starting uv run --with-requirements requirements.txt agent.py dev
 ```
 
 ### 3. Confirm the gateway health endpoint
@@ -223,6 +255,7 @@ Expected:
 
 - interrupt should stop the reply
 - the next user speech should be treated as a new turn, not a stale interrupt loop
+- the phone should not keep reading stale local transcript audio beside the live reply
 
 ### Phase 5: Recovery
 
@@ -236,6 +269,21 @@ Expected:
 
 - the app either reconnects clearly or degrades clearly
 - it should not silently hang in fake processing
+- if the desktop is unreachable but cached chats exist, the app should stay usable in
+  `Offline / On-device` rather than forcing repair before ideation can continue
+
+### Phase 6: Offline import safety
+
+1. Stop the desktop host or disconnect the phone from the paired desktop.
+2. Open a cached chat and create one or two offline turns.
+3. Reconnect the desktop.
+4. Review the offline import screen and import the notes.
+
+Expected:
+
+- the imported items arrive as `system` notes, not live user turns
+- the import itself does not queue a desktop task
+- the app offers one drafted `Continue with Freedom` turn, but does not auto-send it
 
 ## Known Remaining Risks
 
@@ -243,11 +291,11 @@ Expected:
 
 This is the biggest remaining blocker.
 
-### 2. Mobile still carries both runtimes
+### 2. Mobile still carries multiple voice/runtime branches
 
-The realtime path is now primary-capable, but the old device fallback still exists in the
- store and voice service code. That is intentional for now, but it means more state
- branching than the end-state architecture should keep.
+The realtime path is now primary-capable, while device fallback and offline on-device
+ideation still exist in parallel. That is intentional for this release, but it means
+more state branching than the end-state architecture should keep.
 
 ### 3. Desktop and mobile voice are still not one unified session controller
 

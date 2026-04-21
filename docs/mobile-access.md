@@ -48,6 +48,13 @@ surface than a one-shot relay:
 - premium realtime voice sessions now rehydrate from the recent thread and write their
   final transcripts back into the shared session history, so ending and restarting Talk
   no longer wipes the current conversational context
+- if the paired desktop becomes unreachable after the app has cached chats, the phone can
+  stay in `Offline / On-device` mode for local ideation, drafting, summaries, and queued
+  import review instead of only throwing a connection error
+- offline mobile work is now review-first and safe by design:
+  importing it writes non-executing `system` notes into canonical history and drafts one
+  explicit `Continue with Freedom` follow-up instead of auto-replaying offline turns into
+  live desktop execution
 - the header controls are now split cleanly:
   the three-line pull-down is the actions/capabilities lane, while the three dots are
   the settings lane for voice choices, reply behavior, and system adjustments
@@ -88,6 +95,16 @@ For premium mobile voice, repo-root `.env` must also contain:
 
 Keep `.env.example` as placeholders only. The live runtime does not read secrets from the
 template file.
+
+The desktop host now autostarts the Python LiveKit/OpenAI worker when those runtime
+credentials are present. The default command is:
+
+`uv run --with-requirements requirements.txt agent.py dev`
+
+Optional control knobs:
+
+- `DESKTOP_VOICE_WORKER_AUTOSTART=false` disables automatic worker launch
+- `DESKTOP_VOICE_WORKER_COMMAND=<custom command>` overrides the default worker command
 
 ## Launch Path
 
@@ -136,9 +153,15 @@ The companion install page remains:
 - If a phone appears to "start where it left off" after reinstalling, check for
   preserved app storage or a restored paired device token before assuming the APK is stale.
 - If premium voice connects but stalls without hearing your speech, verify the paired
-  desktop worker is reading secrets from repo-root `.env`, confirm only one LiveKit
-  worker is running, and reinstall the latest APK so the Android speech-service filter fix
-  is present on the phone.
+  desktop worker is reading secrets from repo-root `.env`, confirm the desktop-host logs
+  show `[voice-worker] starting ...`, and reinstall the latest APK so the latest Android
+  speech/runtime fixes are present on the phone.
+- If `Talk` connects but stays on `Listening`, treat that as a missing or stalled desktop
+  voice worker first. The phone can connect to the LiveKit room successfully even when
+  nobody is there yet to answer.
+- If an interrupt ever sounds like two different Freedom voices answering at once, verify
+  the phone is on Android `0.2.68 (75)` or later. That build stops the phone-local
+  spoken-reply path from competing with live realtime playback.
 
 ## What This Means
 
@@ -155,5 +178,5 @@ desktop or workstation running Freedom Desktop must stay online and reachable.
   live runtime so Freedom can branch governed work in practice
 - add clearer builder-first actions from the desktop shell into Freedom-governed
   build requests
-- finish real-device Android validation for the current interrupt and multi-task
-  orchestration pass
+- continue real-device Android validation for the current offline companion and realtime
+  interrupt/recovery pass, especially under conference-grade network and noise conditions

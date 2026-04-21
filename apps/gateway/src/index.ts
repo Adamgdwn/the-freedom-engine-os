@@ -12,6 +12,7 @@ import {
   hostHeartbeatRequestSchema,
   hostInterruptTurnRequestSchema,
   hostStartTurnRequestSchema,
+  offlineImportRequestSchema,
   pairingCompleteRequestSchema,
   postMessageRequestSchema,
   registerPushTokenRequestSchema,
@@ -446,6 +447,13 @@ const server = createServer(async (req, res) => {
       const sessionId = url.pathname.split("/")[2];
       const parsed = postMessageRequestSchema.parse(await readJson(req));
       sendJson(res, 200, await store.postMessage(readBearer(req), sessionId, parsed));
+      return;
+    }
+
+    if (method === "POST" && /^\/sessions\/[^/]+\/offline-import$/.test(url.pathname)) {
+      const sessionId = url.pathname.split("/")[2];
+      const parsed = offlineImportRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.importOfflineSession(readBearer(req), sessionId, parsed));
       return;
     }
 

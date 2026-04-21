@@ -1,7 +1,7 @@
 export const DEFAULT_BASE_URL = "http://pop-os.taildcb5c5.ts.net:43111";
 export const FCM_ENABLED = false;
-export const MOBILE_APP_VERSION_NAME = "0.2.50";
-export const MOBILE_APP_VERSION_CODE = 57;
+export const MOBILE_APP_VERSION_NAME = "0.2.68";
+export const MOBILE_APP_VERSION_CODE = 75;
 export const VOICE_RUNTIME_MODE = "realtime_primary";
 export const VOICE_SESSION_ENABLED = true;
 export const VOICE_INTERRUPT_MIN_CHARS = 8;

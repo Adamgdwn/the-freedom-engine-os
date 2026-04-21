@@ -17,6 +17,8 @@ apps/mobile/ios/build/
 apps/mobile/ios/Pods/
 apps/mobile/.expo/
 apps/mobile/src/generated/
+apps/mobile/assets/models/*.gguf
+apps/mobile/android/app/src/main/assets/models/*.gguf
 
 # Desktop / gateway runtime state
 **/.local-data/

@@ -6,6 +6,8 @@ import { CodexAppServerClient } from "./codexAppServerClient.js";
 import { resolveCodexBinary } from "./codexBinary.js";
 
 const execFileAsync = promisify(execFile);
+const REUSED_THREAD_FIRST_EVENT_TIMEOUT_MS = 8_000;
+const STALE_THREAD_NO_OUTPUT_ERROR = "__FREEDOM_STALE_THREAD_NO_OUTPUT__";
 
 interface ThreadStartResponse {
   thread: {
@@ -99,6 +101,11 @@ export class CodexBridge {
     const queuedDeltas: string[] = [];
     const itemBuffers = new Map<string, string>();
     const bufferedNotifications = new Map<string, unknown[]>();
+    let firstTurnEventSeen = false;
+    let settleFirstTurnEvent: (() => void) | null = null;
+    const firstTurnEvent = new Promise<void>((resolve) => {
+      settleFirstTurnEvent = () => resolve();
+    });
     let deltaChain = Promise.resolve();
     let settleTurnCompletion: ((error?: Error) => void) | null = null;
     const turnCompletion = new Promise<void>((resolve, reject) => {
@@ -116,10 +123,21 @@ export class CodexBridge {
       return deltaChain;
     };
 
+    const markFirstTurnEventSeen = () => {
+      if (firstTurnEventSeen) {
+        return;
+      }
+      firstTurnEventSeen = true;
+      settleFirstTurnEvent?.();
+      settleFirstTurnEvent = null;
+    };
+
     const handleTurnNotification = async (message: unknown) => {
       if (!isNotification(message) || notificationTurnId(message) !== turnId) {
         return;
       }
+
+      markFirstTurnEventSeen();
 
       if (message.method === "item/agentMessage/delta" && matchesTurn(message.params, turnId)) {
         const delta = readString(message.params, "delta");
@@ -184,6 +202,10 @@ export class CodexBridge {
         return;
       }
 
+      if (messageTurnId === turnId) {
+        markFirstTurnEventSeen();
+      }
+
       await handleTurnNotification(message);
     };
 
@@ -204,6 +226,25 @@ export class CodexBridge {
       turnId = turn.turn.id;
       const earlyNotifications = bufferedNotifications.get(turnId) ?? [];
       bufferedNotifications.delete(turnId);
+      if (earlyNotifications.length > 0) {
+        markFirstTurnEventSeen();
+      }
+
+      if (input.threadId) {
+        const sawTurnEvent = await Promise.race([
+          firstTurnEvent.then(() => true),
+          delay(REUSED_THREAD_FIRST_EVENT_TIMEOUT_MS).then(() => false)
+        ]);
+        if (!sawTurnEvent) {
+          try {
+            await this.interrupt(threadId, turnId);
+          } catch {
+            // Best effort only. If the stale turn cannot be interrupted, the runtime retry still needs to continue.
+          }
+          throw new Error(STALE_THREAD_NO_OUTPUT_ERROR);
+        }
+      }
+
       await input.onTurnStarted({ threadId, turnId });
       readyForDeltas = true;
 
@@ -240,6 +281,10 @@ export class CodexBridge {
     return response.thread.id;
   }
 
+}
+
+export function isStaleThreadNoOutputError(message: string | null | undefined): boolean {
+  return (message ?? "").includes(STALE_THREAD_NO_OUTPUT_ERROR);
 }
 
 function isNotification(value: unknown): value is { method: string; params?: unknown } {
@@ -280,4 +325,8 @@ function readErrorMessage(value: unknown): string | null {
   }
   const message = error.message;
   return typeof message === "string" ? message : null;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
