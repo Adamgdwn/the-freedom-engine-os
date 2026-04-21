@@ -29,6 +29,16 @@ using the same operating rules.
 - Test: `npm test`
 - Typecheck: `npm run typecheck`
 
+## Freedom Dispatcher
+
+The Freedom Dispatcher (`agents/freedom-dispatcher/`) is a FastAPI service on 127.0.0.1:4317 that gives Freedom the ability to invoke any local tool or agent during conversation.
+
+- Runs as a systemd user service (`freedom-dispatcher.service`) — starts automatically on login.
+- Scans `~/code/**` every 20 seconds for `freedom.tool.yaml` manifests. New manifests are picked up automatically.
+- To make any tool callable by Freedom: add a `freedom.tool.yaml` manifest beside the tool's code and ensure the tool accepts JSON on stdin and writes a JSON result as the last stdout line.
+- Manifest schema version: 1. See `agents/freedom-dispatcher/tools/` for examples.
+- Autonomy levels: A1 (verbal confirm), A2 (silent). Default A1.
+
 ## Document control
 
 - Architecture decisions go in `docs/`
