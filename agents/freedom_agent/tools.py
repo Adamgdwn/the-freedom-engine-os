@@ -1544,3 +1544,116 @@ async def prepare_email_draft(
         },
     })
     return "Email draft prepared for confirmation."
+
+
+# ── Freedom Dispatcher integration ────────────────────────────────────────────
+
+_DISPATCHER_BASE = "http://127.0.0.1:4317"
+_pending_scaffold: dict[str, object] = {}
+
+
+def _dispatcher_request(
+    method: str,
+    path: str,
+    *,
+    payload: dict | None = None,
+) -> dict | None:
+    url = f"{_DISPATCHER_BASE}{path}"
+    data = json.dumps(payload).encode() if payload is not None else None
+    headers: dict[str, str] = {"Accept": "application/json"}
+    if data:
+        headers["Content-Type"] = "application/json"
+    try:
+        req = request.Request(url, data=data, headers=headers, method=method)
+        with request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except Exception:
+        return None
+
+
+@function_tool
+async def scaffold_new_project(
+    project_name: str,
+    build_type: str,
+    governance_type: str = "",
+    risk_tier: str = "medium",
+    primary_builder: str = "codex session",
+    stack: str = "not specified",
+    scope_problem: str = "",
+    scope_user: str = "",
+    scope_mvp: str = "",
+    build_lane_id: str = "",
+    confirmed: bool = False,
+) -> str:
+    """
+    Scaffold a new governed project folder using the New Build Agent.
+
+    Call after a build-lane record has been drafted for this capability.
+    Autonomy A1 (default): call first without confirmed=True to present the
+    plan to the operator, then call again with confirmed=True after they say
+    yes. Autonomy A2: executes immediately and narrates.
+    Never claim success without receiving status 'created' in the response.
+    """
+    params: dict[str, str] = {"project_name": project_name, "build_type": build_type}
+    for k, v in [
+        ("governance_type", governance_type),
+        ("risk_tier", risk_tier),
+        ("primary_builder", primary_builder),
+        ("stack", stack),
+        ("scope_problem", scope_problem),
+        ("scope_user", scope_user),
+        ("scope_mvp", scope_mvp),
+        ("build_lane_id", build_lane_id),
+    ]:
+        if v and v not in ("not specified", "medium", "codex session"):
+            params[k] = v
+    params.setdefault("risk_tier", risk_tier)
+    params.setdefault("primary_builder", primary_builder)
+
+    tool_info = _dispatcher_request("GET", "/admin/tools?id=new-build-agent")
+    if tool_info is None:
+        return (
+            "The Freedom Dispatcher is not running. "
+            "Start it with: bash ~/code/agents/freedom-dispatcher/start.sh"
+        )
+
+    tools_list = tool_info.get("tools", [])
+    autonomy = tools_list[0].get("autonomy_level", "A1") if tools_list else "A1"
+
+    if autonomy == "A2":
+        result = _dispatcher_request("POST", "/invoke", payload={"tool_id": "new-build-agent", "params": params})
+        return _scaffold_result_message(project_name, result)
+
+    if not confirmed:
+        slug = re.sub(r"-+", "-", re.sub(r"[^a-z0-9-]", "", re.sub(r"[ _/]", "-", project_name.lower()))).strip("-")
+        gov = governance_type or {"app": "application", "agent": "agent", "tool": "internal-tool"}.get(build_type, "internal-tool")
+        folder_root = "agents" if build_type == "agent" or gov == "agent" else "Applications"
+        _pending_scaffold.update({"params": params})
+        return (
+            f"I'll scaffold '{project_name}' at ~/code/{folder_root}/{slug} "
+            f"as a {gov} project (risk: {risk_tier}, builder: {primary_builder}). "
+            "Say yes to confirm and I'll create the folder now."
+        )
+
+    _pending_scaffold.clear()
+    result = _dispatcher_request("POST", "/invoke", payload={"tool_id": "new-build-agent", "params": params})
+    return _scaffold_result_message(project_name, result)
+
+
+def _scaffold_result_message(project_name: str, result: dict | None) -> str:
+    if result is None:
+        return "Dispatcher call failed. Check that the Freedom Dispatcher is running on port 4317."
+    if not result.get("ok"):
+        err = result.get("error", {})
+        return f"Scaffold failed: {err.get('message', 'unknown error')}"
+    output = result.get("result", {})
+    status = output.get("status", "unknown")
+    path = output.get("project_path", "unknown path")
+    count = len(output.get("files_created", []))
+    if status == "already-existed":
+        return f"Folder {path} already exists — nothing was changed."
+    return (
+        f"Created {path} with {count} files. "
+        "Next steps: fill in AI_BOOTSTRAP.md, confirm risk tier in project-control.yaml, "
+        "then run the governance preflight."
+    )
