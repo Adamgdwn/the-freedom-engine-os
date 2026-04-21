@@ -2,6 +2,16 @@
 
 ## 2026-04-21 (offline mobile companion, voice recovery, and release 0.2.68)
 
+- expanded the live Freedom voice agent so it can inspect governed repo control files
+  and tool manifests directly from approved roots, including `project-control.yaml`,
+  `docs/tool-permission-matrix.md`, `AI_BOOTSTRAP.md`, and registered `freedom.tool.yaml`
+  files, instead of bluffing when asked what rules or tools govern it
+- added live voice wrappers for dispatcher registry review, manifest inspection, registry
+  reload, and approval-gated dispatcher autonomy changes so the runtime prompt and the
+  callable tool surface are back in sync
+- added an approval-gated bridge from the live voice runtime into the desktop
+  programming lane, so Freedom can queue real repo work through the governed desktop
+  shell after explicit operator confirmation instead of stopping only at a programming request
 - added an Android offline companion path that keeps cached chats available when the
   paired desktop is unreachable, runs a bundled on-device GGUF ideation model, and
   stores offline work as local-only transcripts plus reviewable import drafts instead of

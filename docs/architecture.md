@@ -57,6 +57,8 @@ For a fast operator-facing view of what is actually live right now, use
   coordination tools for open tasks, durable learning, pending programming requests,
   trusted recipients, approved persona overlays, parked-task updates, and approval-gated
   email, programming, persona-adjustment, overlay-revision, and overlay-retirement actions.
+  It can now also inspect governed repo control files and tool manifests from approved
+  roots, and hand approved programming work into the desktop shell/Codex lane.
 - Persistence boundary:
   Supabase migrations under `supabase/migrations/` mirror both the original control-plane
   entities and the Freedom Connect runtime entities.
@@ -109,10 +111,13 @@ For a fast operator-facing view of what is actually live right now, use
 12. The desktop host now supervises the LiveKit/OpenAI voice worker, while the mobile
     app can also continue in a bounded offline ideation posture with cached chats and a
     bundled on-device model when the desktop is unreachable.
-13. Significant ideas that arise in conversation are meant to be promoted into the
+13. The live voice agent can inspect its own repo-side governance and tool YAML, and
+    after explicit confirmation it can bridge approved programming work into the desktop
+    execution lane instead of stopping only at a request-for-later posture.
+14. Significant ideas that arise in conversation are meant to be promoted into the
     dedicated Pop!_OS build lane, where business case, approval posture, and execution
     evidence are made explicit before or during implementation.
-14. Future persistence will swap the seed layer for Supabase queries while preserving the
+15. Future persistence will swap the seed layer for Supabase queries while preserving the
     same entity boundaries.
 
 ## Dependencies

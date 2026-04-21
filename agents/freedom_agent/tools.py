@@ -24,6 +24,24 @@ _HOST_STATE_PATH = Path(
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _MOBILE_RUNTIME_CONFIG_PATH = _REPO_ROOT / "apps/mobile/src/generated/runtimeConfig.ts"
 _RUNTIME_CONFIG_EXPORT_RE = re.compile(r"^export const (?P<key>[A-Z0-9_]+) = (?P<value>.+);$")
+_MAX_GOVERNED_FILE_CHARS = 12_000
+_ALLOWED_GOVERNED_REPO_PATHS = {
+    "AGENTS.md",
+    "AI_BOOTSTRAP.md",
+    "README.md",
+    "project-control.yaml",
+    "docs/CHANGELOG.md",
+    "docs/agent-inventory.md",
+    "docs/architecture.md",
+    "docs/current-capabilities.md",
+    "docs/deployment-guide.md",
+    "docs/manual.md",
+    "docs/model-registry.md",
+    "docs/prompt-register.md",
+    "docs/roadmap.md",
+    "docs/runbook.md",
+    "docs/tool-permission-matrix.md",
+}
 
 _VOICE_CATALOG: dict[str, dict[str, object]] = {
     "alloy": {
@@ -240,6 +258,138 @@ def _gateway_request(
         return None
 
     return parsed if isinstance(parsed, dict) else None
+
+
+def _loopback_gateway_base_url() -> str:
+    host_state = _read_host_runtime_state() or {}
+    gateway_url = os.getenv("FREEDOM_GATEWAY_URL") or host_state.get("gatewayUrl") or "http://127.0.0.1:43111"
+    parsed = parse.urlsplit(str(gateway_url))
+    scheme = parsed.scheme or "http"
+    port = parsed.port or 43111
+    return f"{scheme}://127.0.0.1:{port}"
+
+
+def _loopback_gateway_request(
+    method: str,
+    pathname: str,
+    body: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    endpoint = parse.urljoin(_loopback_gateway_base_url().rstrip("/") + "/", pathname.lstrip("/"))
+    payload = None if body is None else json.dumps(body).encode("utf-8")
+    req = request.Request(endpoint, data=payload, method=method)
+    if payload is not None:
+        req.add_header("Content-Type", "application/json")
+
+    try:
+        with request.urlopen(req, timeout=10) as response:
+            raw = response.read().decode("utf-8")
+    except (error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+
+    if not raw.strip():
+        return None
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _approved_roots() -> list[Path]:
+    roots_env = os.getenv("DESKTOP_APPROVED_ROOTS", "").strip()
+    root_values = [item.strip() for item in roots_env.split(",") if item.strip()]
+    if not root_values:
+        root_values = [str(_REPO_ROOT)]
+
+    resolved_roots: list[Path] = []
+    for item in root_values:
+        try:
+            resolved_roots.append(Path(item).expanduser().resolve(strict=True))
+        except OSError:
+            continue
+    if not resolved_roots:
+        resolved_roots.append(_REPO_ROOT.resolve())
+    return resolved_roots
+
+
+def _path_within_root(candidate: Path, root: Path) -> bool:
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_allowed_governed_repo_path(relative_path: str) -> bool:
+    normalized = relative_path.strip().lstrip("./")
+    return normalized in _ALLOWED_GOVERNED_REPO_PATHS or normalized.endswith("/freedom.tool.yaml") or normalized == "freedom.tool.yaml"
+
+
+def _resolve_governed_repo_path(path_hint: str) -> tuple[Path, str]:
+    raw_hint = path_hint.strip()
+    if not raw_hint:
+        raise ValueError("Tell me which governed file to inspect.")
+
+    approved_roots = _approved_roots()
+    raw_path = Path(raw_hint).expanduser()
+    candidates: list[tuple[Path, str]] = []
+    if raw_path.is_absolute():
+        try:
+            resolved = raw_path.resolve(strict=True)
+        except OSError as exc:
+            raise ValueError(f"I could not find {raw_hint}.") from exc
+        for root in approved_roots:
+            if _path_within_root(resolved, root):
+                candidates.append((resolved, resolved.relative_to(root).as_posix()))
+                break
+    else:
+        for root in approved_roots:
+            try:
+                resolved = (root / raw_path).resolve(strict=True)
+            except OSError:
+                continue
+            if _path_within_root(resolved, root):
+                candidates.append((resolved, resolved.relative_to(root).as_posix()))
+
+    if not candidates:
+        raise ValueError("That file is outside approved roots or does not exist.")
+
+    for resolved, relative_path in candidates:
+        if _is_allowed_governed_repo_path(relative_path):
+            return resolved, relative_path
+
+    raise ValueError(
+        "This runtime can only inspect governed control docs and freedom.tool.yaml manifests inside approved roots."
+    )
+
+
+def _read_governed_repo_file(path_hint: str, max_chars: int = _MAX_GOVERNED_FILE_CHARS) -> tuple[str, str]:
+    resolved_path, relative_path = _resolve_governed_repo_path(path_hint)
+    try:
+        contents = resolved_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"I could not read {relative_path}.") from exc
+
+    clipped = contents[:max_chars]
+    if len(contents) > max_chars:
+        clipped += "\n\n[truncated]"
+    return relative_path, clipped
+
+
+def _dispatcher_tool_summary(tool_id: str = "") -> dict[str, object] | None:
+    normalized_tool_id = tool_id.strip()
+    suffix = f"?id={parse.quote(normalized_tool_id, safe='')}" if normalized_tool_id else ""
+    return _dispatcher_request("GET", f"/admin/tools{suffix}")
+
+
+def _dispatcher_manifest_path(tool_id: str) -> str | None:
+    response = _dispatcher_tool_summary(tool_id)
+    if not response or not isinstance(response.get("tools"), list) or not response["tools"]:
+        return None
+    manifest_path = response["tools"][0].get("manifest_path")
+    return manifest_path.strip() if isinstance(manifest_path, str) and manifest_path.strip() else None
 
 
 def get_current_voice_profile() -> dict[str, object] | None:
@@ -948,6 +1098,109 @@ async def review_runtime_status() -> str:
 
 
 @function_tool
+async def review_governance_controls() -> str:
+    """
+    Review the repo's governing controls for autonomy, approved tools, and
+    operating rules.
+
+    Use this when the operator asks what Freedom is allowed to do, how
+    self-programming is governed, or which policy files define tool access.
+    """
+    sections: list[str] = []
+    approved_roots = ", ".join(str(path) for path in _approved_roots())
+    sections.append(f"Approved roots: {approved_roots}")
+
+    dispatcher_status = _dispatcher_tool_summary()
+    if dispatcher_status and isinstance(dispatcher_status.get("tools"), list):
+        sections.append(f"Dispatcher tool count: {len(dispatcher_status['tools'])}")
+    else:
+        sections.append("Dispatcher tool count: unavailable because the dispatcher is not responding on 127.0.0.1:4317.")
+
+    for path_hint in ["project-control.yaml", "docs/tool-permission-matrix.md", "AI_BOOTSTRAP.md"]:
+        try:
+            relative_path, content = _read_governed_repo_file(path_hint, max_chars=2_000)
+            sections.append(f"{relative_path}:\n{content}")
+        except ValueError as exc:
+            sections.append(f"{path_hint}: {exc}")
+
+    return "\n\n".join(sections)
+
+
+@function_tool
+async def read_governed_repo_file(path: str) -> str:
+    """
+    Read a governed repo control document or a freedom.tool.yaml manifest from
+    an approved root.
+
+    Use this when you need the exact current contents of project-control.yaml,
+    tool-permission guidance, AI bootstrap rules, or a tool manifest before
+    reasoning about authority, approval, or self-improvement.
+    """
+    try:
+        relative_path, content = _read_governed_repo_file(path)
+    except ValueError as exc:
+        return str(exc)
+    return f"{relative_path}:\n{content}"
+
+
+@function_tool
+async def review_dispatcher_tool_status(tool_id: str = "") -> str:
+    """
+    Review the current Freedom Dispatcher registry, including autonomy level and
+    manifest path for each tool or a specific tool.
+    """
+    response = _dispatcher_tool_summary(tool_id)
+    if response is None:
+        return (
+            "The Freedom Dispatcher is not responding. "
+            "Start it with: bash ~/code/agents/the-freedom-engine-os/agents/freedom-dispatcher/start.sh"
+        )
+
+    tools = response.get("tools")
+    if not isinstance(tools, list) or not tools:
+        if tool_id.strip():
+            return f"I could not find dispatcher tool '{tool_id.strip()}'."
+        return "The dispatcher responded, but it did not return any registered tools."
+
+    lines = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        lines.append(
+            f"- {tool.get('id', 'unknown')} | {tool.get('name', 'unknown')} | "
+            f"autonomy={tool.get('autonomy_level', 'unknown')} | "
+            f"manifest={tool.get('manifest_path', 'unknown path')}"
+        )
+    return "\n".join(lines) if lines else "The dispatcher returned no readable tool summaries."
+
+
+@function_tool
+async def review_dispatcher_tool_manifest(tool_id: str) -> str:
+    """
+    Read the manifest for a registered Freedom Dispatcher tool.
+
+    Use this when the operator asks what a tool can do, what autonomy it has,
+    or which YAML governs that tool's behavior.
+    """
+    normalized_tool_id = tool_id.strip()
+    if not normalized_tool_id:
+        return "Tell me which dispatcher tool id to inspect."
+
+    manifest_path = _dispatcher_manifest_path(normalized_tool_id)
+    if not manifest_path:
+        return (
+            f"I could not resolve the manifest path for dispatcher tool '{normalized_tool_id}'. "
+            "Review the dispatcher tool status first if needed."
+        )
+
+    try:
+        relative_path, content = _read_governed_repo_file(manifest_path)
+    except ValueError as exc:
+        return str(exc)
+    return f"{normalized_tool_id} manifest at {relative_path}:\n{content}"
+
+
+@function_tool
 async def top_venture_status() -> str:
     """Return the status of the top-priority active venture."""
     # TODO: replace with Supabase query against ventures table
@@ -1572,6 +1825,78 @@ def _dispatcher_request(
 
 
 @function_tool
+async def reload_dispatcher_registry() -> str:
+    """
+    Reload the Freedom Dispatcher registry after manifests have been added or changed.
+    """
+    result = _dispatcher_request("POST", "/admin/reload")
+    if result is None:
+        return (
+            "The Freedom Dispatcher is not responding. "
+            "Start it with: bash ~/code/agents/the-freedom-engine-os/agents/freedom-dispatcher/start.sh"
+        )
+
+    tool_count = result.get("tool_count", "unknown")
+    errors = result.get("errors")
+    if isinstance(errors, list) and errors:
+        return f"Reloaded the dispatcher registry with {tool_count} tools, but there were warnings: {', '.join(str(item) for item in errors)}"
+    return f"Reloaded the dispatcher registry. Registered tools: {tool_count}."
+
+
+@function_tool
+async def update_dispatcher_tool_autonomy(
+    tool_id: str,
+    new_level: str,
+    reason: str,
+    confirmed: bool = False,
+) -> str:
+    """
+    Update a dispatcher's tool autonomy level after explicit operator approval.
+
+    Call first without confirmed=True to restate the change for approval, then
+    call again with confirmed=True after the operator says yes.
+    """
+    normalized_tool_id = tool_id.strip()
+    normalized_level = new_level.strip().upper()
+    normalized_reason = reason.strip()
+    if not normalized_tool_id:
+        return "Tell me which dispatcher tool id should change autonomy."
+    if normalized_level not in {"A0", "A1", "A2"}:
+        return "Autonomy level must be A0, A1, or A2."
+    if len(normalized_reason) < 4:
+        return "Give a short reason so the autonomy change is auditable."
+
+    if not confirmed:
+        return (
+            f"I can change dispatcher tool '{normalized_tool_id}' to {normalized_level}. "
+            f"Reason: {normalized_reason}. Say yes to confirm."
+        )
+
+    result = _dispatcher_request(
+        "POST",
+        "/admin/autonomy",
+        payload={
+            "tool_id": normalized_tool_id,
+            "new_level": normalized_level,
+            "reason": normalized_reason,
+        },
+    )
+    if result is None:
+        return (
+            "The Freedom Dispatcher is not responding. "
+            "Start it with: bash ~/code/agents/the-freedom-engine-os/agents/freedom-dispatcher/start.sh"
+        )
+    if not result.get("ok"):
+        return f"I could not update the tool autonomy for '{normalized_tool_id}'."
+
+    previous_level = result.get("previous_level", "unknown")
+    return (
+        f"Updated dispatcher tool '{normalized_tool_id}' from {previous_level} to {normalized_level}. "
+        f"Reason recorded: {normalized_reason}."
+    )
+
+
+@function_tool
 async def scaffold_new_project(
     project_name: str,
     build_type: str,
@@ -1656,4 +1981,49 @@ def _scaffold_result_message(project_name: str, result: dict | None) -> str:
         f"Created {path} with {count} files. "
         "Next steps: fill in AI_BOOTSTRAP.md, confirm risk tier in project-control.yaml, "
         "then run the governance preflight."
+    )
+
+
+@function_tool
+async def delegate_approved_programming_task(
+    task: str,
+    confirmed: bool = False,
+) -> str:
+    """
+    Hand an approved programming task into the desktop shell/Codex lane.
+
+    This is the governed bridge from voice into real repo work. Call first
+    without confirmed=True so the operator can approve the programming task,
+    then call again with confirmed=True after they say yes.
+    """
+    normalized_task = task.strip()
+    if not normalized_task:
+        return "Describe the programming task you want me to hand into the desktop lane."
+
+    if not confirmed:
+        return (
+            "I can send this into the governed desktop programming lane so Freedom can work on the repo: "
+            f"{normalized_task} Say yes to confirm."
+        )
+
+    session_response = _loopback_gateway_request("POST", "/api/desktop-shell/session")
+    if not session_response or not isinstance(session_response.get("id"), str):
+        return "I could not open the desktop programming session on this machine."
+
+    session_id = session_response["id"]
+    message_response = _loopback_gateway_request(
+        "POST",
+        f"/api/desktop-shell/sessions/{parse.quote(session_id, safe='')}/messages",
+        body={
+            "text": normalized_task,
+            "inputMode": "text",
+            "responseStyle": "executive",
+        },
+    )
+    if not message_response or not isinstance(message_response.get("id"), str):
+        return "I opened the desktop programming session, but I could not queue the programming turn."
+
+    return (
+        f"Queued the approved programming task into the desktop lane under session {session_id}. "
+        "Freedom can now work on it through the governed repo execution path."
     )

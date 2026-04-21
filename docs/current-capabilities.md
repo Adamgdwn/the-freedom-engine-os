@@ -75,6 +75,10 @@ or the boundary between modeled and fully operational capability.
 - Supabase-backed server-side memory load and persist path.
 - Runtime read access for Freedom to inspect open tasks, recent learning signals,
   pending self-programming requests, approved persona overlays, and trusted email recipients during voice sessions.
+- Runtime read access for the live voice agent to inspect governed repo control files
+  inside approved roots, including `project-control.yaml`,
+  `docs/tool-permission-matrix.md`, `AI_BOOTSTRAP.md`, and registered
+  `freedom.tool.yaml` manifests.
 - Local backup and restore of memory tables through:
   `npm run backup:freedom-memory`
   `npm run restore:freedom-memory -- --input=...`
@@ -216,6 +220,8 @@ or the boundary between modeled and fully operational capability.
 ### Self-Programming
 
 - Freedom can record and surface self-programming requests.
+- Freedom voice can now hand explicitly approved programming work into the governed
+  desktop shell/Codex lane instead of stopping only at a request-for-later surface.
 - Freedom can now route substantial conversation-born work into a governed Pop!_OS
   build lane with objective, business case, approval state, autonomy envelope,
   reporting path, and next checkpoint captured in live memory.

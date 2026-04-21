@@ -37,6 +37,15 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   import draft, and use the review/import flow. The phone should import summary notes and
   draft turns as non-executing `system` messages only; it must not batch replay offline
   turns into live desktop execution.
+- Freedom says it cannot read its own governing YAML, tool manifests, or approval rules:
+  use the live voice governance tools first. `Talk` should now be able to inspect
+  `project-control.yaml`, `docs/tool-permission-matrix.md`, `AI_BOOTSTRAP.md`, and
+  registered `freedom.tool.yaml` manifests from approved roots. If it still cannot, verify
+  the Python voice worker was restarted after the integration patch.
+- Freedom can review rules but cannot start approved repo work:
+  verify the voice runtime is using the new desktop-bridge tool. After explicit approval,
+  it should queue the programming task into the desktop shell/Codex lane instead of only
+  recording a self-programming request.
 - Freedom memory looks missing or stale:
   verify `SUPABASE_SERVICE_ROLE_KEY`, confirm the latest memory migration is applied, and
   restore from the latest local backup if needed.
@@ -80,7 +89,10 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 9. If the phone must continue while the desktop is unreachable, keep the conversation in
    offline mode and import the notes later instead of trying to replay old offline turns
    directly into a live session.
-10. If Freedom has been left to work between sessions, require a morning report that states:
+10. If the live voice agent seems out of sync with the dispatcher registry, use the
+    dispatcher reload path and then start a fresh voice session so the current tool
+    surface is rehydrated into the worker.
+11. If Freedom has been left to work between sessions, require a morning report that states:
    what moved in the Pop!_OS build lane,
    what was done autonomously,
    what approvals were assumed or used,

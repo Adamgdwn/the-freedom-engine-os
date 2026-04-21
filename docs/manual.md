@@ -134,6 +134,13 @@ that ties business outcomes back to freedom outcomes.
   published mobile build version/code, current live Freedom voice profile, desktop voice
   runtime provider/model, and whether Perplexity web search is configured. The one thing
   it still cannot inspect directly is the phone's current local Homebase fallback voice.
+- Freedom voice can now also inspect the repo-side control files that govern it:
+  `project-control.yaml`, `docs/tool-permission-matrix.md`, `AI_BOOTSTRAP.md`, and
+  registered `freedom.tool.yaml` manifests inside approved roots. That makes the voice
+  runtime materially more self-aware about its real authority and tool posture.
+- When you explicitly approve real repo work in conversation, Freedom voice can now hand
+  that work into the governed desktop programming lane instead of only recording a
+  self-programming request for later review.
 - The Android companion now keeps the conversation-originated build lane inside the
   pull-down utility sheet instead of the main voice canvas, so Freedom can surface the
   governed queue when needed without crowding the primary talk surface.
