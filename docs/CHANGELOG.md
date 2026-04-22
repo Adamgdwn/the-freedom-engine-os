@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-04-21 (desktop launcher drift + env precedence hardening)
+
+- fixed the Linux `Freedom Desktop` launcher installer path so the installed desktop entry
+  is rewritten against this repo and no longer reopens the retired
+  `codex_adam_connect` shell after a click or reboot
+- hardened the desktop launcher script so it no longer sources broad shell startup files
+  before launch, which had been re-injecting unrelated exported secrets and stale
+  developer state into the gateway and desktop-host processes
+- changed repo env loading for the gateway, desktop-host, wake relay, and the main repo
+  utility scripts so repo `.env` values now override inherited shell variables instead of
+  losing to stale exported values from the login environment
+- removed the stale machine-level exported `OPENAI_API_KEY` override from the user shell
+  startup path so live Freedom services stop drifting back to the wrong key after restarts
+
 ## 2026-04-21 (disconnected web companion default + mobile talk layout + release 0.2.74)
 
 - fixed the slim Android runtime config so a configured `MOBILE_DEFAULT_BASE_URL` now

@@ -18,6 +18,15 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Phone access fails through Freedom Desktop:
   verify Codex login, Tailscale reachability, and that Freedom Engine's repo root is
   present in `DESKTOP_APPROVED_ROOTS`.
+- Desktop shell or install page suddenly reverts to an old build:
+  inspect `~/.local/share/applications/freedom-desktop.desktop` first and confirm its
+  `Exec`, `Path`, and `Icon` all point at `the-freedom-engine-os`, not an absorbed repo.
+  If they drift, rerun `node scripts/install-linux-launcher.mjs` from this repo before
+  rebuilding or reinstalling the phone app.
+- Mobile companion or premium voice starts failing after a shell restart with a wrong API key:
+  treat this as environment drift first. Repo `.env` should be the source of truth for
+  Freedom services. Remove any stale shell-exported `OPENAI_API_KEY` overrides and then
+  restart the gateway/desktop-host so the live processes reload the repo config cleanly.
 - Premium mobile voice connects but does not answer:
   verify repo-root `.env` contains `LIVEKIT_URL`, `LIVEKIT_API_KEY`,
   `LIVEKIT_API_SECRET`, and `OPENAI_API_KEY`, then confirm the desktop-host log shows

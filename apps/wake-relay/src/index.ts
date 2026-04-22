@@ -10,7 +10,7 @@ import { wakeRelayRequestSchema, type WakeRelayResponse, wakeRelayTargetsRespons
 const execFile = promisify(execFileCallback);
 
 for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "../../.env")]) {
-  dotenv.config({ path: envPath, override: false });
+  dotenv.config({ path: envPath, override: true });
 }
 
 type WakeTarget = {

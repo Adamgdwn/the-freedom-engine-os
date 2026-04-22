@@ -26,17 +26,8 @@ collect_port_pids() {
   lsof -tiTCP:"$gateway_port" -sTCP:LISTEN 2>/dev/null || true
 }
 
-if [[ -r "$HOME/.profile" ]]; then
-  # shellcheck disable=SC1090
-  source "$HOME/.profile"
-fi
-
-if [[ -r "$HOME/.bashrc" ]]; then
-  # shellcheck disable=SC1090
-  source "$HOME/.bashrc"
-fi
-
 if ! command -v npm >/dev/null 2>&1 && [[ -s "$HOME/.nvm/nvm.sh" ]]; then
+  # Load just enough shell state to find npm without inheriting unrelated developer exports.
   # shellcheck disable=SC1090
   source "$HOME/.nvm/nvm.sh"
   nvm use default >/dev/null 2>&1 || true

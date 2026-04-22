@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-dotenv.config({ path: path.resolve(repoRoot, ".env") });
+dotenv.config({ path: path.resolve(repoRoot, ".env"), override: true });
 
 const shouldOpenBrowser = !process.argv.includes("--no-open");
 const shouldUseShell = shouldOpenBrowser && hasGuiSession();
@@ -149,7 +149,6 @@ async function start() {
   }
 
   children.push(spawnNpmProcess("gateway", ["run", "dev:gateway"]));
-  children.push(spawnNpmProcess("desktop", ["run", "dev:desktop"]));
 
   const ready = await waitForDashboard(dashboardUrl);
   if (!ready) {
@@ -157,6 +156,8 @@ async function start() {
     shutdown(1);
     return;
   }
+
+  children.push(spawnNpmProcess("desktop", ["run", "dev:desktop"]));
 
   process.stdout.write(`Dashboard ready at ${dashboardUrl}\n`);
 

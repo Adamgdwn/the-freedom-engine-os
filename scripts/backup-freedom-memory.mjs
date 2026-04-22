@@ -8,7 +8,7 @@ for (const envPath of [
   path.resolve(process.cwd(), ".env.local"),
   path.resolve(process.cwd(), ".env"),
 ]) {
-  dotenv.config({ path: envPath, override: false });
+  dotenv.config({ path: envPath, override: true });
 }
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -20,7 +20,7 @@ import { getTailscaleStatus } from "./tailscale.js";
 import { VoiceWorkerSupervisor } from "./voiceWorkerSupervisor.js";
 
 for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "../../.env")]) {
-  dotenv.config({ path: envPath, override: false });
+  dotenv.config({ path: envPath, override: true });
 }
 
 interface ActiveRun {

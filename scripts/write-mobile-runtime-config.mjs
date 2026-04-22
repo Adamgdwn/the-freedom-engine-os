@@ -3,7 +3,7 @@ import path from "node:path";
 import dotenv from "dotenv";
 
 const repoRoot = path.resolve(new URL(".", import.meta.url).pathname, "..");
-dotenv.config({ path: path.join(repoRoot, ".env") });
+dotenv.config({ path: path.join(repoRoot, ".env"), override: true });
 
 const defaultBaseUrl = process.env.MOBILE_DEFAULT_BASE_URL?.trim() || "";
 const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED?.trim() === "true";

@@ -37,7 +37,7 @@ import {
 import { GatewayStore } from "./store.js";
 
 for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "../../.env")]) {
-  dotenv.config({ path: envPath, override: false });
+  dotenv.config({ path: envPath, override: true });
 }
 
 const port = Number(process.env.GATEWAY_PORT ?? 43111);

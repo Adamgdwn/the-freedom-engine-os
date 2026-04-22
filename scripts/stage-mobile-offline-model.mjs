@@ -6,7 +6,7 @@ import path from "node:path";
 import dotenv from "dotenv";
 
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-dotenv.config({ path: path.join(repoRoot, ".env"), override: false });
+dotenv.config({ path: path.join(repoRoot, ".env"), override: true });
 const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED?.trim() === "true";
 
 const defaultModelFile = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
