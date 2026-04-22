@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-04-21 (disconnected web companion default + mobile talk layout + release 0.2.74)
+
+- fixed the slim Android runtime config so a configured `MOBILE_DEFAULT_BASE_URL` now
+  automatically enables the disconnected web companion path instead of silently compiling
+  the app back to `notes_only`
+- fixed disconnected web companion fallback so the phone now tries the current paired
+  host first and then falls back to the configured install/web companion host, instead of
+  getting stuck on one unreachable URL
+- tightened the mobile `Talk` canvas headline sizing and transcript panel behavior on
+  narrow phones so long states like `Reconnecting` and `Disconnected companion` no longer
+  break awkwardly or hide too much transcript content at once
+- published Android `0.2.74 (81)` to the live install surface
+
 ## 2026-04-21 (desktop voice worker lock + durable logs)
 
 - hardened the desktop-host voice worker supervisor with a persisted lock under

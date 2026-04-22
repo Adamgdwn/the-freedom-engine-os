@@ -563,7 +563,16 @@ export const styles = StyleSheet.create({
     fontSize: 52,
     lineHeight: 58,
     fontWeight: "300",
+    maxWidth: "100%",
     textAlign: "center"
+  },
+  voiceSurfaceHeadlineCompact: {
+    fontSize: 44,
+    lineHeight: 48
+  },
+  voiceSurfaceHeadlineTight: {
+    fontSize: 38,
+    lineHeight: 42
   },
   voiceSurfaceSubhead: {
     color: "#9aa0a8",
@@ -571,6 +580,10 @@ export const styles = StyleSheet.create({
     lineHeight: 28,
     fontWeight: "400",
     textAlign: "center"
+  },
+  voiceSurfaceSubheadCompact: {
+    fontSize: 18,
+    lineHeight: 24
   },
   voiceSurfaceStatusPill: {
     maxWidth: "88%",

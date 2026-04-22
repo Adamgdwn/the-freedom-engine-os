@@ -121,10 +121,11 @@ or the boundary between modeled and fully operational capability.
 - Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
   while preserving `latest.apk` as a compatibility alias.
 - The Android companion now has a safe disconnected posture:
-  cached sessions/messages survive desktop disconnects, the default slim release keeps
-  local note capture and later sync imports those notes as non-executing history, and
-  optional builds can either route disconnected turns through a web companion or bundle
-  the old on-device model when explicitly requested.
+  cached sessions/messages survive desktop disconnects, the default slim release now uses
+  the configured install/web companion host for disconnected chat/brainstorm/answer turns
+  when `MOBILE_DEFAULT_BASE_URL` or `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is present,
+  later sync imports those notes as non-executing history, and optional builds can still
+  bundle the old on-device model only when explicitly requested.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.

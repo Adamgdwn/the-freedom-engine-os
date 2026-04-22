@@ -289,13 +289,15 @@ function getDisconnectedAssistantReadyState(): { state: OfflineModelState; detai
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
       return offlineAssistant.getStatus();
-    case "cloud":
+    case "cloud": {
+      const companionBaseUrl = getConfiguredDisconnectedAssistantBaseUrl();
       return {
         state: "ready",
-        detail: DISCONNECTED_ASSISTANT_BASE_URL
-          ? `Web companion ready via ${DISCONNECTED_ASSISTANT_BASE_URL}.`
+        detail: companionBaseUrl
+          ? `Web companion ready via ${companionBaseUrl}.`
           : "Web companion ready."
       };
+    }
     default:
       return {
         state: "missing",
@@ -534,12 +536,39 @@ function buildNotesOnlyReply(): string {
   );
 }
 
-function resolveDisconnectedAssistantBaseUrl(currentBaseUrl: string | null | undefined): string {
-  const normalizedCurrentBaseUrl = currentBaseUrl ? normalizeBaseUrl(currentBaseUrl) : "";
-  if (normalizedCurrentBaseUrl) {
-    return normalizedCurrentBaseUrl;
+function getConfiguredDisconnectedAssistantBaseUrl(): string {
+  return normalizeBaseUrl(DISCONNECTED_ASSISTANT_BASE_URL || DEFAULT_BASE_URL);
+}
+
+function listDisconnectedAssistantBaseUrls(currentBaseUrl: string | null | undefined): string[] {
+  const candidates = [
+    currentBaseUrl ? normalizeBaseUrl(currentBaseUrl) : "",
+    getConfiguredDisconnectedAssistantBaseUrl()
+  ].filter(Boolean);
+
+  return candidates.filter((candidate, index) => candidates.indexOf(candidate) === index);
+}
+
+async function requestDisconnectedCloudCompanionReply(
+  currentBaseUrl: string,
+  request: (baseUrl: string) => Promise<string>
+): Promise<string> {
+  const candidateBaseUrls = listDisconnectedAssistantBaseUrls(currentBaseUrl);
+  let lastError: Error | null = null;
+
+  for (const candidateBaseUrl of candidateBaseUrls) {
+    try {
+      return await request(candidateBaseUrl);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
   }
-  return normalizeBaseUrl(DISCONNECTED_ASSISTANT_BASE_URL);
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  throw new Error("Could not reach the web companion.");
 }
 
 async function ensureOfflineModelPrepared(
@@ -573,12 +602,14 @@ async function requestDisconnectedAssistantReply(messages: ChatMessage[], prompt
         messages: buildOfflineContextMessages(messages, prompt)
       });
     case "cloud":
-      return cloudCompanion.generateReply(
-        resolveDisconnectedAssistantBaseUrl(baseUrl),
-        buildOfflineContextMessages(messages, prompt).map((message) => ({
-          role: message.role,
-          content: message.content
-        }))
+      return requestDisconnectedCloudCompanionReply(baseUrl, (candidateBaseUrl) =>
+        cloudCompanion.generateReply(
+          candidateBaseUrl,
+          buildOfflineContextMessages(messages, prompt).map((message) => ({
+            role: message.role,
+            content: message.content
+          }))
+        )
       );
     default:
       return buildNotesOnlyReply();
@@ -603,7 +634,9 @@ async function requestDisconnectedImportSummary(messages: ChatMessage[], draftTu
         temperature: 0.35
       });
     case "cloud":
-      return cloudCompanion.summarizeDraftTurns(resolveDisconnectedAssistantBaseUrl(baseUrl), draftTurns);
+      return requestDisconnectedCloudCompanionReply(baseUrl, (candidateBaseUrl) =>
+        cloudCompanion.summarizeDraftTurns(candidateBaseUrl, draftTurns)
+      );
     default:
       return buildOfflineImportSummaryFallback(messages, draftTurns);
   }

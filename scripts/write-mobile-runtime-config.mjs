@@ -7,7 +7,8 @@ dotenv.config({ path: path.join(repoRoot, ".env") });
 
 const defaultBaseUrl = process.env.MOBILE_DEFAULT_BASE_URL?.trim() || "";
 const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED?.trim() === "true";
-const disconnectedAssistantBaseUrl = process.env.MOBILE_DISCONNECTED_ASSISTANT_BASE_URL?.trim() || "";
+const configuredDisconnectedAssistantBaseUrl = process.env.MOBILE_DISCONNECTED_ASSISTANT_BASE_URL?.trim() || "";
+const disconnectedAssistantBaseUrl = configuredDisconnectedAssistantBaseUrl || defaultBaseUrl;
 const disconnectedAssistantMode = bundledOfflineEnabled ? "bundled_model" : disconnectedAssistantBaseUrl ? "cloud" : "notes_only";
 const requestedVoiceRuntimeMode = process.env.MOBILE_VOICE_RUNTIME_MODE?.trim();
 const voiceRuntimeMode = requestedVoiceRuntimeMode === "device_fallback" ? "device_fallback" : "realtime_primary";

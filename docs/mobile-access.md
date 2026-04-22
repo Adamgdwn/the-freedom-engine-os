@@ -50,11 +50,12 @@ surface than a one-shot relay:
   no longer wipes the current conversational context
 - if the paired desktop becomes unreachable after the app has cached chats, the phone can
   stay usable in a disconnected mode instead of only throwing a connection error:
-  the normal slim release keeps cached chats plus saved-idea capture, builds with
-  `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` can route those turns through a web
-  companion, the phone prefers its current paired host URL before falling back to that
-  configured companion URL, and only explicitly requested builds bundle the heavy
-  on-device model
+  the normal slim release now routes those turns through the disconnected web companion
+  whenever `MOBILE_DEFAULT_BASE_URL` or `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is
+  configured, the phone prefers its current paired host URL before falling back to that
+  configured install/web companion host, and only explicitly requested builds bundle the
+  heavy on-device model; if neither URL is configured, the app still falls back to cached
+  chats plus saved-idea capture
 - offline mobile work is now review-first and safe by design:
   importing it writes non-executing `system` notes into canonical history and drafts one
   explicit `Continue with Freedom` follow-up instead of auto-replaying offline turns into

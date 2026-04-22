@@ -156,6 +156,7 @@ export function StartScreen(props: {
   onStartTalk(): void;
 }): React.JSX.Element {
   const { store, onRefresh, bottomPadding, onOpenTypedChat, onOpenActions, onOpenSettings, onStartTalk } = props;
+  const { width: windowWidth } = useWindowDimensions();
   const currentSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
   const voiceHeadline = store.offlineMode ? "Disconnected companion ready" : store.voiceAvailable ? "Start talking" : "Voice unavailable";
   const voiceHint = store.offlineMode
@@ -163,6 +164,8 @@ export function StartScreen(props: {
     : currentSession?.title ?? "Freedom is ready when you are.";
   const surfaceMessage = store.error ?? store.notice;
   const surfaceMessageTone = store.error ? "error" : "info";
+  const compactVoiceSurface = windowWidth < 400;
+  const tightVoiceSurface = windowWidth < 360;
 
   return (
     <ScrollView
@@ -189,8 +192,19 @@ export function StartScreen(props: {
       </View>
 
       <View style={styles.voiceSurfaceCenter}>
-        <Text style={styles.voiceSurfaceHeadline}>{voiceHeadline}</Text>
-        <Text style={styles.voiceSurfaceSubhead}>{voiceHint}</Text>
+        <Text
+          style={[
+            styles.voiceSurfaceHeadline,
+            compactVoiceSurface ? styles.voiceSurfaceHeadlineCompact : null,
+            tightVoiceSurface ? styles.voiceSurfaceHeadlineTight : null
+          ]}
+          numberOfLines={2}
+        >
+          {voiceHeadline}
+        </Text>
+        <Text style={[styles.voiceSurfaceSubhead, compactVoiceSurface ? styles.voiceSurfaceSubheadCompact : null]}>
+          {voiceHint}
+        </Text>
         {surfaceMessage ? (
           <View
             style={[
@@ -866,14 +880,16 @@ export function ChatScreen(props: {
   const [composerMinimized, setComposerMinimized] = useState(false);
   const composerRef = useRef<TextInput | null>(null);
   const transcriptScrollRef = useRef<ScrollView | null>(null);
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const showExternalDraftCard = Boolean(store.externalDraft);
   const offlineDraft = store.selectedSessionId ? store.offlineImportDrafts[store.selectedSessionId] ?? null : null;
   const showOfflineImportReview = false;
   const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
   const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
-  const transcriptPanelHeight = Math.max(240, Math.min(420, Math.round(windowHeight * 0.42)));
+  const transcriptPanelHeight = Math.max(250, Math.min(460, Math.round(windowHeight * 0.46)));
   const shouldShowTranscript = showTranscript || showExternalDraftCard;
+  const compactVoiceSurface = windowWidth < 400;
+  const tightVoiceSurface = windowWidth < 360;
   const centerHeadline =
     store.offlineMode && !busy && !store.sendingMessage && !store.voiceSessionActive
       ? "Disconnected companion"
@@ -988,8 +1004,20 @@ export function ChatScreen(props: {
         </View>
 
         <View style={styles.voiceSurfaceCenter}>
-          <Text style={styles.voiceSurfaceHeadline}>{centerHeadline}</Text>
-          <Text style={styles.voiceSurfaceSubhead} numberOfLines={shouldShowTranscript ? 3 : 2}>
+          <Text
+            style={[
+              styles.voiceSurfaceHeadline,
+              compactVoiceSurface ? styles.voiceSurfaceHeadlineCompact : null,
+              tightVoiceSurface ? styles.voiceSurfaceHeadlineTight : null
+            ]}
+            numberOfLines={2}
+          >
+            {centerHeadline}
+          </Text>
+          <Text
+            style={[styles.voiceSurfaceSubhead, compactVoiceSurface ? styles.voiceSurfaceSubheadCompact : null]}
+            numberOfLines={shouldShowTranscript ? 3 : 2}
+          >
             {centerSubhead}
           </Text>
           {surfaceMessage ? (
@@ -1025,7 +1053,7 @@ export function ChatScreen(props: {
               ref={transcriptScrollRef}
               style={styles.voiceTranscriptBody}
               contentContainerStyle={styles.voiceTranscriptBodyContent}
-              showsVerticalScrollIndicator={false}
+              showsVerticalScrollIndicator
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
             >
