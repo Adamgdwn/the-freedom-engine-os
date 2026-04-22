@@ -94,8 +94,8 @@ For a fast operator-facing view of what is actually live right now, use
   (gateway, desktop-host, mobile, wake-relay) are transport and pairing infrastructure.
 - Mobile and desktop conversations land in Freedom-owned session contexts with shared
   audit correlation.
-- `codex_adam_connect` has been fully absorbed into this repo (2026-04-15) and is
-  archived. All future mobile, gateway, and desktop work happens here.
+- The earlier companion repo has been fully absorbed into this repo (2026-04-15) and is
+  retired. All future mobile, gateway, and desktop work happens here.
 - Android Gradle build requires explicit `reactNativeDir` / `codegenDir` / `cliFile`
   overrides and root-relative `includeBuild` paths because npm workspaces hoists
   `node_modules` to repo root rather than `apps/mobile/node_modules`.

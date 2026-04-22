@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { ResponseStyle, WakeControl } from "@freedom/shared";
+import type { AssistantVoicePresetId, ResponseStyle, WakeControl } from "@freedom/shared";
 
-const SETTINGS_KEY = "adam-connect.settings";
+const SETTINGS_KEY = "freedom.settings";
 
 export interface StoredSettings {
   baseUrl: string;
@@ -12,6 +12,7 @@ export interface StoredSettings {
   voiceAutoSendPreferenceTouched?: boolean;
   responseStyle?: ResponseStyle;
   assistantVoiceId?: string | null;
+  freedomVoicePresetId?: AssistantVoicePresetId | null;
   wakeControl?: WakeControl | null;
 }
 

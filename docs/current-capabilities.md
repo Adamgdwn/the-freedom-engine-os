@@ -1,6 +1,6 @@
 # Current Capabilities
 
-Last updated: 2026-04-21
+Last updated: 2026-04-22
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -30,7 +30,7 @@ or the boundary between modeled and fully operational capability.
 - LiveKit WebRTC browser voice session.
 - OpenAI Realtime worker (`gpt-realtime-mini`) in Python.
 - Model-level interrupt support through LiveKit data messages.
-- Web voice is the repo's only primary-grade realtime voice path today.
+- Web voice and paired mobile voice now share the same primary-grade realtime worker contract.
 - Web voice tokens are short-lived and bound to explicit browser voice-session ids instead of a shared room.
 - Mobile can now request its own authenticated LiveKit voice session from the paired
   gateway and connect directly to the same realtime voice worker contract.
@@ -41,9 +41,9 @@ or the boundary between modeled and fully operational capability.
 - Task-aware interruption routing across mobile/gateway/desktop:
   `quick_question`, `clarification`, `parallel_subtask`, `replace_task`, and `stop_task`.
 - Mobile voice loops are pinned to one chat session at a time so switching chats does not silently reroute live speech or spoken replies.
-- Mobile now prefers the realtime voice runtime first and only drops to the older chained
-  device STT -> text agent -> device TTS loop when the paired desktop does not have
-  `LIVEKIT_*` and `OPENAI_API_KEY` configured for the premium path.
+- Mobile now prefers the realtime voice runtime first and drops to device STT plus
+  Freedom-hosted spoken replies only when the premium lane is unavailable. The old
+  phone-native TTS engine is no longer auto-selected during routine use.
 - Desktop-host now autostarts and supervises the Python LiveKit/OpenAI voice worker when
   those premium voice env values are present, so mobile `Talk` no longer depends on a
   separate manually launched worker process.
@@ -121,11 +121,13 @@ or the boundary between modeled and fully operational capability.
 - Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
   while preserving `latest.apk` as a compatibility alias.
 - The Android companion now has a safe disconnected posture:
-  cached sessions/messages survive desktop disconnects, the default slim release now uses
-  the configured install/web companion host for disconnected chat/brainstorm/answer turns
-  when `MOBILE_DEFAULT_BASE_URL` or `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is present,
-  later sync imports those notes as non-executing history, and optional builds can still
-  bundle the old on-device model only when explicitly requested.
+  cached sessions/messages survive desktop disconnects, the phone can create and keep
+  phone-only standalone threads, hosted disconnected chat/lookup now activates only when
+  `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured, later sync imports
+  those notes as non-executing history, and optional builds can still bundle the old
+  on-device model only when explicitly requested.
+- The current live slim build still compiles standalone as `notes_only` because no
+  explicit `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is configured in the active repo env.
 - Android companion shell now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.
@@ -150,6 +152,8 @@ or the boundary between modeled and fully operational capability.
   release verification.
 - The mobile settings sheet now shows Freedom's actual live realtime voice presets,
   with Marin as the default baseline, instead of leading with device-only fallback TTS voices.
+- Legacy saved phone-native TTS selections are now migrated away on boot so stale Android
+  voice choices do not silently override the newer Freedom preset path.
 - Mobile voice auto-send is on by default again, and riskier or unusually long spoken requests are pushed into transcript review before they can run.
 - Android live voice now uses the device-default recognizer language instead of forcing
   `en-US`, which avoids on-device language-pack mismatches on phones whose configured
@@ -212,8 +216,9 @@ or the boundary between modeled and fully operational capability.
 - The current live web voice runtime now defaults to `gpt-realtime-mini`, so the default
   voice lane is cheaper than before even though it is still hosted rather than local.
 - The premium mobile realtime lane still depends on desktop-side `LIVEKIT_*` plus
-  `OPENAI_API_KEY` being present. Without those credentials, the APK degrades to the
-  older device fallback instead of silently pretending the premium path exists.
+  `OPENAI_API_KEY` being present. Without those credentials, the APK degrades to local
+  capture plus non-realtime companion behavior instead of silently pretending the
+  premium path exists.
 - Gateway assistant streaming now defers disk persistence instead of rewriting the full
   state file on every token chunk.
 - Environment-level routing config now exists for the modeled router:

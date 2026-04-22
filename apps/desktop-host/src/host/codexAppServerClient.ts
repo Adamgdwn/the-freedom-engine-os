@@ -152,7 +152,7 @@ export class CodexAppServerClient extends EventEmitter {
 
     await this.request("initialize", {
       clientInfo: {
-        name: "adam-connect-host",
+        name: "freedom-host",
         version: "0.3.0"
       },
       capabilities: null

@@ -1,6 +1,45 @@
-import Voice from "@react-native-voice/voice";
 import { I18nManager, Platform, PermissionsAndroid } from "react-native";
+import Voice from "../src/services/voice/nativeVoice";
 import { VoiceService } from "../src/services/voice/voiceService";
+
+jest.mock("../src/services/voice/nativeVoice", () => {
+  const mockListeners = new Map();
+
+  return {
+    __esModule: true,
+    default: {
+      __listeners: mockListeners,
+      removeAllListeners: jest.fn(() => mockListeners.clear()),
+      destroy: jest.fn(async () => undefined),
+      isAvailable: jest.fn(async () => 1),
+      getSpeechRecognitionServices: jest.fn(async () => ["com.google.android.googlequicksearchbox"]),
+      start: jest.fn(async () => undefined),
+      stop: jest.fn(async () => undefined),
+      cancel: jest.fn(async () => undefined),
+      set onSpeechStart(handler: (event?: unknown) => void) {
+        mockListeners.set("onSpeechStart", handler);
+      },
+      set onSpeechRecognized(handler: (event?: unknown) => void) {
+        mockListeners.set("onSpeechRecognized", handler);
+      },
+      set onSpeechEnd(handler: (event?: unknown) => void) {
+        mockListeners.set("onSpeechEnd", handler);
+      },
+      set onSpeechError(handler: (event?: unknown) => void) {
+        mockListeners.set("onSpeechError", handler);
+      },
+      set onSpeechResults(handler: (event?: unknown) => void) {
+        mockListeners.set("onSpeechResults", handler);
+      },
+      set onSpeechPartialResults(handler: (event?: unknown) => void) {
+        mockListeners.set("onSpeechPartialResults", handler);
+      },
+      set onSpeechVolumeChanged(handler: (event?: unknown) => void) {
+        mockListeners.set("onSpeechVolumeChanged", handler);
+      }
+    }
+  };
+});
 
 describe("VoiceService", () => {
   beforeEach(() => {

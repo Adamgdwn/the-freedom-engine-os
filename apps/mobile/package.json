@@ -23,6 +23,7 @@
     "@react-native/new-app-screen": "0.84.1",
     "expo": "^56.0.0-canary-20260409-6fc2991",
     "expo-asset": "^56.0.0-canary-20260409-6fc2991",
+    "expo-audio": "56.0.0-canary-20260414-e3dbafd",
     "expo-modules-core": "^56.0.0-canary-20260409-6fc2991",
     "expo-speech": "^56.0.0-canary-20260409-6fc2991",
     "livekit-client": "^2.18.2",

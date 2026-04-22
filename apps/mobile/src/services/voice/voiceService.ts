@@ -68,9 +68,30 @@ async function getAndroidRecognitionServices(): Promise<string[]> {
   }
 }
 
+function isSupportedAndroidRecognitionService(service: string): boolean {
+  const normalized = service.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized !== "com.google.android.tts" &&
+    !normalized.includes(".tts") &&
+    !normalized.includes("texttospeech")
+  );
+}
+
 async function hasSupportedAndroidRecognitionService(): Promise<boolean> {
   const services = await getAndroidRecognitionServices();
-  return services.length > 0;
+  if (services.length > 0) {
+    return services.some(isSupportedAndroidRecognitionService);
+  }
+
+  try {
+    return Boolean(await Voice.isAvailable());
+  } catch {
+    return false;
+  }
 }
 
 async function ensureSupportedAndroidRecognitionService(): Promise<void> {
@@ -78,10 +99,11 @@ async function ensureSupportedAndroidRecognitionService(): Promise<void> {
     return;
   }
 
-  const services = await getAndroidRecognitionServices();
-  if (services.length > 0) {
+  if (await hasSupportedAndroidRecognitionService()) {
     return;
   }
+
+  throw new Error("Speech recognition is not available in this build.");
 }
 
 function getPreferredRecognitionLanguage(): string {

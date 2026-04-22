@@ -107,9 +107,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace "com.adamconnectmobile"
+    namespace "com.freedommobile"
     defaultConfig {
-        applicationId "com.adamconnectmobile"
+        applicationId "com.freedommobile"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Every distributed APK must use a unique versionCode so Android installs

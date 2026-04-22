@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 import {
+  assistantVoiceCatalog,
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
   FREEDOM_RUNTIME_NAME,
@@ -9,17 +10,12 @@ import {
   summarizeAssistantVoiceProfile
 } from "@freedom/shared";
 import type { AppState } from "../store/appStore";
-import {
-  buildVoiceSelectionBadges,
-  describeVoiceOption,
-  describeVoiceOptionRecommendation,
-  shortlistVoiceOptions
-} from "../services/voice/voiceOptionPersona";
 import { isValidExternalEmail } from "../utils/externalSend";
 import { findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
 import { Banner, LabeledInput, MessageBubble, StatusChip, WorkingBubble } from "./components";
 import { styles } from "./mobileStyles";
 import { DISCONNECTED_ASSISTANT_MODE } from "../generated/runtimeConfig";
+import { humanizeSurfaceConnectivity, standaloneSurfaceHint } from "../services/mobile/standalone";
 
 const keyboardDismissMode: "interactive" | "on-drag" = Platform.OS === "ios" ? "interactive" : "on-drag";
 export const refreshScrollInteractionProps = {
@@ -29,22 +25,12 @@ export const refreshScrollInteractionProps = {
   overScrollMode: "always" as const
 };
 
-function disconnectedStatusLabel(): string {
-  switch (DISCONNECTED_ASSISTANT_MODE) {
-    case "bundled_model":
-      return "Offline / On-device";
-    case "cloud":
-      return "Disconnected / Cloud";
-    default:
-      return "Disconnected / Notes";
-  }
-}
-
 function disconnectedHint(fallbackTitle: string | null): string {
+  const disconnectedMode = String(DISCONNECTED_ASSISTANT_MODE);
   if (fallbackTitle) {
     return fallbackTitle;
   }
-  switch (DISCONNECTED_ASSISTANT_MODE) {
+  switch (disconnectedMode) {
     case "bundled_model":
       return "Cached chats and on-device ideation are ready.";
     case "cloud":
@@ -55,7 +41,8 @@ function disconnectedHint(fallbackTitle: string | null): string {
 }
 
 function disconnectedCompanionLabel(state: AppState): string {
-  if (DISCONNECTED_ASSISTANT_MODE === "bundled_model") {
+  const disconnectedMode = String(DISCONNECTED_ASSISTANT_MODE);
+  if (disconnectedMode === "bundled_model") {
     return state.offlineModelState === "ready"
       ? "Model ready"
       : state.offlineModelState === "extracting"
@@ -64,18 +51,69 @@ function disconnectedCompanionLabel(state: AppState): string {
           ? "Model attention"
           : "Model bundled";
   }
-  if (DISCONNECTED_ASSISTANT_MODE === "cloud") {
-    return "Web companion";
+  if (disconnectedMode === "cloud") {
+    return "Web lookup ready";
   }
   return "Notes only";
+}
+
+function disconnectedCompanionTone(state: AppState): "teal" | "orange" {
+  const disconnectedMode = String(DISCONNECTED_ASSISTANT_MODE);
+  if (disconnectedMode === "bundled_model") {
+    return state.offlineModelState === "ready" ? "teal" : "orange";
+  }
+  return "teal";
+}
+
+function connectedVoiceLaneLabel(state: AppState): string {
+  if (!state.realtimeConnected) {
+    return "Desktop reconnecting";
+  }
+  if (!state.hostStatus?.host.isOnline) {
+    return "Desktop offline";
+  }
+  if (state.hostStatus?.auth.status !== "logged_in") {
+    return "Login needed";
+  }
+
+  switch (state.voiceRuntimeMode) {
+    case "on_device_offline":
+      return "On-device voice";
+    case "device_fallback":
+      return "Device fallback";
+    default:
+      return "Realtime voice";
+  }
+}
+
+function connectedVoiceLaneTone(state: AppState): "teal" | "orange" {
+  if (!state.realtimeConnected || !state.hostStatus?.host.isOnline || state.hostStatus?.auth.status !== "logged_in") {
+    return "orange";
+  }
+  return "teal";
+}
+
+function voiceSurfaceCapabilityLabel(state: AppState): string {
+  if (!state.token || state.offlineMode) {
+    return disconnectedCompanionLabel(state);
+  }
+  return connectedVoiceLaneLabel(state);
+}
+
+function voiceSurfaceCapabilityTone(state: AppState): "teal" | "orange" {
+  if (!state.token || state.offlineMode) {
+    return disconnectedCompanionTone(state);
+  }
+  return connectedVoiceLaneTone(state);
 }
 
 export function PairingScreen(props: {
   store: AppState;
   keyboardHeight: number;
   insetBottom: number;
+  onUseStandalone(): void;
 }): React.JSX.Element {
-  const { store, keyboardHeight, insetBottom } = props;
+  const { store, keyboardHeight, insetBottom, onUseStandalone } = props;
 
   return (
     <ScrollView
@@ -86,8 +124,8 @@ export function PairingScreen(props: {
         <Text style={styles.eyebrow}>Freedom Companion</Text>
         <Text style={styles.heroTitle}>{FREEDOM_PRODUCT_NAME}</Text>
         <Text style={styles.heroBody}>
-          Turn this phone into a private Freedom companion for your desktop. Pair once, keep API keys off the device,
-          and use voice or text from anywhere your phone can reach the desktop.
+          Pair to your desktop when you want live sync and governed execution, or keep this phone standalone for voice,
+          notes, and independent lookup whenever a hosted companion is configured.
         </Text>
       </View>
 
@@ -113,6 +151,12 @@ export function PairingScreen(props: {
         >
           <Text style={styles.primaryLabel}>Link Phone</Text>
         </Pressable>
+        <Pressable testID="enter-standalone-button" style={styles.secondaryButton} onPress={onUseStandalone}>
+          <Text style={styles.secondaryLabel}>Use This Phone Standalone</Text>
+        </Pressable>
+        <Text style={styles.helperText}>
+          Standalone keeps voice capture and private notes on the phone now. Pair later whenever you want desktop sync and canonical history.
+        </Text>
       </View>
 
       <View style={styles.card}>
@@ -157,10 +201,21 @@ export function StartScreen(props: {
 }): React.JSX.Element {
   const { store, onRefresh, bottomPadding, onOpenTypedChat, onOpenActions, onOpenSettings, onStartTalk } = props;
   const { width: windowWidth } = useWindowDimensions();
+  const canUseTalk = store.voiceAvailable || store.voiceSessionActive;
   const currentSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
-  const voiceHeadline = store.offlineMode ? "Disconnected companion ready" : store.voiceAvailable ? "Start talking" : "Voice unavailable";
-  const voiceHint = store.offlineMode
-    ? disconnectedHint(currentSession?.title ?? null)
+  const voiceHeadline = !store.token
+    ? store.voiceAvailable
+      ? "Phone standalone ready"
+      : "Standalone notes ready"
+    : store.offlineMode
+      ? "Disconnected companion ready"
+      : store.voiceAvailable
+        ? "Start talking"
+        : "Voice unavailable";
+  const voiceHint = !store.token
+    ? currentSession?.title ?? standaloneSurfaceHint()
+    : store.offlineMode
+      ? disconnectedHint(currentSession?.title ?? null)
     : currentSession?.title ?? "Freedom is ready when you are.";
   const surfaceMessage = store.error ?? store.notice;
   const surfaceMessageTone = store.error ? "error" : "info";
@@ -188,7 +243,10 @@ export function StartScreen(props: {
       </View>
 
       <View style={styles.statusRow}>
-        <StatusChip label={store.offlineMode ? disconnectedStatusLabel() : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
+        <StatusChip
+          label={humanizeSurfaceConnectivity({ token: store.token, offlineMode: store.offlineMode })}
+          tone={!store.token || !store.offlineMode ? "teal" : "orange"}
+        />
       </View>
 
       <View style={styles.voiceSurfaceCenter}>
@@ -228,10 +286,20 @@ export function StartScreen(props: {
         <Pressable testID="start-message-button" style={styles.voiceSurfaceCompactButton} onPress={onOpenTypedChat}>
           <Text style={styles.voiceSurfaceCompactLabel}>Text</Text>
         </Pressable>
-        <Pressable style={styles.voiceSurfaceRoundButton} onPress={onStartTalk}>
+        <Pressable
+          testID="start-talk-round-button"
+          style={[styles.voiceSurfaceRoundButton, !canUseTalk ? styles.disabledButton : null]}
+          onPress={onStartTalk}
+          disabled={!canUseTalk}
+        >
           <Text style={styles.voiceSurfaceRoundGlyph}>◉</Text>
         </Pressable>
-        <Pressable style={[styles.voiceSurfaceActionButton, !store.voiceAvailable ? styles.disabledButton : null]} onPress={onStartTalk} disabled={!store.voiceAvailable}>
+        <Pressable
+          testID="start-talk-action-button"
+          style={[styles.voiceSurfaceActionButton, !canUseTalk ? styles.disabledButton : null]}
+          onPress={onStartTalk}
+          disabled={!canUseTalk}
+        >
           <Text style={styles.voiceSurfaceActionLabel}>{store.voiceSessionActive ? "End" : "Talk"}</Text>
         </Pressable>
       </View>
@@ -247,8 +315,7 @@ export function HostScreen(props: {
 }): React.JSX.Element {
   const { store, onRefresh, bottomPadding } = props;
   const currentDevice = store.devices.find((device) => device.id === store.currentDeviceId) ?? null;
-  const selectedVoice = store.assistantVoices.find((voice) => voice.id === store.selectedAssistantVoiceId) ?? null;
-  const curatedVoices = shortlistVoiceOptions(store.assistantVoices, store.selectedAssistantVoiceId, 4);
+  const activeFreedomVoiceId = store.hostStatus?.voiceProfile?.targetVoice ?? store.selectedFreedomVoicePresetId;
   const outboundEmail = store.hostStatus?.outboundEmail ?? null;
   const wakeConfigured = Boolean(store.wakeControl?.enabled);
   const hostOnline = store.hostStatus?.availability === "ready";
@@ -383,60 +450,38 @@ export function HostScreen(props: {
           </Text>
         </View>
         <View style={styles.insetCard}>
-          <Text style={styles.inputLabel}>Spoken Reply Voice</Text>
+          <Text style={styles.inputLabel}>Freedom fallback & standalone voice</Text>
           <Text style={styles.helperText}>
-            This controls the phone&apos;s local spoken-reply fallback voice. It is separate from the live realtime Freedom voice profile above.
+            The same Freedom preset now carries into hosted spoken replies when realtime is unavailable or when the phone is running in standalone cloud mode. The old phone-native TTS is no longer auto-selected.
           </Text>
           <View style={styles.voiceChoiceList}>
-            <Pressable
-              style={[styles.voiceChoiceCard, !store.selectedAssistantVoiceId ? styles.voiceChoiceCardActive : null]}
-              onPress={() => store.selectAssistantVoice(null).catch((error) => console.warn(error))}
-            >
-              <View style={styles.voiceChoiceHeader}>
-                <Text style={[styles.voiceChoiceTitle, !store.selectedAssistantVoiceId ? styles.voiceChoiceTitleActive : null]}>Automatic</Text>
-                <View style={[styles.voiceBadge, !store.selectedAssistantVoiceId ? styles.voiceBadgeActive : null]}>
-                  <Text style={[styles.voiceBadgeLabel, !store.selectedAssistantVoiceId ? styles.voiceBadgeLabelActive : null]}>Recommended</Text>
-                </View>
-              </View>
-              <Text style={[styles.voiceChoiceBody, !store.selectedAssistantVoiceId ? styles.voiceChoiceBodyActive : null]}>
-                Freedom will favor the richest installed English voice and keep the picker focused on the least robotic choices.
-              </Text>
-            </Pressable>
-            {curatedVoices.map((voice) => (
+            {assistantVoiceCatalog.map((voice) => (
               <Pressable
                 key={voice.id}
-                style={[styles.voiceChoiceCard, store.selectedAssistantVoiceId === voice.id ? styles.voiceChoiceCardActive : null]}
-                onPress={() => store.selectAssistantVoice(voice.id).catch((error) => console.warn(error))}
+                style={[styles.voiceChoiceCard, activeFreedomVoiceId === voice.id ? styles.voiceChoiceCardActive : null]}
+                onPress={() => store.selectFreedomVoicePreset(voice.id).catch((error) => console.warn(error))}
               >
                 <View style={styles.voiceChoiceHeader}>
-                  <Text style={[styles.voiceChoiceTitle, store.selectedAssistantVoiceId === voice.id ? styles.voiceChoiceTitleActive : null]}>
-                    {voice.label}
-                  </Text>
-                </View>
-                <View style={styles.voiceBadgeRow}>
-                  {buildVoiceSelectionBadges(voice).map((badge) => (
-                    <View
-                      key={`${voice.id}-${badge}`}
-                      style={[styles.voiceBadge, store.selectedAssistantVoiceId === voice.id ? styles.voiceBadgeActive : null]}
-                    >
-                      <Text
-                        style={[styles.voiceBadgeLabel, store.selectedAssistantVoiceId === voice.id ? styles.voiceBadgeLabelActive : null]}
-                      >
-                        {badge}
-                      </Text>
+                  <Text style={[styles.voiceChoiceTitle, activeFreedomVoiceId === voice.id ? styles.voiceChoiceTitleActive : null]}>{voice.label}</Text>
+                  {activeFreedomVoiceId === voice.id ? (
+                    <View style={[styles.voiceBadge, styles.voiceBadgeActive]}>
+                      <Text style={[styles.voiceBadgeLabel, styles.voiceBadgeLabelActive]}>Active</Text>
                     </View>
-                  ))}
+                  ) : null}
                 </View>
-                <Text style={[styles.voiceChoiceBody, store.selectedAssistantVoiceId === voice.id ? styles.voiceChoiceBodyActive : null]}>
-                  {describeVoiceOptionRecommendation(voice)}
+                <Text style={[styles.voiceChoiceBody, activeFreedomVoiceId === voice.id ? styles.voiceChoiceBodyActive : null]}>
+                  {voice.summary} {voice.warmth} warmth, {voice.pace} pace.
                 </Text>
               </Pressable>
             ))}
           </View>
           <Text style={styles.helperText}>
-            {selectedVoice
-              ? `Current spoken reply voice: ${describeVoiceOption(selectedVoice)}.`
-              : "Automatic now looks for the strongest available English voice instead of just showing every installed option."}
+            Current fallback preset: {summarizeAssistantVoiceProfile(store.hostStatus?.voiceProfile ?? {
+              targetVoice: store.selectedFreedomVoicePresetId,
+              tone: null,
+              warmth: null,
+              pace: null
+            })}.
           </Text>
         </View>
         <View style={styles.insetCard}>
@@ -882,7 +927,7 @@ export function ChatScreen(props: {
   const transcriptScrollRef = useRef<ScrollView | null>(null);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const showExternalDraftCard = Boolean(store.externalDraft);
-  const offlineDraft = store.selectedSessionId ? store.offlineImportDrafts[store.selectedSessionId] ?? null : null;
+  const offlineDraft = store.selectedSessionId ? store.offlineImportDrafts?.[store.selectedSessionId] ?? null : null;
   const showOfflineImportReview = false;
   const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
   const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
@@ -891,7 +936,9 @@ export function ChatScreen(props: {
   const compactVoiceSurface = windowWidth < 400;
   const tightVoiceSurface = windowWidth < 360;
   const centerHeadline =
-    store.offlineMode && !busy && !store.sendingMessage && !store.voiceSessionActive
+    !store.token && !busy && !store.sendingMessage && !store.voiceSessionActive
+      ? "Phone standalone"
+      : store.offlineMode && !busy && !store.sendingMessage && !store.voiceSessionActive
       ? "Disconnected companion"
       : busy || store.sendingMessage
       ? "Working"
@@ -904,6 +951,8 @@ export function ChatScreen(props: {
     ? store.liveTranscript
     : store.voiceAssistantDraft
       ? store.voiceAssistantDraft
+      : !store.token
+        ? selectedSession?.title ?? standaloneSurfaceHint()
       : store.offlineMode
         ? disconnectedHint(null)
       : busy || store.sendingMessage
@@ -996,10 +1045,13 @@ export function ChatScreen(props: {
         </View>
 
         <View style={styles.statusRow}>
-          <StatusChip label={store.offlineMode ? disconnectedStatusLabel() : "Desktop linked"} tone={store.offlineMode ? "orange" : "teal"} />
           <StatusChip
-            label={disconnectedCompanionLabel(store)}
-            tone={store.offlineModelState === "ready" ? "teal" : "orange"}
+            label={humanizeSurfaceConnectivity({ token: store.token, offlineMode: store.offlineMode })}
+            tone={!store.token || !store.offlineMode ? "teal" : "orange"}
+          />
+          <StatusChip
+            label={voiceSurfaceCapabilityLabel(store)}
+            tone={voiceSurfaceCapabilityTone(store)}
           />
         </View>
 

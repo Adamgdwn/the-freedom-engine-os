@@ -16,6 +16,7 @@ import type { AppState } from "../store/appStore";
 import { useAppStore } from "../store/appStore";
 import { humanizeVoiceSessionPhase } from "../services/voice/voiceSessionMachine";
 import { MOBILE_APP_VERSION_CODE, MOBILE_APP_VERSION_NAME } from "../generated/runtimeConfig";
+import { humanizeSurfaceConnectivity } from "../services/mobile/standalone";
 
 type UtilitySheetMode = "actions" | "settings";
 
@@ -71,9 +72,15 @@ export function AppShell(): React.JSX.Element {
   const voiceStatus = humanizeVoiceStatus(store);
   const voiceCta = voiceActionCopy(store);
   const showGlobalBanners = store.view === "host" || store.view === "sessions";
-  const liveVoiceSummary = store.hostStatus?.voiceProfile
-    ? summarizeAssistantVoiceProfile(store.hostStatus.voiceProfile)
-    : "Marin • feminine • warm";
+  const liveVoiceSummary = summarizeAssistantVoiceProfile(
+    store.hostStatus?.voiceProfile ?? {
+      targetVoice: store.selectedFreedomVoicePresetId,
+      tone: null,
+      warmth: null,
+      pace: null
+    }
+  );
+  const showPairing = !store.token && store.view === "pairing";
 
   if (store.booting) {
     return (
@@ -87,10 +94,15 @@ export function AppShell(): React.JSX.Element {
     );
   }
 
-  if (!store.token && store.sessions.length === 0) {
+  if (showPairing) {
     return (
       <SafeAreaView style={styles.root} edges={["top", "left", "right", "bottom"]}>
-        <PairingScreen store={store} keyboardHeight={keyboardHeight} insetBottom={insets.bottom} />
+        <PairingScreen
+          store={store}
+          keyboardHeight={keyboardHeight}
+          insetBottom={insets.bottom}
+          onUseStandalone={() => store.enterStandaloneMode().catch((error) => console.warn(error))}
+        />
       </SafeAreaView>
     );
   }
@@ -108,13 +120,6 @@ export function AppShell(): React.JSX.Element {
   };
 
   const handleTalkPress = () => {
-    if (store.view !== "chat") {
-      const targetSessionId = store.selectedSessionId ?? store.sessions[0]?.id ?? null;
-      store.setView("chat");
-      if (targetSessionId && store.selectedSessionId !== targetSessionId) {
-        store.selectSession(targetSessionId).catch((error) => console.warn(error));
-      }
-    }
     store.toggleListening().catch((error) => console.warn(error));
   };
 
@@ -332,11 +337,11 @@ export function AppShell(): React.JSX.Element {
                   <View style={styles.mobileSheetSection}>
                     <Text style={styles.mobileSheetSectionTitle}>Status</Text>
                     <View style={styles.statusRow}>
-                      <StatusChip label={store.hostStatus?.host.isOnline ? "Desktop online" : "Desktop offline"} tone={store.hostStatus?.host.isOnline ? "teal" : "orange"} />
-                      <StatusChip label={store.realtimeConnected ? "Live sync on" : "Live sync reconnecting"} tone={store.realtimeConnected ? "teal" : "orange"} />
+                      <StatusChip label={humanizeDesktopStatus(store)} tone={!store.token || store.hostStatus?.host.isOnline ? "teal" : "orange"} />
+                      <StatusChip label={humanizeSyncStatus(store)} tone={!store.token || store.realtimeConnected ? "teal" : "orange"} />
                       <StatusChip label={voiceStatus} tone={store.voiceAvailable ? "teal" : "orange"} />
                     </View>
-                    <Text style={styles.mobileSheetHelper}>{store.hostStatus?.auth.detail ?? "Waiting for desktop heartbeat."}</Text>
+                    <Text style={styles.mobileSheetHelper}>{humanizeStatusDetail(store)}</Text>
                   </View>
                 </>
               ) : (
@@ -349,12 +354,12 @@ export function AppShell(): React.JSX.Element {
                         value={liveVoiceSummary}
                       />
                       <Text style={styles.mobileSheetHelper}>
-                        These are the actual live Freedom voices. Marin is the currently installed default unless you switch it here. The old phone fallback voices stay in Homebase because they are not the same thing as the voice you hear in live conversation.
+                        This preset now carries across Freedom&apos;s live realtime voice and the hosted spoken-reply path used in fallback or standalone cloud mode. Freedom voice is AI-generated, and the old phone-native TTS is no longer auto-selected during normal use.
                       </Text>
                     </View>
                     <View style={styles.voiceChoiceList}>
                       {assistantVoiceCatalog.map((voice) => {
-                        const activeVoiceId = store.hostStatus?.voiceProfile?.targetVoice ?? "marin";
+                        const activeVoiceId = store.hostStatus?.voiceProfile?.targetVoice ?? store.selectedFreedomVoicePresetId ?? "marin";
                         const isActive = activeVoiceId === voice.id;
                         return (
                           <Pressable
@@ -393,9 +398,9 @@ export function AppShell(): React.JSX.Element {
                         : "Captured turns pause for review instead of sending automatically."}
                     </Text>
                     <View style={styles.insetCard}>
-                      <Text style={styles.inputLabel}>Phone fallback voice</Text>
+                      <Text style={styles.inputLabel}>Legacy phone voice backup</Text>
                       <Text style={styles.helperText}>
-                        The phone&apos;s local spoken-reply fallback voices live in Homebase. They are secondary and can sound odd because they are device TTS voices, not Freedom&apos;s live realtime voice presets.
+                        Android&apos;s local TTS engine is retained only as a manual recovery path. It is no longer auto-selected, and it should not be the voice you hear in routine use.
                       </Text>
                       <View style={styles.actions}>
                         <Pressable
@@ -414,6 +419,17 @@ export function AppShell(): React.JSX.Element {
                   <View style={styles.mobileSheetSection}>
                     <Text style={styles.mobileSheetSectionTitle}>System adjustments</Text>
                     <View style={styles.mobileSheetActionRow}>
+                      {!store.token ? (
+                        <Pressable
+                          style={[styles.secondaryButton, styles.mobileSheetActionButton]}
+                          onPress={() => {
+                            store.setView("pairing");
+                            closeSheet();
+                          }}
+                        >
+                          <Text style={styles.secondaryLabel}>Link Desktop</Text>
+                        </Pressable>
+                      ) : null}
                       <Pressable
                         style={[styles.secondaryButton, styles.mobileSheetActionButton]}
                         onPress={() => {
@@ -423,19 +439,23 @@ export function AppShell(): React.JSX.Element {
                       >
                         <Text style={styles.secondaryLabel}>Open Homebase</Text>
                       </Pressable>
-                      <Pressable
-                        style={[styles.secondaryButton, styles.mobileSheetActionButton, store.refreshing ? styles.disabledButton : null]}
-                        onPress={() => store.refresh().catch((error) => console.warn(error))}
-                        disabled={store.refreshing}
-                      >
-                        <Text style={styles.secondaryLabel}>{store.refreshing ? "Refreshing..." : "Refresh"}</Text>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.secondaryButton, styles.mobileSheetActionButton]}
-                        onPress={() => store.reconnectRealtime().catch((error) => console.warn(error))}
-                      >
-                        <Text style={styles.secondaryLabel}>Reconnect Realtime</Text>
-                      </Pressable>
+                      {store.token ? (
+                        <Pressable
+                          style={[styles.secondaryButton, styles.mobileSheetActionButton, store.refreshing ? styles.disabledButton : null]}
+                          onPress={() => store.refresh().catch((error) => console.warn(error))}
+                          disabled={store.refreshing}
+                        >
+                          <Text style={styles.secondaryLabel}>{store.refreshing ? "Refreshing..." : "Refresh"}</Text>
+                        </Pressable>
+                      ) : null}
+                      {store.token ? (
+                        <Pressable
+                          style={[styles.secondaryButton, styles.mobileSheetActionButton]}
+                          onPress={() => store.reconnectRealtime().catch((error) => console.warn(error))}
+                        >
+                          <Text style={styles.secondaryLabel}>Reconnect Realtime</Text>
+                        </Pressable>
+                      ) : null}
                     </View>
                   </View>
 
@@ -490,6 +510,9 @@ function humanizeVoiceStatus(store: AppState): string {
     }
     return humanizeVoiceSessionPhase(store.voiceSessionPhase);
   }
+  if (!store.token) {
+    return "Standalone ready";
+  }
   if (!store.realtimeConnected) {
     return "Desktop reconnecting";
   }
@@ -503,7 +526,13 @@ function humanizeVoiceStatus(store: AppState): string {
 }
 
 function humanizeVoiceRuntimeMode(store: AppState): string {
-  return store.voiceRuntimeMode === "realtime_primary" ? "LiveKit + OpenAI Realtime" : "Device STT/TTS fallback";
+  if (store.voiceRuntimeMode === "realtime_primary") {
+    return "LiveKit + OpenAI Realtime";
+  }
+  if (!store.token) {
+    return "Phone voice + standalone companion";
+  }
+  return store.voiceRuntimeMode === "on_device_offline" ? "On-device voice + local model" : "Device STT + Freedom hosted speech";
 }
 
 function humanizeBuildLaneApproval(approvalState: string): string {
@@ -572,6 +601,27 @@ function voiceActionCopy(store: AppState): { label: string; hint: string } {
           : "Open the continuous voice surface from anywhere."
       };
   }
+}
+
+function humanizeDesktopStatus(store: AppState): string {
+  if (!store.token) {
+    return humanizeSurfaceConnectivity({ token: store.token, offlineMode: store.offlineMode });
+  }
+  return store.hostStatus?.host.isOnline ? "Desktop online" : "Desktop offline";
+}
+
+function humanizeSyncStatus(store: AppState): string {
+  if (!store.token) {
+    return "Standalone mode";
+  }
+  return store.realtimeConnected ? "Live sync on" : "Live sync reconnecting";
+}
+
+function humanizeStatusDetail(store: AppState): string {
+  if (!store.token) {
+    return "Pair later when you want desktop sync, build routing, or canonical import back into shared history.";
+  }
+  return store.hostStatus?.auth.detail ?? "Waiting for desktop heartbeat.";
 }
 
 function capitalize(value: string): string {

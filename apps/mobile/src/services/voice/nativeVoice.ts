@@ -140,9 +140,6 @@ class NativeVoice {
   }
 
   async stop(): Promise<void> {
-    if (!this.loaded && !this.listeners) {
-      return;
-    }
     const module = requireNativeVoiceModule();
     await new Promise<void>((resolve, reject) => {
       module.stopSpeech((error) => {
@@ -156,9 +153,6 @@ class NativeVoice {
   }
 
   async cancel(): Promise<void> {
-    if (!this.loaded && !this.listeners) {
-      return;
-    }
     const module = requireNativeVoiceModule();
     await new Promise<void>((resolve, reject) => {
       module.cancelSpeech((error) => {

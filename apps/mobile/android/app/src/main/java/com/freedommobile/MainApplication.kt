@@ -1,4 +1,4 @@
-package com.adamconnectmobile
+package com.freedommobile
 
 import android.app.Application
 import android.content.res.Configuration

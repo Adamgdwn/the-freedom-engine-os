@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const desktopLauncherScript = path.join(repoRoot, "scripts", "launch-freedom-desktop.sh");
 dotenv.config({ path: path.resolve(repoRoot, ".env"), override: true });
 
 const shouldOpenBrowser = !process.argv.includes("--no-open");
@@ -17,10 +18,10 @@ const desktopDataDir = path.join(repoRoot, "apps/desktop-host/.local-data/deskto
 const sharedEnv = {
   ...process.env,
   DESKTOP_APPROVED_ROOTS: process.env.DESKTOP_APPROVED_ROOTS?.trim() || repoRoot,
-  DESKTOP_HOST_NAME: process.env.DESKTOP_HOST_NAME?.trim() || "Freedom Desktop",
-  DESKTOP_GATEWAY_URL: process.env.DESKTOP_GATEWAY_URL?.trim() || `http://127.0.0.1:${gatewayPort}`,
-  DESKTOP_DATA_DIR: process.env.DESKTOP_DATA_DIR?.trim() || desktopDataDir,
-  GATEWAY_DATA_DIR: process.env.GATEWAY_DATA_DIR?.trim() || gatewayDataDir
+  DESKTOP_HOST_NAME: "Freedom Desktop",
+  DESKTOP_GATEWAY_URL: `http://127.0.0.1:${gatewayPort}`,
+  DESKTOP_DATA_DIR: desktopDataDir,
+  GATEWAY_DATA_DIR: gatewayDataDir
 };
 
 process.stdout.write("Launching Freedom desktop...\n");
@@ -34,6 +35,10 @@ const children = [];
 
 function spawnNpmProcess(name, args) {
   const command = process.platform === "win32" ? "npm.cmd" : "npm";
+  return spawnNamedProcess(name, command, args);
+}
+
+function spawnNamedProcess(name, command, args) {
   const child = spawn(command, args, {
     cwd: repoRoot,
     env: sharedEnv,
@@ -129,7 +134,10 @@ async function openBrowser(url) {
 async function start() {
   if (shouldUseShell) {
     process.stdout.write("Launching Freedom Desktop shell...\n");
-    const shellProcess = spawnNpmProcess("shell", ["run", "app:desktop:electron"]);
+    const shellProcess =
+      process.platform === "linux"
+        ? spawnNamedProcess("shell", "bash", [desktopLauncherScript])
+        : spawnNpmProcess("shell", ["run", "app:desktop:electron"]);
     children.push(shellProcess);
     return;
   }

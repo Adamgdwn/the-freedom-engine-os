@@ -11,7 +11,7 @@ const baseStore = {
   realtimeConnected: true,
   view: "chat",
   baseUrl: "http://127.0.0.1:43111",
-  deviceName: "Adam's Phone",
+  deviceName: "Freedom Phone",
   pairingCode: "",
   token: "device-token",
   currentDeviceId: "device-1",
@@ -119,6 +119,9 @@ const baseStore = {
   voiceRuntimeBinding: null,
   pushAvailable: false,
   pushSyncing: false,
+  offlineMode: false,
+  offlineModelState: "ready",
+  offlineModelDetail: "Local fallback ready",
   listening: false,
   voiceSessionActive: false,
   voiceTargetSessionId: null,
@@ -149,6 +152,7 @@ const baseStore = {
   renameSession: jest.fn(async () => undefined),
   deleteSession: jest.fn(async () => undefined),
   sendMessage: jest.fn(async () => undefined),
+  enterStandaloneMode: jest.fn(async () => undefined),
   stopSession: jest.fn(async () => undefined),
   renameCurrentDevice: jest.fn(async () => undefined),
   enablePushNotifications: jest.fn(async () => undefined),
@@ -187,8 +191,8 @@ describe("ChatScreen busy send state", () => {
           footerBottomPadding={12}
           toolSheetBottomPadding={98}
           manualToolsVisible
-          onOpenStart={() => undefined}
-          onOpenUtility={() => undefined}
+          onOpenActions={() => undefined}
+          onOpenSettings={() => undefined}
           onToggleManualTools={() => undefined}
           onStartOrStopVoice={() => undefined}
         />
@@ -237,8 +241,8 @@ describe("ChatScreen busy send state", () => {
           footerBottomPadding={12}
           toolSheetBottomPadding={98}
           manualToolsVisible
-          onOpenStart={() => undefined}
-          onOpenUtility={() => undefined}
+          onOpenActions={() => undefined}
+          onOpenSettings={() => undefined}
           onToggleManualTools={() => undefined}
           onStartOrStopVoice={() => undefined}
         />
@@ -278,8 +282,8 @@ describe("ChatScreen busy send state", () => {
           footerBottomPadding={12}
           toolSheetBottomPadding={98}
           manualToolsVisible
-          onOpenStart={() => undefined}
-          onOpenUtility={() => undefined}
+          onOpenActions={() => undefined}
+          onOpenSettings={() => undefined}
           onToggleManualTools={() => undefined}
           onStartOrStopVoice={() => undefined}
         />
@@ -317,8 +321,8 @@ describe("ChatScreen busy send state", () => {
           footerBottomPadding={12}
           toolSheetBottomPadding={98}
           manualToolsVisible={false}
-          onOpenStart={() => undefined}
-          onOpenUtility={() => undefined}
+          onOpenActions={() => undefined}
+          onOpenSettings={() => undefined}
           onToggleManualTools={() => undefined}
           onStartOrStopVoice={() => undefined}
         />
@@ -329,6 +333,33 @@ describe("ChatScreen busy send state", () => {
 
     expect(labels).toContain("Start talking");
     expect(tree.root.findAllByProps({ testID: "voice-inline-composer" })).toHaveLength(0);
+  });
+
+  test("shows realtime voice status instead of disconnected notes while desktop-linked", async () => {
+    let tree!: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(
+        <ChatScreen
+          store={baseStore}
+          onRefresh={() => undefined}
+          keyboardInset={0}
+          footerBottomPadding={12}
+          toolSheetBottomPadding={98}
+          manualToolsVisible={false}
+          onOpenActions={() => undefined}
+          onOpenSettings={() => undefined}
+          onToggleManualTools={() => undefined}
+          onStartOrStopVoice={() => undefined}
+        />
+      );
+    });
+
+    const labels = tree.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+
+    expect(labels).toContain("Desktop linked");
+    expect(labels).toContain("Realtime voice");
+    expect(labels).not.toContain("Notes only");
   });
 });
 

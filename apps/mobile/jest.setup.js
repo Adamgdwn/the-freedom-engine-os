@@ -110,6 +110,19 @@ jest.mock('expo-speech', () => ({
   ]),
 }));
 
+jest.mock('expo-audio', () => ({
+  createAudioPlayer: jest.fn((_source, _options) => ({
+    addListener: jest.fn(() => ({
+      remove: jest.fn(),
+    })),
+    replace: jest.fn(),
+    play: jest.fn(),
+    pause: jest.fn(),
+    seekTo: jest.fn(async () => undefined),
+  })),
+  setAudioModeAsync: jest.fn(async () => undefined),
+}));
+
 jest.mock('react-native-permissions', () => ({
   PERMISSIONS: {
     IOS: {MICROPHONE: 'ios.microphone', SPEECH_RECOGNITION: 'ios.speech'},

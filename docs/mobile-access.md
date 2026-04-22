@@ -48,14 +48,25 @@ surface than a one-shot relay:
 - premium realtime voice sessions now rehydrate from the recent thread and write their
   final transcripts back into the shared session history, so ending and restarting Talk
   no longer wipes the current conversational context
-- if the paired desktop becomes unreachable after the app has cached chats, the phone can
-  stay usable in a disconnected mode instead of only throwing a connection error:
-  the normal slim release now routes those turns through the disconnected web companion
-  whenever `MOBILE_DEFAULT_BASE_URL` or `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is
-  configured, the phone prefers its current paired host URL before falling back to that
-  configured install/web companion host, and only explicitly requested builds bundle the
-  heavy on-device model; if neither URL is configured, the app still falls back to cached
-  chats plus saved-idea capture
+- the phone can now enter a real standalone mode before pairing or after the desktop link
+  drops: local voice capture stays available, saved notes persist on-device, and cached
+  phone-only threads survive later desktop refreshes instead of being overwritten
+- pull-to-refresh on the standalone phone surface now stays local-safe: it rehydrates the
+  saved on-device threads instead of throwing the operator back into a desktop-only pairing
+  error path
+- the `Talk` canvas now labels the second status chip by the active posture: desktop-linked
+  sessions show the connected voice lane such as `Realtime voice`, while only true
+  standalone/disconnected sessions show fallback labels such as `Notes only`
+- transient realtime reconnects no longer immediately throw a paired phone into a false
+  disconnected `Notes only` posture; the mobile surface now waits to confirm the desktop is
+  actually unreachable before presenting the disconnected companion state
+- Freedom-hosted speech now wins over any previously saved legacy Android TTS choice, and
+  stale phone-native voice selections are migrated away on boot so the old robotic voice
+  does not silently hijack normal spoken replies
+- the slim release no longer treats `MOBILE_DEFAULT_BASE_URL` as a fake disconnected cloud
+  companion; hosted disconnected lookup now activates only when
+  `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured, while optional builds
+  can still bundle the heavy on-device model and the default fallback remains notes-only
 - offline mobile work is now review-first and safe by design:
   importing it writes non-executing `system` notes into canonical history and drafts one
   explicit `Continue with Freedom` follow-up instead of auto-replaying offline turns into
@@ -184,11 +195,18 @@ network routing is unavailable.
 
 ## What This Means
 
-This gives you phone access to the repo through a Freedom-branded shell and phone
-companion while the integrated Freedom desktop runtime stays underneath as the bridge.
-It does not yet mean
-Freedom Engine has its own independent hosted mobile backend. For "anytime" use, the
-desktop or workstation running Freedom Desktop must stay online and reachable.
+This gives you phone access to Freedom in two postures:
+
+- desktop-linked, where premium realtime voice and shared canonical history stay aligned
+  with the workstation runtime
+- phone-standalone, where voice capture and saved notes stay available even without any
+  desktop link, and hosted lookup or hosted spoken replies come online only when an
+  explicit mobile companion host is configured
+
+Independent hosted lookup now uses the dedicated mobile companion endpoint only when
+`MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured. Without that explicit
+host, the standalone phone falls back to notes-only capture instead of silently depending
+on the desktop URL.
 
 ## Next Improvements
 

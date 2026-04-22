@@ -1,6 +1,10 @@
 import { Platform } from "react-native";
 import { sanitizeTextForSpeech } from "../../utils/operatorConsole";
 import { pickAutomaticVoice } from "./voiceOptionPersona";
+import {
+  FreedomSpeechService,
+  type FreedomSpeechProvider
+} from "./freedomSpeechService";
 
 export interface TtsVoiceOption {
   id: string;
@@ -11,7 +15,7 @@ export interface TtsVoiceOption {
   nativeIdentifier?: string | null;
 }
 
-type SpeechBackend = "expo-speech" | "react-native-tts";
+type SpeechBackend = "freedom-cloud" | "expo-speech" | "react-native-tts";
 
 type ReactNativeTtsModule = {
   voices?(): Promise<
@@ -145,6 +149,7 @@ function getExpoSpeechModule(): ExpoSpeechModule | null {
 export class TtsService {
   private readonly reactNativeTts = getReactNativeTtsModule();
   private readonly expoSpeech = getExpoSpeechModule();
+  private readonly freedomSpeech = new FreedomSpeechService();
   private handlersConfigured = false;
   private initPromise: Promise<boolean> | null = null;
   private errorHandler: ((message: string) => void) | null = null;
@@ -156,6 +161,7 @@ export class TtsService {
   private lastSuccessfulBackend: SpeechBackend | null = null;
   private lastAttemptedBackend: SpeechBackend | null = null;
   private readonly knownVoiceBackendById = new Map<string, SpeechBackend>();
+  private freedomSpeechProviderResolver: (() => FreedomSpeechProvider | null) | null = null;
 
   private hasWarmBackend(): boolean {
     return Boolean(this.initPromise || this.selectedVoiceId || this.lastSuccessfulBackend || this.lastAttemptedBackend);
@@ -166,6 +172,10 @@ export class TtsService {
     this.initPromise = null;
     this.lastSuccessfulBackend = null;
     this.lastAttemptedBackend = null;
+  }
+
+  setFreedomSpeechProviderResolver(resolver: (() => FreedomSpeechProvider | null) | null): void {
+    this.freedomSpeechProviderResolver = resolver;
   }
 
   isAvailable(): boolean {
@@ -209,6 +219,14 @@ export class TtsService {
   async listVoices(): Promise<TtsVoiceOption[]> {
     const backend = this.resolvePreferredBackend();
     if (!backend) {
+      if (this.reactNativeTts) {
+        await this.initializeReactNativeTts().catch(() => false);
+        return this.getReactNativeVoiceOptions();
+      }
+      if (this.expoSpeech) {
+        await this.initializeExpoSpeech().catch(() => false);
+        return this.getExpoVoiceOptions();
+      }
       return [];
     }
 
@@ -217,7 +235,15 @@ export class TtsService {
       return [];
     }
 
-    return backend === "expo-speech" ? this.getExpoVoiceOptions() : this.getReactNativeVoiceOptions();
+    if (backend === "expo-speech") {
+      return this.getExpoVoiceOptions();
+    }
+
+    if (backend === "freedom-cloud") {
+      return this.reactNativeTts ? this.getReactNativeVoiceOptions() : this.getExpoVoiceOptions();
+    }
+
+    return this.getReactNativeVoiceOptions();
   }
 
   async setPreferredVoice(voiceId: string | null): Promise<TtsVoiceOption | null> {
@@ -251,6 +277,12 @@ export class TtsService {
   }): void {
     this.handlers = handlers;
     this.errorHandler = handlers.onError ?? null;
+    this.freedomSpeech.configureHandlers({
+      onStart: () => this.handleSpeechStart(),
+      onFinish: () => this.handlers.onFinish?.(),
+      onCancel: () => this.handlers.onCancel?.(),
+      onError: (message) => this.handlers.onError?.(message)
+    });
 
     if (this.handlersConfigured || !this.reactNativeTts?.addEventListener) {
       return;
@@ -272,7 +304,7 @@ export class TtsService {
     this.prepare()
       .then((ready) => {
         if (!ready) {
-          this.errorHandler?.("Spoken replies are unavailable because phone speech output is not ready on this device.");
+          this.errorHandler?.("Freedom spoken replies are unavailable because no hosted Freedom speech path is ready on this device.");
           return;
         }
 
@@ -285,6 +317,7 @@ export class TtsService {
   }
 
   stop(): void {
+    this.freedomSpeech.stop();
     this.reactNativeTts?.stop();
     this.expoSpeech?.stop();
   }
@@ -292,6 +325,10 @@ export class TtsService {
   retryWithAlternateBackend(text: string): boolean {
     const spokenText = sanitizeTextForSpeech(text);
     if (!spokenText) {
+      return false;
+    }
+
+    if (this.lastAttemptedBackend === "freedom-cloud") {
       return false;
     }
 
@@ -311,10 +348,19 @@ export class TtsService {
   async describeAvailability(): Promise<string> {
     const backend = this.resolvePreferredBackend();
     if (!backend) {
-      return "Spoken replies are unavailable because this build does not include a phone speech-output backend.";
+      return this.reactNativeTts || this.expoSpeech
+        ? "Freedom hosted speech is not reachable right now. Legacy phone TTS is no longer selected automatically, so spoken replies will pause until a Freedom voice path is available."
+        : "Spoken replies are unavailable because this build does not include a compatible Freedom speech output path.";
     }
 
     const ready = await this.prepare();
+    if (backend === "freedom-cloud") {
+      const provider = this.getFreedomSpeechProvider();
+      return ready
+        ? `Freedom hosted speech is ready using ${provider?.voiceProfile.targetVoice ?? "marin"} via ${provider?.label ?? "the configured companion"}.`
+        : "Freedom hosted speech is not ready right now, so spoken replies may pause until the Freedom voice path is back.";
+    }
+
     if (backend === "expo-speech") {
       const voices = await this.getExpoVoiceOptions();
       const englishVoices = voices.filter((voice) => /^en(?:[-_]|$)/i.test(voice.language));
@@ -331,14 +377,18 @@ export class TtsService {
     const currentVoice = voices.find((voice) => voice.id === this.selectedVoiceId);
 
     return ready
-      ? `Phone speech output is ready using Android text-to-speech. Default engine: ${defaultEngine}. Current voice: ${currentVoice?.label ?? "default English"}. English voices available: ${installedEnglishVoices.length}.`
-      : `Phone speech output is not ready using Android text-to-speech. Default engine: ${defaultEngine}. Current voice: ${currentVoice?.label ?? "default English"}. English voices available: ${installedEnglishVoices.length}.`;
+      ? `Legacy phone TTS backup is ready using Android speech output. Default engine: ${defaultEngine}. Current voice: ${currentVoice?.label ?? "default English"}. English voices available: ${installedEnglishVoices.length}.`
+      : `Legacy phone TTS backup is not ready yet. Default engine: ${defaultEngine}. Current voice: ${currentVoice?.label ?? "default English"}. English voices available: ${installedEnglishVoices.length}.`;
   }
 
   private async initialize(): Promise<boolean> {
     const backend = this.resolvePreferredBackend();
     if (!backend) {
       return false;
+    }
+
+    if (backend === "freedom-cloud") {
+      return this.freedomSpeech.prepare();
     }
 
     if (backend === "expo-speech") {
@@ -349,20 +399,15 @@ export class TtsService {
   }
 
   private resolvePreferredBackend(): SpeechBackend | null {
-    const availableBackends = this.availableBackends();
-    if (!availableBackends.length) {
-      return null;
+    if (this.canUseFreedomSpeechBackend()) {
+      return "freedom-cloud";
     }
 
-    if (this.selectedBackend && availableBackends.includes(this.selectedBackend)) {
+    if (this.selectedBackend === "expo-speech" || this.selectedBackend === "react-native-tts") {
       return this.selectedBackend;
     }
 
-    if (this.lastSuccessfulBackend && availableBackends.includes(this.lastSuccessfulBackend)) {
-      return this.lastSuccessfulBackend;
-    }
-
-    return this.defaultBackendOrder().find((backend) => availableBackends.includes(backend)) ?? availableBackends[0];
+    return null;
   }
 
   private resolveAlternateBackend(currentBackend: SpeechBackend | null): SpeechBackend | null {
@@ -377,6 +422,9 @@ export class TtsService {
 
   private availableBackends(): SpeechBackend[] {
     const available: SpeechBackend[] = [];
+    if (this.canUseFreedomSpeechBackend()) {
+      available.push("freedom-cloud");
+    }
     if (this.expoSpeech) {
       available.push("expo-speech");
     }
@@ -387,9 +435,11 @@ export class TtsService {
   }
 
   private defaultBackendOrder(): SpeechBackend[] {
-    // Prefer Android's richer native TTS voices first, and keep Expo speech as
-    // the fallback when the native bridge is unavailable or fails to start.
-    return Platform.OS === "android" ? ["react-native-tts", "expo-speech"] : ["react-native-tts", "expo-speech"];
+    // Freedom-hosted speech keeps the modern preset voice consistent with the
+    // realtime lane. Native phone TTS stays behind it as a last-resort backup.
+    return Platform.OS === "android"
+      ? ["freedom-cloud", "react-native-tts", "expo-speech"]
+      : ["freedom-cloud", "react-native-tts", "expo-speech"];
   }
 
   private async initializeExpoSpeech(): Promise<boolean> {
@@ -453,6 +503,10 @@ export class TtsService {
       this.speakWithBackend(primaryBackend, text);
       return;
     } catch (error) {
+      if (primaryBackend === "freedom-cloud") {
+        throw error;
+      }
+
       const alternateBackend = this.resolveAlternateBackend(primaryBackend);
       if (!alternateBackend) {
         throw error;
@@ -464,6 +518,10 @@ export class TtsService {
 
   private speakWithBackend(backend: SpeechBackend, text: string): void {
     this.lastAttemptedBackend = backend;
+    if (backend === "freedom-cloud") {
+      this.speakWithFreedomSpeech(text);
+      return;
+    }
     if (backend === "expo-speech") {
       this.speakWithExpoSpeech(text);
       return;
@@ -478,6 +536,19 @@ export class TtsService {
     }
     console.info(`[FreedomTTS] start backend=${this.lastAttemptedBackend ?? "unknown"}`);
     this.handlers.onStart?.();
+  }
+
+  private speakWithFreedomSpeech(text: string): void {
+    const provider = this.getFreedomSpeechProvider();
+    if (!provider) {
+      throw new Error("Freedom hosted speech is not configured.");
+    }
+
+    console.info(`[FreedomTTS] speak backend=freedom-cloud voice=${provider.voiceProfile.targetVoice}`);
+    const spokenText = this.freedomSpeech.speak(text, provider);
+    if (!spokenText) {
+      throw new Error("Freedom hosted speech rejected the request.");
+    }
   }
 
   private speakWithExpoSpeech(text: string): void {
@@ -501,7 +572,7 @@ export class TtsService {
 
   private speakWithReactNativeTts(text: string): void {
     if (!this.reactNativeTts) {
-      throw new Error("Android text-to-speech is unavailable.");
+      throw new Error("Legacy Android speech output is unavailable.");
     }
 
     console.info("[FreedomTTS] speak backend=react-native-tts");
@@ -600,6 +671,18 @@ export class TtsService {
     const previousBackend = this.resolvePreferredBackend();
     this.selectedBackend = voiceId ? await this.resolveBackendForVoiceId(voiceId) : null;
     return Boolean(this.selectedBackend && this.selectedBackend !== previousBackend);
+  }
+
+  private getFreedomSpeechProvider(): FreedomSpeechProvider | null {
+    try {
+      return this.freedomSpeechProviderResolver?.() ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private canUseFreedomSpeechBackend(): boolean {
+    return this.freedomSpeech.isAvailable() && Boolean(this.getFreedomSpeechProvider());
   }
 
   private async resolveBackendForVoiceId(voiceId: string): Promise<SpeechBackend | null> {

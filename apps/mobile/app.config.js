@@ -4,8 +4,15 @@ module.exports = {
   expo: {
     name: "Freedom",
     slug: "freedom-mobile-companion",
+    android: {
+      package: "com.freedommobile"
+    },
+    ios: {
+      bundleIdentifier: "com.freedommobile"
+    },
     plugins: bundledOfflineEnabled
       ? [
+          "expo-audio",
           [
             "llama.rn",
             {
@@ -14,6 +21,6 @@ module.exports = {
             }
           ]
         ]
-      : []
+      : ["expo-audio"]
   }
 };

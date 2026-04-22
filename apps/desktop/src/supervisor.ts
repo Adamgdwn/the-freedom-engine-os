@@ -24,14 +24,30 @@ interface SupervisorEvents {
 type SupervisorEventName = keyof SupervisorEvents;
 type SupervisorEventHandler<T extends SupervisorEventName> = SupervisorEvents[T];
 
+function resolveManagedDataDir(repoRoot: string, envValue: string | undefined, fallbackPath: string): string {
+  const candidate = envValue?.trim();
+  if (!candidate) {
+    return fallbackPath;
+  }
+
+  const resolved = path.resolve(candidate);
+  return resolved.includes(`${path.sep}codex_adam_connect${path.sep}`) ? fallbackPath : resolved;
+}
+
 export class DesktopShellSupervisor {
   private readonly events = new EventEmitter();
   private readonly repoRoot = path.resolve(__dirname, "../../..");
   private readonly localBaseUrl = process.env.DESKTOP_GATEWAY_URL?.trim() || `http://127.0.0.1:${process.env.GATEWAY_PORT ?? 43111}`;
-  private readonly gatewayDataDir =
-    process.env.GATEWAY_DATA_DIR?.trim() || path.join(this.repoRoot, "apps/gateway/.local-data/gateway");
-  private readonly desktopDataDir =
-    process.env.DESKTOP_DATA_DIR?.trim() || path.join(this.repoRoot, "apps/desktop-extension/.local-data/desktop");
+  private readonly gatewayDataDir = resolveManagedDataDir(
+    this.repoRoot,
+    process.env.GATEWAY_DATA_DIR,
+    path.join(this.repoRoot, "apps/gateway/.local-data/gateway")
+  );
+  private readonly desktopDataDir = resolveManagedDataDir(
+    this.repoRoot,
+    process.env.DESKTOP_DATA_DIR,
+    path.join(this.repoRoot, "apps/desktop-host/.local-data/desktop")
+  );
   private readonly overviewUrl = `${this.localBaseUrl.replace(/\/+$/, "")}/api/desktop/overview`;
   private readonly healthUrl = `${this.localBaseUrl.replace(/\/+$/, "")}/healthz`;
   private readonly managed: ManagedProcess[] = [];

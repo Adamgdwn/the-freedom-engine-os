@@ -9,11 +9,11 @@ const mockStore = {
   refreshing: false,
   sendingMessage: false,
   realtimeConnected: true,
-  view: "start",
+  view: "start" as AppState["view"],
   baseUrl: "http://127.0.0.1:43111",
-  deviceName: "Adam's Phone",
+  deviceName: "Freedom Phone",
   pairingCode: "",
-  token: "device-token",
+  token: "device-token" as string | null,
   currentDeviceId: "device-1",
   hostStatus: {
     host: {
@@ -57,12 +57,15 @@ const mockStore = {
     },
     voiceProfile: {
       targetVoice: "marin",
+      displayName: "Marin",
       gender: "feminine",
       accent: null,
       tone: "warm",
       warmth: "high",
       pace: "steady",
-      notes: null
+      notes: null,
+      source: "default",
+      updatedAt: "2026-04-12T10:00:00.000Z"
     },
     availability: "ready",
     repairState: "healthy",
@@ -70,6 +73,7 @@ const mockStore = {
     activeSessionCount: 0,
     pairedDeviceCount: 1
   },
+  buildLaneSummary: null as AppState["buildLaneSummary"],
   devices: [],
   sessions: [] as AppState["sessions"],
   selectedSessionId: null as string | null,
@@ -132,6 +136,7 @@ const mockStore = {
   renameSession: jest.fn(async () => undefined),
   deleteSession: jest.fn(async () => undefined),
   sendMessage: jest.fn(async () => undefined),
+  enterStandaloneMode: jest.fn(async () => undefined),
   stopSession: jest.fn(async () => undefined),
   renameCurrentDevice: jest.fn(async () => undefined),
   enablePushNotifications: jest.fn(async () => undefined),
@@ -166,6 +171,7 @@ describe("refresh affordances", () => {
   beforeEach(() => {
     mockStore.refreshing = false;
     mockStore.view = "start";
+    mockStore.token = "device-token";
     mockStore.sendingMessage = false;
     mockStore.voiceAvailable = true;
     mockStore.realtimeConnected = true;
@@ -174,11 +180,36 @@ describe("refresh affordances", () => {
     mockStore.sessions = [];
     mockStore.selectedSessionId = null;
     mockStore.composer = "";
+    mockStore.buildLaneSummary = null;
     mockStore.hostStatus.auth.status = "logged_in";
     mockStore.refresh.mockClear();
     mockStore.bootstrap.mockClear();
     mockStore.selectSession.mockClear();
+    mockStore.toggleListening.mockClear();
+    mockStore.enterStandaloneMode.mockClear();
     mockStore.setField.mockClear();
+    mockStore.setView.mockClear();
+  });
+
+  test("pairing screen exposes standalone entry before any desktop link exists", async () => {
+    mockStore.token = null;
+    mockStore.sessions = [];
+    mockStore.view = "pairing";
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Use This Phone Standalone");
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "enter-standalone-button" }).props.onPress();
+    });
+
+    expect(mockStore.enterStandaloneMode).toHaveBeenCalledTimes(1);
   });
 
   test("AppShell lands on the new start surface after pairing", async () => {
@@ -196,6 +227,41 @@ describe("refresh affordances", () => {
     expect(labels).toContain("Text");
     expect(labels).toContain("Talk");
     expect(mockStore.bootstrap).toHaveBeenCalled();
+  });
+
+  test("start talk uses the voice action without forcing a chat navigation first", async () => {
+    mockStore.view = "start";
+    mockStore.voiceAvailable = true;
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "start-talk-action-button" }).props.onPress();
+    });
+
+    expect(mockStore.toggleListening).toHaveBeenCalledTimes(1);
+    expect(mockStore.setView).not.toHaveBeenCalled();
+    expect(mockStore.selectSession).not.toHaveBeenCalled();
+  });
+
+  test("start round talk button disables cleanly when voice is unavailable", async () => {
+    mockStore.view = "start";
+    mockStore.voiceAvailable = false;
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    const talkButton = tree!.root.findByProps({ testID: "start-talk-round-button" });
+    expect(talkButton.props.disabled).toBe(true);
+    expect(mockStore.toggleListening).not.toHaveBeenCalled();
+    expect(mockStore.setView).not.toHaveBeenCalled();
   });
 
   test("shared refresh scroll interaction keeps overscroll enabled", () => {
@@ -258,7 +324,7 @@ describe("refresh affordances", () => {
           auditCorrelationId: "audit-correlation-1"
         },
         threadId: null,
-        status: "ready",
+        status: "idle",
         activeTurnId: null,
         stopRequested: false,
         lastError: null,
@@ -310,7 +376,7 @@ describe("refresh affordances", () => {
           auditCorrelationId: "audit-correlation-1"
         },
         threadId: null,
-        status: "ready",
+        status: "idle",
         activeTurnId: null,
         stopRequested: false,
         lastError: null,
@@ -329,6 +395,7 @@ describe("refresh affordances", () => {
           role: "assistant",
           content: "Recent reply from Freedom.",
           status: "completed",
+          errorMessage: null,
           createdAt: "2026-04-12T10:00:00.000Z",
           updatedAt: "2026-04-12T10:00:00.000Z"
         }
@@ -375,13 +442,13 @@ describe("refresh affordances", () => {
           id: "lane-1",
           title: "Electrical contractor app",
           summary: "Capture the business case and kickoff path.",
-          approvalState: "pending_operator",
+          approvalState: "needs-approval",
           executionSurface: "pop_os",
           reportingPath: "morning_check_in",
           nextCheckpoint: "Review with Adam"
         }
       ]
-    };
+    } as AppState["buildLaneSummary"];
     mockStore.sessions = [
       {
         id: "session-1",
@@ -439,12 +506,15 @@ describe("refresh affordances", () => {
     mockStore.autoSendVoice = false;
     mockStore.hostStatus.voiceProfile = {
       targetVoice: "marin",
+      displayName: "Marin",
       gender: "feminine",
       accent: null,
       tone: "warm",
       warmth: "high",
       pace: "steady",
-      notes: null
+      notes: null,
+      source: "default",
+      updatedAt: "2026-04-12T10:00:00.000Z"
     };
 
     let tree: ReactTestRenderer.ReactTestRenderer;
@@ -465,7 +535,7 @@ describe("refresh affordances", () => {
     expect(labels).toContain("Live");
     expect(labels).toContain("Auto-read replies");
     expect(labels).toContain("Auto-send voice turns");
-    expect(labels).toContain("Phone fallback voice");
+    expect(labels).toContain("Legacy phone voice backup");
     expect(labels).toContain("Open Homebase Voice Settings");
     expect(labels).toContain("System adjustments");
     expect(labels).toContain("Open Homebase");

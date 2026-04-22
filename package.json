@@ -28,12 +28,13 @@
     "release:android-live-offline": "npm run build:android-release-offline && npm run publish:android-release",
     "dev:gateway": "npm run dev --workspace @freedom/gateway",
     "dev:desktop": "npm run dev --workspace @freedom/desktop-host",
+    "app:desktop": "npm run launch",
     "app:desktop:electron": "npm run dev --workspace @freedom/desktop",
     "dev:desktop-stack": "node scripts/dev-desktop-stack.mjs",
     "dev:mobile": "npm run start --workspace @freedom/mobile",
     "dev:wake-relay": "npm run dev --workspace @freedom/wake-relay",
-    "launch": "node scripts/launch-adam-connect.mjs",
-    "launch:no-open": "node scripts/launch-adam-connect.mjs --no-open",
+    "launch": "node scripts/launch-freedom-desktop.mjs",
+    "launch:no-open": "node scripts/launch-freedom-desktop.mjs --no-open",
     "smoke": "node scripts/smoke-test.mjs"
   },
   "dependencies": {

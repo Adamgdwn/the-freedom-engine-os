@@ -1,4 +1,20 @@
 type BufferSourceLike = ArrayBuffer | ArrayBufferView;
+type TextEncoderLike = {
+  readonly encoding: string;
+  encode(input?: string): Uint8Array;
+};
+type TextDecoderLike = {
+  readonly encoding: string;
+  readonly fatal: boolean;
+  readonly ignoreBOM: boolean;
+  decode(input?: BufferSourceLike): string;
+};
+type TextEncoderConstructor = new () => TextEncoderLike;
+type TextDecoderConstructor = new () => TextDecoderLike;
+type TextEncodingRuntime = typeof globalThis & {
+  TextDecoder?: TextDecoderConstructor;
+  TextEncoder?: TextEncoderConstructor;
+};
 
 function encodeUtf8(value: string): Uint8Array {
   const bytes: number[] = [];
@@ -88,11 +104,16 @@ function normalizeBufferSource(input?: BufferSourceLike): Uint8Array {
   return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
 }
 
+export function encodeTextUtf8(value: string): Uint8Array {
+  return encodeUtf8(String(value));
+}
+
+export function decodeTextUtf8(input?: BufferSourceLike): string {
+  return decodeUtf8(normalizeBufferSource(input));
+}
+
 function installTextEncodingPolyfill(): void {
-  const runtime = globalThis as typeof globalThis & {
-    TextDecoder?: typeof globalThis.TextDecoder;
-    TextEncoder?: typeof globalThis.TextEncoder;
-  };
+  const runtime = globalThis as TextEncodingRuntime;
 
   if (typeof runtime.TextEncoder === "undefined") {
     class TextEncoderPolyfill {
@@ -118,7 +139,7 @@ function installTextEncodingPolyfill(): void {
       readonly ignoreBOM = false;
 
       decode(input?: BufferSourceLike): string {
-        return decodeUtf8(normalizeBufferSource(input));
+        return decodeTextUtf8(input);
       }
     }
 

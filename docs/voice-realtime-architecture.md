@@ -2,7 +2,7 @@
 
 ## Current Assessment
 
-Before this upgrade, Adam Connect voice behaved like a one-shot transcript helper:
+Before this upgrade, the earlier mobile companion voice lane behaved like a one-shot transcript helper:
 
 1. the phone started on-device speech recognition
 2. the recognizer returned one final transcript
@@ -49,6 +49,9 @@ This keeps the current trust boundary the same: the phone still does not hold mo
 - The phone begins speaking once enough text is available instead of waiting for the full response.
 - TTS is cancelled immediately on confirmed barge-in.
 - Android spoken reply pacing is faster, and switching the selected voice now re-applies the preference without forcing a cold restart of the entire speech backend.
+- When realtime is unavailable, the mobile runtime now prefers Freedom-hosted speech for
+  spoken replies. The legacy phone-native TTS engine remains as a manual recovery path
+  instead of the normal fallback voice.
 
 ### UI and observability
 
@@ -63,6 +66,9 @@ This keeps the current trust boundary the same: the phone still does not hold mo
 - Realtime voice remains gated by mobile runtime config so the behavior can be tuned or disabled per build.
 - The upgrade does not add new remote execution capability; it changes how quickly voice turns enter the existing approved-root Codex flow.
 - Parallel task handling is intentionally conservative: tasks only run side-by-side when the scheduler believes they can do so safely, and replacement/stop interrupts still serialize aggressively.
+- Standalone hosted lookup and hosted speech still require an explicit
+  `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL`; otherwise the slim Android build stays in a
+  notes-only disconnected posture.
 
 ## Web Voice Note
 

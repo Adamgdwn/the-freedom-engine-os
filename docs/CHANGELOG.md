@@ -1,10 +1,24 @@
 # Changelog
 
+## 2026-04-22 (mobile Freedom voice precedence + connected posture hardening)
+
+- changed mobile spoken-reply routing so Freedom-hosted speech now wins over any stale
+  saved Android TTS choice instead of letting the old robotic phone voice silently
+  hijack normal playback
+- migrated legacy saved phone-native voice selections away on boot so new Freedom voice
+  presets stay consistent across paired realtime sessions and non-realtime spoken replies
+- fixed realtime reconnect handling on the phone so transient socket drops no longer flip
+  a paired session into a false disconnected `Notes only` posture before the desktop is
+  actually confirmed unreachable
+- rebuilt and reinstalled Android `0.2.74 (81)` and verified the live UI now shows
+  `Desktop linked` on the start surface and `Realtime voice` / `Listening` after tapping
+  `Talk`
+
 ## 2026-04-21 (desktop launcher drift + env precedence hardening)
 
 - fixed the Linux `Freedom Desktop` launcher installer path so the installed desktop entry
-  is rewritten against this repo and no longer reopens the retired
-  `codex_adam_connect` shell after a click or reboot
+  is rewritten against this repo and no longer reopens the retired absorbed shell after
+  a click or reboot
 - hardened the desktop launcher script so it no longer sources broad shell startup files
   before launch, which had been re-injecting unrelated exported secrets and stale
   developer state into the gateway and desktop-host processes
@@ -712,23 +726,23 @@
 - APK built from Freedom Engine OS: `npm run build:android-release` → 68 MB release APK at
   `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
 - gateway, desktop-host, and Electron shell now running from `the-freedom-engine-os`; old
-  `codex_adam_connect` desktop process retired; install page at
+  absorbed desktop process retired; install page at
   `pop-os.taildcb5c5.ts.net:43111/install` serves the new APK
 - `.env` seeded in `the-freedom-engine-os` with gateway, Supabase, and outbound-email config
 
 ## 2026-04-15
 
-- absorbed `codex_adam_connect` as native monorepo — `apps/mobile`, `apps/gateway`,
+- absorbed the legacy companion repo as native monorepo — `apps/mobile`, `apps/gateway`,
   `apps/desktop`, `apps/desktop-host`, `apps/wake-relay`, `packages/shared`,
   `packages/core`, `packages/provider-adapters` all live inside Freedom Engine OS
-- package scope renamed `@adam-connect/*` → `@freedom/*` throughout
+- legacy package scope renamed to `@freedom/*` throughout
 - npm workspaces configured at repo root; `tsconfig.workspace.json` and
   `tsconfig.base.json` added for composite node package builds
 - `.npmrc` added (`legacy-peer-deps=true`) for React Native Firebase peer dep
-- `scripts/` merged from both repos; `build-android-release.sh`, `launch-adam-connect.mjs`,
+- `scripts/` merged from both repos; `build-android-release.sh`, `launch-freedom-desktop.mjs`,
   `write-mobile-runtime-config.mjs`, and others are now runnable from Freedom root
 - `.env.example` extended with gateway, desktop-host, mobile, and wake-relay vars
-- docs from Adam Connect merged in: `outbound-email-setup`, `voice-realtime-architecture`,
+- docs from the absorbed mobile companion merged in: `outbound-email-setup`, `voice-realtime-architecture`,
   `wake-relay-deployment`, `SECURITY_ASSUMPTIONS`
 - added Phase 2 Freedom Core type contracts: capability layer, agent-build contracts,
   model routing types, and `CommunicationChannel`
@@ -772,5 +786,5 @@
 - initialized local git, created the private GitHub repository, and pushed the first main branch
 - provisioned Supabase project `basbwglynuyfxcqxfyur`, linked the repo, and applied the
   initial migration
-- documented Adam Connect reuse as the phone-access path for Freedom Engine
+- documented the native phone-access architecture for Freedom Engine
 - added a focus-guardrail policy and prompt so the system can flag off-roadmap drift

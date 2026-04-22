@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const SERVICE = "adam-connect.device-token";
+const SERVICE = "freedom.device-token";
 const FALLBACK_KEY = `${SERVICE}.fallback`;
 
 type KeychainModule = {

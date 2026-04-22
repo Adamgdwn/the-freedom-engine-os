@@ -2,6 +2,7 @@ import { AudioSession, AndroidAudioTypePresets } from "@livekit/react-native";
 import { Room, RoomEvent, type AudioCaptureOptions } from "livekit-client";
 import type { VoiceRuntimeState, VoiceSessionBinding } from "@freedom/shared";
 import { PermissionsAndroid, Platform } from "react-native";
+import { decodeTextUtf8, encodeTextUtf8 } from "../../runtime/installTextEncodingPolyfill";
 
 const MIC_CAPTURE_OPTIONS: AudioCaptureOptions = {
   echoCancellation: true,
@@ -176,7 +177,7 @@ export class RealtimeVoiceService {
     }
 
     await this.room.localParticipant.publishData(
-      new TextEncoder().encode(JSON.stringify({ type: "interrupt" })),
+      encodeTextUtf8(JSON.stringify({ type: "interrupt" })),
       { reliable: true }
     );
   }
@@ -203,7 +204,7 @@ export class RealtimeVoiceService {
   private handleDataMessage(payloadBuffer: Uint8Array): void {
     let payload: VoiceDataEnvelope;
     try {
-      payload = JSON.parse(new TextDecoder().decode(payloadBuffer)) as VoiceDataEnvelope;
+      payload = JSON.parse(decodeTextUtf8(payloadBuffer)) as VoiceDataEnvelope;
     } catch {
       return;
     }

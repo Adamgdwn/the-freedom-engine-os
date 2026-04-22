@@ -188,7 +188,7 @@ export class AssistantSpeechRuntime {
       this.currentChunk = null;
       this.alternateBackendAttempted = false;
       this.handlers?.onSpeakingChange(false);
-      this.handlers?.onSpeechError?.("Spoken replies could not start on this phone. Check Android text-to-speech output and media volume.");
+      this.handlers?.onSpeechError?.("Freedom spoken replies could not start on this phone. Check Freedom speech connectivity and media volume.");
       this.flushQueue();
     }, 2500);
   }

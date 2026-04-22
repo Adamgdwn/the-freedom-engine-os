@@ -7,6 +7,12 @@ describe("TtsService", () => {
     jest.clearAllMocks();
   });
 
+  test("does not auto-select the legacy phone voice without an explicit backup choice", () => {
+    const service = new TtsService();
+
+    expect(service.isAvailable()).toBe(false);
+  });
+
   test("lists installed voices in a stable, user-friendly order", async () => {
     const service = new TtsService();
 
@@ -43,7 +49,7 @@ describe("TtsService", () => {
     expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
   });
 
-  test("applies a new preferred voice during prepare without resetting the engine", async () => {
+  test("does not cold-restart the legacy backup engine while switching backup voices during prepare", async () => {
     const service = new TtsService();
 
     await service.prepare("en-us-standard");
@@ -53,11 +59,9 @@ describe("TtsService", () => {
 
     expect(ReactNativeTts.stop).not.toHaveBeenCalled();
     expect(ReactNativeTts.getInitStatus).not.toHaveBeenCalled();
-    expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
-    expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-GB");
   });
 
-  test("falls back to the automatic English voice when the selection is cleared", async () => {
+  test("disables the legacy backup again when the explicit selection is cleared", async () => {
     const service = new TtsService();
 
     await service.setPreferredVoice("en-gb-enhanced");
@@ -65,8 +69,8 @@ describe("TtsService", () => {
 
     await service.setPreferredVoice(null);
 
-    expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
-    expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-GB");
+    expect(service.isAvailable()).toBe(false);
+    await expect(service.describeAvailability()).resolves.toContain("Legacy phone TTS is no longer selected automatically");
   });
 
   test("switches back to the selected voice backend after a fallback", async () => {
@@ -82,5 +86,27 @@ describe("TtsService", () => {
 
     expect(ReactNativeTts.setDefaultVoice).toHaveBeenCalledWith("en-gb-enhanced");
     expect(ReactNativeTts.setDefaultLanguage).toHaveBeenCalledWith("en-GB");
+  });
+
+  test("prefers Freedom hosted speech over a previously selected legacy phone voice", async () => {
+    const service = new TtsService();
+
+    await service.setPreferredVoice("en-gb-enhanced");
+    jest.clearAllMocks();
+
+    service.setFreedomSpeechProviderResolver(() => ({
+      endpointUrl: "https://freedom.example.com",
+      voiceProfile: {
+        targetVoice: "marin"
+      },
+      label: "the standalone companion"
+    }));
+
+    await service.prepare();
+    const availability = await service.describeAvailability();
+
+    expect(availability).toContain("Freedom hosted speech is ready");
+    expect(ReactNativeTts.getInitStatus).not.toHaveBeenCalled();
+    expect(ReactNativeTts.setDefaultVoice).not.toHaveBeenCalled();
   });
 });

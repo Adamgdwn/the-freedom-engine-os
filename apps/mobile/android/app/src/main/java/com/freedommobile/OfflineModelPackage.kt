@@ -1,4 +1,4 @@
-package com.adamconnectmobile
+package com.freedommobile
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule

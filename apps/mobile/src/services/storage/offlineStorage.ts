@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { ChatMessage, ChatSession } from "@freedom/shared";
+import { sanitizeSessionsForFreedom } from "../mobile/sessionSanitizer";
 
 const OFFLINE_STATE_KEY = "freedom-mobile.offline-state";
 const MAX_CACHED_SESSIONS = 20;
@@ -28,7 +29,7 @@ function trimMessages(messages: ChatMessage[]): ChatMessage[] {
 }
 
 function trimState(state: StoredOfflineState): StoredOfflineState {
-  const sessions = [...state.sessions]
+  const sessions = sanitizeSessionsForFreedom([...state.sessions])
     .sort((left, right) => (right.lastActivityAt ?? right.updatedAt).localeCompare(left.lastActivityAt ?? left.updatedAt))
     .slice(0, MAX_CACHED_SESSIONS);
   const allowedSessionIds = new Set(sessions.map((session) => session.id));

@@ -1,4 +1,4 @@
-package com.adamconnectmobile
+package com.freedommobile
 
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext

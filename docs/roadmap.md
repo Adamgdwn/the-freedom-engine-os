@@ -16,13 +16,14 @@
   builder dependencies, safety notes, learning history
 - Model Router surface: tier policy, escalation request queue, provider preference order,
   operator provider-choice set, and resolved decision audit trail
-- Monorepo consolidation: `codex_adam_connect` absorbed into `the-freedom-engine-os`;
-  `@freedom/*` packages native to this repo; `monorepo-merge` merged to `main`
+- Monorepo consolidation: the legacy companion repo absorbed into
+  `the-freedom-engine-os`; `@freedom/*` packages native to this repo; `monorepo-merge`
+  merged to `main`
 - Android Gradle build fixed for npm workspaces; APK (68 MB) built and verified from
   `npm run build:android-release`
 - Full runtime cutover: gateway, desktop-host, and Electron shell now running from
   `the-freedom-engine-os`; install page at `pop-os.taildcb5c5.ts.net:43111/install`
-  serves the Freedom Engine OS APK; `codex_adam_connect` retired
+  serves the Freedom Engine OS APK; the retired companion repo is no longer used
 - Mobile voice stabilization + orchestration pass: STT pauses during TTS, Android
   restart timing tightened, hot voice switching added, Freedom Voice mobile surface
   refreshed, interrupt classification added, and gateway/desktop-host now schedule

@@ -149,6 +149,39 @@ export function getAssistantVoiceCatalogEntry(voiceId: string | null | undefined
   return assistantVoiceCatalog.find((voice) => voice.id === normalized) ?? assistantVoiceCatalog[0];
 }
 
+export function buildAssistantSpeechInstructions(profile: {
+  targetVoice: string;
+  accent?: string | null;
+  tone?: string | null;
+  warmth?: string | null;
+  pace?: string | null;
+  notes?: string | null;
+}): string {
+  const entry = getAssistantVoiceCatalogEntry(profile.targetVoice);
+  const accentHint = profile.accent?.trim() || entry.accentHints[0] || "general";
+  const toneHint = profile.tone?.trim() || entry.toneHints.join(", ");
+  const warmth = profile.warmth ?? entry.warmth;
+  const pace = profile.pace ?? entry.pace;
+  const notes = profile.notes?.trim();
+
+  const parts = [
+    "Sound natural, warm, and human. Avoid robotic delivery.",
+    accentHint === "international" ? "Keep the accent light and international." : `Accent hint: ${accentHint}.`,
+    toneHint ? `Tone: ${toneHint}.` : null,
+    warmth === "high" ? "Keep the delivery warm and textured." : warmth === "low" ? "Keep the delivery lean and dry." : "Keep the delivery balanced and calm.",
+    pace === "slower"
+      ? "Speak a little slower than average."
+      : pace === "brisk"
+        ? "Speak a little brisker than average."
+        : pace === "adaptive"
+          ? "Adapt the pace naturally to the sentence."
+          : "Keep a steady speaking pace.",
+    notes ? `Operator note: ${notes}.` : null
+  ];
+
+  return parts.filter((part): part is string => Boolean(part && part.trim())).join(" ");
+}
+
 export function summarizeAssistantVoiceProfile(profile: {
   targetVoice: string;
   gender?: string | null;

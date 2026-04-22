@@ -30,7 +30,7 @@ describe("AssistantSpeechRuntime", () => {
 
     expect(onSpeakingChange).toHaveBeenCalledWith(false);
     expect(onSpeechError).toHaveBeenCalledWith(
-      "Spoken replies could not start on this phone. Check Android text-to-speech output and media volume."
+      "Freedom spoken replies could not start on this phone. Check Freedom speech connectivity and media volume."
     );
   });
 
