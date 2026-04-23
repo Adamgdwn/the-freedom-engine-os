@@ -156,6 +156,125 @@ Acceptance:
 - Reconnecting stays quiet and temporary.
 - Stand-alone remains useful for capture, planning, brainstorming, and notes.
 
+## Immediate Next Steps
+
+Do these before any further cleanup, refactor, or terminology sweep.
+
+### 1. Resolve the connected-but-degraded voice mismatch
+
+Goal:
+
+- when the phone is connected to Freedom and premium desktop voice is actually available,
+  the UI must stop showing `Backup voice only`
+
+Check:
+
+1. Inspect the live `/host/status` payload from the running gateway during a real phone session.
+2. Record the exact values for:
+   - `connectionState`
+   - `voiceState`
+   - `voiceDetail`
+   - `deferredExecutionState`
+3. Confirm whether the wrong banner is coming from:
+   - gateway truth
+   - mobile effective-state derivation
+   - stale cached host status on the phone
+
+Files:
+
+- `apps/gateway/src/store.ts`
+- `apps/mobile/src/store/appStore.ts`
+- `apps/mobile/src/app/screens.tsx`
+- `packages/shared/src/mobileExperience.ts`
+
+Acceptance:
+
+- connected phone + premium voice available => no `Backup voice only` banner
+- connected phone + premium voice unavailable => banner is truthful and intentionally worded
+
+### 2. Tighten premium voice truth
+
+Goal:
+
+- the gateway must not infer premium voice readiness from env presence alone if that does
+  not match real runtime availability
+
+Check:
+
+1. Audit how premium voice readiness is derived now.
+2. Decide whether `voice_primary_ready` should require:
+   - env only
+   - managed worker running
+   - successful voice endpoint health check
+3. Prefer the smallest truthful check that matches operator-visible behavior.
+
+Files:
+
+- `apps/gateway/src/store.ts`
+- desktop-host voice worker supervision files if needed
+
+Acceptance:
+
+- `voice_primary_ready` means the operator can actually start the premium voice lane
+- `voice_fallback_only` only appears when the premium lane is truly unavailable
+
+### 3. Reduce secondary status noise on the main voice surface
+
+Goal:
+
+- connected-first should feel calm, with capability warnings only when they are truly actionable
+
+Check:
+
+1. Review every status chip and banner currently visible on `Start` and `Talk`.
+2. Remove or soften any chip that repeats non-actionable state.
+3. Keep the main surface voice-first, not diagnostics-first.
+
+Files:
+
+- `apps/mobile/src/app/screens.tsx`
+- `apps/mobile/src/app/AppShell.tsx`
+
+Acceptance:
+
+- normal connected operation shows a calm main surface
+- reconnecting stays visible but quiet
+- only real degradation or operator action requirements stay prominent
+
+### 4. Run one complete truth-table pass
+
+Goal:
+
+- verify the UI matches the spec across the real combinations that matter
+
+Test matrix:
+
+1. `desktop_linked` + `voice_primary_ready`
+2. `desktop_linked` + `voice_fallback_only`
+3. `reconnecting` + `voice_primary_recovering`
+4. `stand_alone` + `voice_fallback_only`
+
+For each case, capture:
+
+- main screen
+- settings sheet
+- visible chips/banners
+- expected operator interpretation
+
+Acceptance:
+
+- no case presents connected behavior like a disconnect
+- no case presents stand-alone like a healthy desktop-backed session
+
+### 5. Only then continue the broader recovery plan
+
+After the above is clean:
+
+1. finish remaining compatibility cleanup in gateway/mobile
+2. continue notification simplification
+3. do the full phone + desktop spoken acceptance pass
+4. resume broader cleanup only after voice-first behavior is stable
+
 ## Cleanup After Alignment
 
 Only after the above is stable:
