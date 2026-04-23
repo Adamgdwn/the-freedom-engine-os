@@ -5,8 +5,12 @@ import { fileURLToPath } from "node:url";
 import QRCode from "qrcode";
 import type { ChatMessage, ChatSession, DesktopOverviewResponse, GatewayOverview, RecentSessionActivity } from "@freedom/shared";
 import {
+  FREEDOM_PHONE_PRODUCT_NAME,
   FREEDOM_PRIMARY_SESSION_TITLE,
-  FREEDOM_PRODUCT_NAME
+  FREEDOM_PRODUCT_NAME,
+  humanizeDeferredExecutionState,
+  humanizeMobileConnectionState,
+  humanizeMobileVoiceState
 } from "@freedom/shared";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -120,9 +124,9 @@ export function renderDesktopPage(model: InstallPageModel): string {
     ? primaryActivity.latestAssistantMessage?.content?.trim() || primaryActivity.session.lastPreview || primaryActivity.session.title
     : "No active Freedom conversation yet. Pair the phone or open the desktop shell to begin.";
   const partnerPosture =
-    hostStatus?.availability === "ready"
-      ? "Freedom is online, paired, and ready to help run the day from desktop or phone."
-      : "Freedom needs attention before it can act like a dependable partner across both surfaces.";
+    hostStatus?.connectionState === "desktop_linked"
+      ? `${FREEDOM_PHONE_PRODUCT_NAME} is linked to the desktop and ready to work across both surfaces.`
+      : `${FREEDOM_PHONE_PRODUCT_NAME} is still recovering or needs attention before the live desktop path is fully restored.`;
 
   return renderPage({
     title: "Freedom Desktop",
@@ -181,9 +185,9 @@ export function renderDesktopPage(model: InstallPageModel): string {
                 <details class="accordion-card" open>
                   <summary>Execution Signals</summary>
                   <div class="accordion-body stack gap-sm">
-                    ${renderWorkbenchSignalCard("Run state", humanizeRunState(hostStatus?.runState ?? "ready"), `${humanizeRepairState(hostStatus?.repairState ?? "healthy")} · ${humanizeAvailability(hostStatus?.availability ?? "needs_attention")}`)}
+                    ${renderWorkbenchSignalCard("Connection", humanizeMobileConnectionState(hostStatus?.connectionState ?? "reconnecting"), `${humanizeMobileVoiceState(hostStatus?.voiceState ?? "voice_unavailable")} · ${humanizeDeferredExecutionState(hostStatus?.deferredExecutionState ?? "failed_needs_review")}`)}
                     ${renderWorkbenchSignalCard("Decision queue", `${attentionEvents.length} item${attentionEvents.length === 1 ? "" : "s"}`, attentionEvents.length ? "Approvals, repairs, or failures are waiting for review." : "No urgent approvals or failures are waiting right now.")}
-                    ${renderWorkbenchSignalCard("Phone sync", `${recentDevices.length} trusted phone${recentDevices.length === 1 ? "" : "s"}`, recentDevices.length ? "Companion devices are attached to this desktop host." : "No phone is paired yet.")}
+                    ${renderWorkbenchSignalCard("Phone sync", `${recentDevices.length} trusted phone${recentDevices.length === 1 ? "" : "s"}`, recentDevices.length ? `${FREEDOM_PHONE_PRODUCT_NAME} devices are attached to this desktop host.` : "No phone is paired yet.")}
                   </div>
                 </details>
                 <details class="accordion-card">
@@ -210,12 +214,12 @@ export function renderDesktopPage(model: InstallPageModel): string {
                     <div class="glow-card">
                       <span class="glow-label">Pairing</span>
                       <strong>${escapeHtml(pairingCode)}</strong>
-                      <p>Current mobile companion code.</p>
+                      <p>Current ${escapeHtml(FREEDOM_PHONE_PRODUCT_NAME)} pairing code.</p>
                     </div>
                     <div class="glow-card">
-                      <span class="glow-label">Companion URL</span>
+                      <span class="glow-label">Phone URL</span>
                       <strong>${escapeHtml(truncatePreview(connectUrl, 28))}</strong>
-                      <p>Shared mobile connection path.</p>
+                      <p>Shared ${escapeHtml(FREEDOM_PHONE_PRODUCT_NAME)} connection path.</p>
                     </div>
                     <div class="glow-card">
                       <span class="glow-label">Approvals</span>
@@ -436,9 +440,9 @@ export function renderDesktopPage(model: InstallPageModel): string {
                   <details class="accordion-card" open>
                     <summary>System metrics</summary>
                     <div class="accordion-body stack gap-sm">
-                      ${renderWorkbenchSignalCard("Run state", humanizeRunState(hostStatus?.runState ?? "ready"), `${humanizeRepairState(hostStatus?.repairState ?? "healthy")} · ${humanizeAvailability(hostStatus?.availability ?? "needs_attention")}`)}
-                      ${renderWorkbenchSignalCard("Pairing", pairingCode, "Current mobile companion code for reconnect and onboarding.")}
-                      ${renderWorkbenchSignalCard("Companion", hostStatus?.pairedDeviceCount === 1 ? "1 phone" : `${hostStatus?.pairedDeviceCount ?? 0} phones`, "Connected mobile companion devices.")}
+                      ${renderWorkbenchSignalCard("Connection", humanizeMobileConnectionState(hostStatus?.connectionState ?? "reconnecting"), `${humanizeMobileVoiceState(hostStatus?.voiceState ?? "voice_unavailable")} · ${humanizeDeferredExecutionState(hostStatus?.deferredExecutionState ?? "failed_needs_review")}`)}
+                      ${renderWorkbenchSignalCard("Pairing", pairingCode, `Current ${FREEDOM_PHONE_PRODUCT_NAME} pairing code for reconnect and onboarding.`)}
+                      ${renderWorkbenchSignalCard(FREEDOM_PHONE_PRODUCT_NAME, hostStatus?.pairedDeviceCount === 1 ? "1 phone" : `${hostStatus?.pairedDeviceCount ?? 0} phones`, `Connected ${FREEDOM_PHONE_PRODUCT_NAME} devices.`)}
                     </div>
                   </details>
                 `
@@ -665,7 +669,7 @@ export function renderInstallPage(model: InstallPageModel): string {
               <code>${escapeHtml(connectUrl)}</code>
               <button class="icon-button" type="button" data-copy="${escapeAttribute(connectUrl)}">Copy</button>
             </div>
-            <p class="muted">Paste this exact URL into the Freedom companion app after installation. It matches the page you opened unless you are viewing this only on the desktop itself.</p>
+            <p class="muted">Paste this exact URL into the ${escapeHtml(FREEDOM_PHONE_PRODUCT_NAME)} app after installation. It matches the page you opened unless you are viewing this only on the desktop itself.</p>
             ${
               recoveryUrl
                 ? `

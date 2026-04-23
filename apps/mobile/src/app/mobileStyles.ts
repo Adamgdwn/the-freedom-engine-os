@@ -108,6 +108,12 @@ export const styles = StyleSheet.create({
     marginBottom: 12
   },
   mobileSheetHeader: { gap: 4, marginBottom: 14 },
+  mobileSheetEyebrowRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12
+  },
   mobileSheetEyebrow: {
     color: "#0f766e",
     textTransform: "uppercase",
@@ -116,6 +122,15 @@ export const styles = StyleSheet.create({
     fontWeight: "800"
   },
   mobileSheetTitle: { color: "#172225", fontSize: 24, lineHeight: 28, fontWeight: "800" },
+  mobileSheetConnectionMark: {
+    fontSize: 12,
+    lineHeight: 12,
+    fontWeight: "800",
+    minWidth: 12,
+    textAlign: "center"
+  },
+  mobileSheetConnectionMarkConnected: { color: "#16a34a" },
+  mobileSheetConnectionMarkDisconnected: { color: "#172225" },
   mobileSheetSubtitle: { color: "#556367", fontSize: 13, lineHeight: 18 },
   mobileSheetScroll: { gap: 16, paddingBottom: 12 },
   mobileSheetSection: { gap: 10 },

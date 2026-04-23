@@ -55,6 +55,12 @@ const baseStore = {
       replyToAddress: null,
       recipientCount: 0
     },
+    connectionState: "connected",
+    connectionDetail: "Desktop linked and ready.",
+    voiceState: "voice_primary_ready",
+    voiceDetail: "Premium voice is ready.",
+    deferredExecutionState: "ready_to_execute",
+    deferredExecutionDetail: "Desktop can execute governed work.",
     availability: "ready",
     repairState: "healthy",
     runState: "running",
@@ -357,9 +363,9 @@ describe("ChatScreen busy send state", () => {
 
     const labels = tree.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
 
-    expect(labels).toContain("Desktop linked");
-    expect(labels).toContain("Realtime voice");
-    expect(labels).not.toContain("Notes only");
+    expect(labels).toContain("Premium voice ready");
+    expect(labels).not.toContain("Saved for later");
+    expect(labels).not.toContain("Connected to desktop");
   });
 });
 

@@ -113,24 +113,27 @@ or the boundary between modeled and fully operational capability.
 
 ### Native Runtime Surfaces
 
-- Desktop shell, desktop host, gateway, wake relay, and mobile companion all live in this monorepo.
+- Desktop shell, desktop host, gateway, wake relay, and Freedom Anywhere all live in this monorepo.
 - Phone and desktop pair into one Freedom-owned session identity through the Connect runtime.
 - Governed session routing, pairing, and activity surfaces are visible in the control plane.
 - Desktop-host and gateway runtime stores now bootstrap missing local state from committed,
   sanitized example files while continuing to keep live machine-specific state local-only.
 - Gateway install surfaces now expose build-specific Android APK identifiers and filenames,
   while preserving `latest.apk` as a compatibility alias.
-- The Android companion now has a safe disconnected posture:
+- Freedom Anywhere now has a safe offline-first posture:
   cached sessions/messages survive desktop disconnects, the phone can create and keep
-  phone-only standalone threads, hosted disconnected chat/lookup now activates only when
+  phone-only threads, hosted offline chat/lookup now activates only when
   `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured, later sync imports
   those notes as non-executing history, and optional builds can still bundle the old
   on-device model only when explicitly requested.
-- The current live slim build still compiles standalone as `notes_only` because no
+- The current live slim build still compiles the offline-safe fallback as `notes_only` because no
   explicit `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is configured in the active repo env.
-- Android companion shell now emphasizes:
+- Freedom Anywhere now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.
+- The settings sheet now uses one compact connection mark beside `FREEDOM ANYWHERE SETTINGS`:
+  reconnecting still reads as connected to Freedom, and only true `stand_alone`
+  shows the disconnected mark.
 - The conversation-originated build lane now lives in that utility sheet rather than on
   the main start surface, so Freedom can surface governed build promotion when needed
   without competing with the core talk-first interface.
@@ -143,11 +146,11 @@ or the boundary between modeled and fully operational capability.
   `Mute`, a small `Text` entry button, a dedicated raised typed-turn composer,
   and one lower `Recent thread` card as the transcript open/close surface, with the
   transcript body scrolling inside a bounded panel so the collapse action stays visible.
-- The mobile companion now supports two distinct thread postures:
+- Freedom Anywhere now supports two distinct thread postures:
   one continuity-first default voice thread for ongoing relationship memory and
   day-to-day work, plus explicit new project kickoff through the `Build` view's
   `Launch build chat` flow for separate governed build sessions.
-- The mobile utility menu now includes an `About this build` section that shows the
+- The Freedom Anywhere utility menu now includes an `About this build` section that shows the
   installed app version, build code, and current voice runtime directly on-device for
   release verification.
 - The mobile settings sheet now shows Freedom's actual live realtime voice presets,
@@ -235,7 +238,7 @@ or the boundary between modeled and fully operational capability.
 - Freedom can now route substantial conversation-born work into a governed Pop!_OS
   build lane with objective, business case, approval state, autonomy envelope,
   reporting path, and next checkpoint captured in live memory.
-- That live build lane is now surfaced in the mobile companion and in the desktop
+- That live build lane is now surfaced in Freedom Anywhere and in the desktop
   agent-control page rather than existing only as roadmap documentation.
 - Approval still gates actual code execution, release, external spend, and connector
   expansion; this is a real runtime routing loop, not approval-free self-modification.

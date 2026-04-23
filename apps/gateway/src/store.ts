@@ -14,6 +14,7 @@ import type {
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
   CreateVoiceRuntimeSessionRequest,
+  DeferredExecutionState,
   GatewayOverview,
   HostAssistantDeltaRequest,
   HostAvailability,
@@ -26,6 +27,8 @@ import type {
   HostStatus,
   HostWorkItem,
   InterruptType,
+  MobileConnectionState,
+  MobileVoiceState,
   NotificationEvent,
   NotificationPrefs,
   OfflineImportRequest,
@@ -170,6 +173,8 @@ const INTERRUPT_RECLAIM_MS = 5_000;
 const STALE_STOP_RECOVERY_MS = 20_000;
 const STALE_QUEUE_CLAIM_MS = 15_000;
 const DUPLICATE_VOICE_MESSAGE_WINDOW_MS = 3_000;
+const HOST_ONLINE_WINDOW_MS = 15_000;
+const HOST_RECONNECTING_WINDOW_MS = 60_000;
 const MAX_PARALLEL_SESSION_TASKS = 2;
 const DEFERRED_WRITE_MS = 200;
 const MAX_WORK_WAIT_MS = 20_000;
@@ -1918,9 +1923,12 @@ export class GatewayStore {
       throw new Error("Host not found.");
     }
 
-    const online = isRecent(host.lastSeenAt, 15_000);
+    const online = isRecent(host.lastSeenAt, HOST_ONLINE_WINDOW_MS);
     host.isOnline = online;
     const recipientCount = state.outboundRecipients.filter((item) => item.hostId === hostId).length;
+    const connectionState = deriveConnectionState(host);
+    const voiceState = deriveVoiceState(host, connectionState);
+    const deferredExecutionState = deriveDeferredExecutionState(host, connectionState);
 
     return {
       host: toPublicHost(host),
@@ -1929,6 +1937,12 @@ export class GatewayStore {
       wakeControl: buildWakeControl(process.env, host),
       voiceProfile: resolveHostVoiceProfile(host),
       outboundEmail: resolveOutboundEmailStatus(process.env, recipientCount),
+      connectionState,
+      connectionDetail: describeConnectionState(host, connectionState),
+      voiceState,
+      voiceDetail: describeVoiceState(host, connectionState, voiceState),
+      deferredExecutionState,
+      deferredExecutionDetail: describeDeferredExecutionState(deferredExecutionState),
       availability: deriveHostAvailability(host),
       repairState: deriveRepairState(host),
       runState: deriveRunState(state.sessions, hostId),
@@ -2658,7 +2672,7 @@ function notificationTitleForEvent(event: NotificationEvent): string {
     case "approval_needed":
       return "Freedom approval needed";
     case "repair_needed":
-      return "Freedom companion repair needed";
+      return "Freedom Anywhere repair needed";
     case "run_failed":
       return "Freedom run failed";
     default:
@@ -2666,13 +2680,118 @@ function notificationTitleForEvent(event: NotificationEvent): string {
   }
 }
 
-function deriveHostAvailability(host: HostRecord): HostAvailability {
+function hasPrimaryVoiceRuntimeConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return Boolean(env.LIVEKIT_URL?.trim() && env.LIVEKIT_API_KEY?.trim() && env.LIVEKIT_API_SECRET?.trim());
+}
+
+function deriveConnectionState(host: HostRecord): MobileConnectionState {
+  if (isRecent(host.lastSeenAt, HOST_ONLINE_WINDOW_MS)) {
+    return "desktop_linked";
+  }
+
+  if (isRecent(host.lastSeenAt, HOST_RECONNECTING_WINDOW_MS)) {
+    return "reconnecting";
+  }
+
+  return "stand_alone";
+}
+
+function describeConnectionState(host: HostRecord, state: MobileConnectionState): string {
+  switch (state) {
+    case "desktop_linked":
+      if (host.auth.status !== "logged_in") {
+        return "Connected to desktop. Freedom can stay linked while the desktop finishes restoring the preferred Freedom login path.";
+      }
+      return "Connected to desktop and ready for live sync, governed execution, and premium voice.";
+    case "reconnecting":
+      return "The desktop heartbeat just went stale. Freedom Anywhere is actively trying to restore the live desktop link.";
+    case "stand_alone":
+      return "The desktop is currently unavailable. Freedom Anywhere should keep working on this phone and save everything for later sync.";
+    default:
+      return "Connected to desktop and ready for live sync, governed execution, and premium voice.";
+  }
+}
+
+function deriveVoiceState(host: HostRecord, connectionState: MobileConnectionState): MobileVoiceState {
+  const primaryConfigured = hasPrimaryVoiceRuntimeConfigured();
+
+  if (connectionState === "desktop_linked") {
+    return primaryConfigured ? "voice_primary_ready" : "voice_fallback_only";
+  }
+  if (connectionState === "reconnecting" && primaryConfigured) {
+    return "voice_primary_recovering";
+  }
+  if (connectionState === "reconnecting") {
+    return "voice_fallback_only";
+  }
+  if (connectionState === "stand_alone") {
+    return "voice_fallback_only";
+  }
+  return primaryConfigured ? "voice_primary_recovering" : "voice_unavailable";
+}
+
+function describeVoiceState(
+  host: HostRecord,
+  connectionState: MobileConnectionState,
+  voiceState: MobileVoiceState
+): string {
+  if (voiceState === "voice_primary_ready") {
+    return "Premium realtime voice is configured on this desktop and should remain the default lane.";
+  }
+  if (voiceState === "voice_primary_recovering") {
+    return "Premium realtime voice is configured, but the desktop link is still recovering.";
+  }
+  if (voiceState === "voice_unavailable") {
+    return "No supported Freedom voice lane is ready right now.";
+  }
+  if (!hasPrimaryVoiceRuntimeConfigured()) {
+    return "Premium realtime voice is not configured on this desktop yet, so the phone should fall back deliberately instead of pretending both lanes are equal.";
+  }
+  if (connectionState === "reconnecting") {
+    return "Premium realtime voice is configured, but Freedom is still restoring the live desktop link.";
+  }
+  return "Premium realtime voice cannot reach the desktop right now. Freedom Anywhere should keep capturing work and save it for later.";
+}
+
+function deriveDeferredExecutionState(host: HostRecord, connectionState: MobileConnectionState): DeferredExecutionState {
   const routerConfig = getModelRouterConfig(process.env);
 
-  if (!isRecent(host.lastSeenAt, 15_000)) {
+  if (connectionState === "stand_alone" || connectionState === "reconnecting") {
+    return "awaiting_desktop";
+  }
+
+  if (host.auth.status !== "logged_in" && !hasRunnableLocalDayToDay(routerConfig)) {
+    return "failed_needs_review";
+  }
+
+  if (!host.tailscale.connected || host.tailscale.transportSecurity === "insecure") {
+    return "failed_needs_review";
+  }
+
+  return "ready_to_execute";
+}
+
+function describeDeferredExecutionState(state: DeferredExecutionState): string {
+  switch (state) {
+    case "ready_to_execute":
+      return "The desktop path is live again, so the next governed action can run when requested.";
+    case "awaiting_desktop":
+      return "Preserve intent now and wait for the desktop to return before execution resumes.";
+    default:
+      return "Deferred work needs review before Freedom should continue.";
+  }
+}
+
+function deriveHostAvailability(host: HostRecord): HostAvailability {
+  const connectionState = deriveConnectionState(host);
+
+  if (connectionState === "reconnecting") {
+    return "reconnecting";
+  }
+  if (connectionState === "stand_alone") {
     return "offline";
   }
-  if (host.auth.status !== "logged_in" && !hasRunnableLocalDayToDay(routerConfig)) {
+  if (host.auth.status !== "logged_in") {
     return "codex_unavailable";
   }
   if (!host.tailscale.connected) {
@@ -2681,11 +2800,21 @@ function deriveHostAvailability(host: HostRecord): HostAvailability {
   if (host.tailscale.transportSecurity === "insecure") {
     return "needs_attention";
   }
-  return "ready";
+  if (connectionState === "desktop_linked") {
+    return "ready";
+  }
+  return "needs_attention";
 }
 
 function deriveRepairState(host: HostRecord): RepairState {
-  return isRecent(host.lastSeenAt, 15_000) ? "healthy" : "reconnecting";
+  const connectionState = deriveConnectionState(host);
+  if (connectionState === "desktop_linked") {
+    return "healthy";
+  }
+  if (connectionState === "reconnecting") {
+    return "reconnecting";
+  }
+  return "repair_required";
 }
 
 function buildWakeControl(env: NodeJS.ProcessEnv, host: HostRecord): WakeControl {

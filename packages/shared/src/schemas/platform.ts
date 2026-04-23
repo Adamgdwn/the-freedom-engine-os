@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { FREEDOM_PRODUCT_NAME } from "../freedom.js";
 import {
+  deferredExecutionStates,
+  mobileConnectionStates,
+  mobileVoiceStates
+} from "../mobileExperience.js";
+import {
   buildLaneApprovalStates,
   buildLaneRequestedFromValues
 } from "../conversationBuildLane.js";
@@ -30,6 +35,9 @@ export const hostAvailabilitySchema = z.enum([
   "needs_attention"
 ]);
 export const repairStateSchema = z.enum(["healthy", "reconnecting", "repair_required", "repaired"]);
+export const mobileConnectionStateSchema = z.enum(mobileConnectionStates);
+export const mobileVoiceStateSchema = z.enum(mobileVoiceStates);
+export const deferredExecutionStateSchema = z.enum(deferredExecutionStates);
 export const runStateSchema = z.enum(["ready", "listening", "review", "sending", "running", "stopping", "speaking", "completed", "failed"]);
 export const sessionKindSchema = z.enum(["operator", "project", "admin", "build", "notes"]);
 export const sessionOriginSurfaceSchema = z.enum(["desktop_shell", "mobile_companion"]);
@@ -267,6 +275,12 @@ export const hostStatusSchema = z.object({
   wakeControl: wakeControlSchema,
   voiceProfile: assistantVoiceProfileSchema.optional(),
   outboundEmail: outboundEmailStatusSchema,
+  connectionState: mobileConnectionStateSchema,
+  connectionDetail: z.string().nullable(),
+  voiceState: mobileVoiceStateSchema,
+  voiceDetail: z.string().nullable(),
+  deferredExecutionState: deferredExecutionStateSchema,
+  deferredExecutionDetail: z.string().nullable(),
   availability: hostAvailabilitySchema,
   repairState: repairStateSchema,
   runState: runStateSchema,
@@ -551,6 +565,9 @@ export type TaskOrigin = z.infer<typeof taskOriginSchema>;
 export type InterruptType = z.infer<typeof interruptTypeSchema>;
 export type HostAvailability = z.infer<typeof hostAvailabilitySchema>;
 export type RepairState = z.infer<typeof repairStateSchema>;
+export type MobileConnectionState = z.infer<typeof mobileConnectionStateSchema>;
+export type MobileVoiceState = z.infer<typeof mobileVoiceStateSchema>;
+export type DeferredExecutionState = z.infer<typeof deferredExecutionStateSchema>;
 export type RunState = z.infer<typeof runStateSchema>;
 export type SessionKind = z.infer<typeof sessionKindSchema>;
 export type ResponseStyle = z.infer<typeof responseStyleSchema>;

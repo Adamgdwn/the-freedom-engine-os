@@ -1,5 +1,7 @@
 # Freedom Engine OS — Cleanup & Integration Plan v1
 
+> Recovery status: this plan is now a follow-on cleanup track. Finish the Freedom Anywhere recovery in [docs/adr/0003-freedom-anywhere-recovery.md](./adr/0003-freedom-anywhere-recovery.md) before resuming Phase 0 here as the primary sequence.
+
 Coding-team handoff. Work top-to-bottom. Each phase is self-contained; do not skip ahead. Open one PR per phase (or per numbered step in Phase 4). Update docs in the same PR as the change.
 
 ## Read this before starting any phase
@@ -8,7 +10,7 @@ Coding-team handoff. Work top-to-bottom. Each phase is self-contained; do not sk
 - **Think about impact before you type.** For every change ask: does this break the voice loop? does this break pairing/session identity? does this change an API the mobile app or dispatcher relies on? If yes, stop and flag it in the PR before continuing.
 - **Corrections you find as you go are expected and wanted.** If a step in this plan is wrong, outdated, or has a better alternative: stop, write a short note in the PR (what you found, what you propose, why), and wait for review. Do not silently deviate; do not push through a known-wrong step.
 - **Voice-first is non-negotiable.** The phone app and desktop voice session are the product's primary surface. Every change must preserve: voice session start latency, wake-word/pairing flow, the self-mute-during-TTS fix in [src/components/voice-interface/voice-context.tsx](../src/components/voice-interface/voice-context.tsx), the mobile offline ideation posture, and the voice agent's ability to call tools mid-turn. If a change risks any of these, stop and flag it.
-- **Test on voice before marking a phase done.** A green `npm run build` is necessary but not sufficient. Start a voice session, confirm Freedom still listens, speaks, and can call at least one tool end-to-end. Phase 1/1b/2 especially: confirm on both desktop voice and the mobile companion.
+- **Test on voice before marking a phase done.** A green `npm run build` is necessary but not sufficient. Start a voice session, confirm Freedom still listens, speaks, and can call at least one tool end-to-end. Phase 1/1b/2 especially: confirm on both desktop voice and Freedom Anywhere on the phone.
 
 ## Context in one paragraph
 
@@ -77,7 +79,7 @@ Acceptance:
 - Voice session start logs show N dispatched tools registered.
 - Asking Freedom "what's the top venture" calls the new manifest tool and returns live control-plane data, not a hardcoded string.
 - `grep -r "TODO" agents/freedom_agent/tools.py` returns nothing in removed areas.
-- **Voice-first check:** on both desktop and the mobile companion, a voice session starts in the same time it did before (no visible latency regression), Freedom responds to speech, and interrupts still work. If any of these regress, the PR is not ready.
+- **Voice-first check:** on both desktop and Freedom Anywhere on the phone, a voice session starts in the same time it did before (no visible latency regression), Freedom responds to speech, and interrupts still work. If any of these regress, the PR is not ready.
 
 ## Phase 2 — scaffold_new_project closes the loop (1 PR)
 

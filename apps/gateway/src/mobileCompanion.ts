@@ -15,12 +15,12 @@ export type MobileCompanionSummaryRequest = {
 };
 
 const MOBILE_COMPANION_REPLY_PROMPT =
-  "You are Freedom's mobile companion when the desktop link is unavailable. " +
-  "Help with voice follow-up, note capture, summaries, drafting, and practical answers. " +
+  "You are Freedom supporting Freedom Anywhere while the desktop link is unavailable. " +
+  "Help with voice follow-up, saved work, summaries, drafting, and practical answers. " +
   "Do not claim live desktop access, tool execution, or canonical sync. Keep replies concise and practical.";
 
 const MOBILE_COMPANION_SUMMARY_PROMPT =
-  "Summarize these disconnected mobile notes for later desktop review. Keep the summary factual, concise, and focused on next steps.";
+  "Summarize this Freedom Anywhere offline work for later desktop review. Keep the summary factual, concise, and focused on next steps.";
 
 const MOBILE_COMPANION_UPSTREAM_TIMEOUT_MS = 20_000;
 
@@ -62,7 +62,7 @@ export function isSummaryRequest(body: unknown): body is MobileCompanionSummaryR
 export async function requestMobileCompanionReply(input: MobileCompanionReplyRequest): Promise<{ text: string; usedWebLookup: boolean }> {
   const messages = normalizeMessages(input.messages);
   if (!messages.length) {
-    throw new Error("No mobile companion messages were provided.");
+    throw new Error("No offline support messages were provided.");
   }
 
   const latestUserPrompt = [...messages].reverse().find((message) => message.role === "user")?.content.trim() ?? "";
@@ -123,7 +123,7 @@ function normalizeMessages(messages: MobileCompanionMessage[]): MobileCompanionM
 async function requestOpenAIChat(messages: MobileCompanionMessage[], temperature: number): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured for the mobile companion.");
+    throw new Error("OPENAI_API_KEY is not configured for the offline support path.");
   }
 
   const payload = await requestJson("https://api.openai.com/v1/chat/completions", {
@@ -141,7 +141,7 @@ async function requestOpenAIChat(messages: MobileCompanionMessage[], temperature
 
   const text = payload?.choices?.[0]?.message?.content?.trim();
   if (!text) {
-    throw new Error("The mobile companion returned an empty reply.");
+    throw new Error("The offline support path returned an empty reply.");
   }
   return text;
 }

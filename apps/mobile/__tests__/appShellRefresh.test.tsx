@@ -4,11 +4,42 @@ import { AppShell } from "../src/app/AppShell";
 import { refreshScrollInteractionProps } from "../src/app/screens";
 import type { AppState } from "../src/store/appStore";
 
+function mockConnectionState(state: typeof mockStore) {
+  if (!state.token) {
+    return "offline_safe" as const;
+  }
+  if (!state.realtimeConnected && state.hostStatus?.connectionState === "connected") {
+    return "reconnecting" as const;
+  }
+  return state.hostStatus?.connectionState ?? (state.offlineMode ? "offline_safe" : "reconnecting");
+}
+
+function mockVoiceState(state: typeof mockStore) {
+  if (!state.voiceAvailable) {
+    return "voice_unavailable" as const;
+  }
+  if (state.voiceSessionActive) {
+    return state.voiceRuntimeMode === "realtime_primary" ? "voice_primary_live" : "voice_fallback_only";
+  }
+  if (!state.token) {
+    return "voice_fallback_only" as const;
+  }
+  return state.hostStatus?.voiceState ?? "voice_primary_ready";
+}
+
+function mockDeferredExecutionState(state: typeof mockStore) {
+  if (!state.token) {
+    return "awaiting_desktop" as const;
+  }
+  return state.hostStatus?.deferredExecutionState ?? "ready_to_execute";
+}
+
 const mockStore = {
   booting: false,
   refreshing: false,
   sendingMessage: false,
   realtimeConnected: true,
+  offlineMode: false,
   view: "start" as AppState["view"],
   baseUrl: "http://127.0.0.1:43111",
   deviceName: "Freedom Phone",
@@ -55,6 +86,12 @@ const mockStore = {
       replyToAddress: null,
       recipientCount: 0
     },
+    connectionState: "connected",
+    connectionDetail: "Desktop linked and ready.",
+    voiceState: "voice_primary_ready",
+    voiceDetail: "Premium voice is ready.",
+    deferredExecutionState: "ready_to_execute",
+    deferredExecutionDetail: "Desktop can execute governed work.",
     voiceProfile: {
       targetVoice: "marin",
       displayName: "Marin",
@@ -164,7 +201,10 @@ const mockStore = {
 };
 
 jest.mock("../src/store/appStore", () => ({
-  useAppStore: jest.fn((selector?: (state: typeof mockStore) => unknown) => (selector ? selector(mockStore) : mockStore))
+  useAppStore: jest.fn((selector?: (state: typeof mockStore) => unknown) => (selector ? selector(mockStore) : mockStore)),
+  getEffectiveConnectionState: jest.fn((state: typeof mockStore) => mockConnectionState(state)),
+  getEffectiveVoiceState: jest.fn((state: typeof mockStore) => mockVoiceState(state)),
+  getEffectiveDeferredExecutionState: jest.fn((state: typeof mockStore) => mockDeferredExecutionState(state))
 }));
 
 describe("refresh affordances", () => {
@@ -203,7 +243,7 @@ describe("refresh affordances", () => {
     });
 
     const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
-    expect(labels).toContain("Use This Phone Standalone");
+    expect(labels).toContain("Use On This Phone First");
 
     await ReactTestRenderer.act(async () => {
       tree!.root.findByProps({ testID: "enter-standalone-button" }).props.onPress();

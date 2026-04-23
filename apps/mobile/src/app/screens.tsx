@@ -2,14 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import { Linking, Platform, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 import {
   assistantVoiceCatalog,
+  FREEDOM_PHONE_PRODUCT_NAME,
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
   FREEDOM_RUNTIME_NAME,
   PROJECT_TEMPLATES,
+  humanizeMobileConnectionState,
+  humanizeMobileVoiceState,
   humanizeResponseStyle,
   summarizeAssistantVoiceProfile
 } from "@freedom/shared";
-import type { AppState } from "../store/appStore";
+import {
+  getEffectiveConnectionState,
+  getEffectiveVoiceState,
+  type AppState
+} from "../store/appStore";
 import { isValidExternalEmail } from "../utils/externalSend";
 import { findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
 import { Banner, LabeledInput, MessageBubble, StatusChip, WorkingBubble } from "./components";
@@ -34,7 +41,7 @@ function disconnectedHint(fallbackTitle: string | null): string {
     case "bundled_model":
       return "Cached chats and on-device ideation are ready.";
     case "cloud":
-      return "Cached chats and the web companion are ready.";
+      return "Cached chats and hosted support are ready.";
     default:
       return "Cached chats and saved ideas are ready.";
   }
@@ -44,17 +51,17 @@ function disconnectedCompanionLabel(state: AppState): string {
   const disconnectedMode = String(DISCONNECTED_ASSISTANT_MODE);
   if (disconnectedMode === "bundled_model") {
     return state.offlineModelState === "ready"
-      ? "Model ready"
+      ? "On-device model ready"
       : state.offlineModelState === "extracting"
-        ? "Preparing model"
+        ? "Preparing on-device model"
         : state.offlineModelState === "failed"
-          ? "Model attention"
-          : "Model bundled";
+          ? "On-device model needs attention"
+          : "On-device model bundled";
   }
   if (disconnectedMode === "cloud") {
-    return "Web lookup ready";
+    return "Hosted support ready";
   }
-  return "Notes only";
+  return "Saved for later";
 }
 
 function disconnectedCompanionTone(state: AppState): "teal" | "orange" {
@@ -66,24 +73,7 @@ function disconnectedCompanionTone(state: AppState): "teal" | "orange" {
 }
 
 function connectedVoiceLaneLabel(state: AppState): string {
-  if (!state.realtimeConnected) {
-    return "Desktop reconnecting";
-  }
-  if (!state.hostStatus?.host.isOnline) {
-    return "Desktop offline";
-  }
-  if (state.hostStatus?.auth.status !== "logged_in") {
-    return "Login needed";
-  }
-
-  switch (state.voiceRuntimeMode) {
-    case "on_device_offline":
-      return "On-device voice";
-    case "device_fallback":
-      return "Device fallback";
-    default:
-      return "Realtime voice";
-  }
+  return humanizeMobileVoiceState(getEffectiveVoiceState(state));
 }
 
 function connectedVoiceLaneTone(state: AppState): "teal" | "orange" {
@@ -121,11 +111,11 @@ export function PairingScreen(props: {
       {...refreshScrollInteractionProps}
     >
       <View style={styles.heroCard}>
-        <Text style={styles.eyebrow}>Freedom Companion</Text>
-        <Text style={styles.heroTitle}>{FREEDOM_PRODUCT_NAME}</Text>
+        <Text style={styles.eyebrow}>{FREEDOM_PHONE_PRODUCT_NAME}</Text>
+        <Text style={styles.heroTitle}>{FREEDOM_PHONE_PRODUCT_NAME}</Text>
         <Text style={styles.heroBody}>
-          Pair to your desktop when you want live sync and governed execution, or keep this phone standalone for voice,
-          notes, and independent lookup whenever a hosted companion is configured.
+          Pair to your desktop when you want live sync and governed execution, or keep working on this phone for voice,
+          saved work, and later sync whenever the desktop is away.
         </Text>
       </View>
 
@@ -152,10 +142,10 @@ export function PairingScreen(props: {
           <Text style={styles.primaryLabel}>Link Phone</Text>
         </Pressable>
         <Pressable testID="enter-standalone-button" style={styles.secondaryButton} onPress={onUseStandalone}>
-          <Text style={styles.secondaryLabel}>Use This Phone Standalone</Text>
+          <Text style={styles.secondaryLabel}>Use On This Phone First</Text>
         </Pressable>
         <Text style={styles.helperText}>
-          Standalone keeps voice capture and private notes on the phone now. Pair later whenever you want desktop sync and canonical history.
+          Freedom Anywhere keeps voice capture and saved work on this phone now. Pair later whenever you want desktop sync and canonical history.
         </Text>
       </View>
 
@@ -203,12 +193,15 @@ export function StartScreen(props: {
   const { width: windowWidth } = useWindowDimensions();
   const canUseTalk = store.voiceAvailable || store.voiceSessionActive;
   const currentSession = store.sessions.find((item) => item.id === store.selectedSessionId) ?? store.sessions[0] ?? null;
+  const connectionState = getEffectiveConnectionState(store);
   const voiceHeadline = !store.token
     ? store.voiceAvailable
-      ? "Phone standalone ready"
-      : "Standalone notes ready"
-    : store.offlineMode
-      ? "Disconnected companion ready"
+      ? "Ready on this phone"
+      : "Saved work ready"
+    : connectionState === "stand_alone"
+      ? "On this phone"
+    : connectionState === "reconnecting"
+      ? "Reconnecting to desktop"
       : store.voiceAvailable
         ? "Start talking"
         : "Voice unavailable";
@@ -241,14 +234,6 @@ export function StartScreen(props: {
           <Text style={styles.voiceSurfaceIconGlyph}>⋮</Text>
         </Pressable>
       </View>
-
-      <View style={styles.statusRow}>
-        <StatusChip
-          label={humanizeSurfaceConnectivity({ token: store.token, offlineMode: store.offlineMode })}
-          tone={!store.token || !store.offlineMode ? "teal" : "orange"}
-        />
-      </View>
-
       <View style={styles.voiceSurfaceCenter}>
         <Text
           style={[
@@ -318,7 +303,8 @@ export function HostScreen(props: {
   const activeFreedomVoiceId = store.hostStatus?.voiceProfile?.targetVoice ?? store.selectedFreedomVoicePresetId;
   const outboundEmail = store.hostStatus?.outboundEmail ?? null;
   const wakeConfigured = Boolean(store.wakeControl?.enabled);
-  const hostOnline = store.hostStatus?.availability === "ready";
+  const connectionState = getEffectiveConnectionState(store);
+  const hostOnline = connectionState === "desktop_linked";
 
   return (
     <ScrollView
@@ -337,12 +323,12 @@ export function HostScreen(props: {
           Connection health, wake controls, trusted devices, and outbound setup remain available without taking over the phone’s front door.
         </Text>
         <View style={styles.statusRow}>
-          <StatusChip label={store.hostStatus?.host.isOnline ? "Desktop online" : "Desktop offline"} tone={store.hostStatus?.host.isOnline ? "teal" : "orange"} />
+          <StatusChip label={humanizeMobileConnectionState(connectionState)} tone={hostOnline ? "teal" : "orange"} />
           <StatusChip
             label={humanizeCodexState(store.hostStatus?.auth.status ?? "logged_out")}
             tone={store.hostStatus?.auth.status === "logged_in" ? "teal" : "orange"}
           />
-          <StatusChip label={humanizeAvailability(store.hostStatus?.availability ?? "needs_attention")} tone={store.hostStatus?.availability === "ready" ? "teal" : "orange"} />
+          <StatusChip label={humanizeMobileVoiceState(getEffectiveVoiceState(store))} tone={store.voiceAvailable ? "teal" : "orange"} />
         </View>
       </View>
 
@@ -450,9 +436,9 @@ export function HostScreen(props: {
           </Text>
         </View>
         <View style={styles.insetCard}>
-          <Text style={styles.inputLabel}>Freedom fallback & standalone voice</Text>
+          <Text style={styles.inputLabel}>Freedom backup voice</Text>
           <Text style={styles.helperText}>
-            The same Freedom preset now carries into hosted spoken replies when realtime is unavailable or when the phone is running in standalone cloud mode. The old phone-native TTS is no longer auto-selected.
+            The same Freedom preset now carries into hosted spoken replies when realtime is unavailable or when this phone is working offline. The old phone-native TTS is no longer auto-selected.
           </Text>
           <View style={styles.voiceChoiceList}>
             {assistantVoiceCatalog.map((voice) => (
@@ -584,7 +570,7 @@ export function HostScreen(props: {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>This Phone</Text>
         <Text style={styles.supportingText}>
-          Rename the current device and manage Android background updates without leaving the companion.
+          Rename the current device and manage Android background updates without leaving this phone.
         </Text>
         <LabeledInput
           label="Device Name"
@@ -935,11 +921,14 @@ export function ChatScreen(props: {
   const shouldShowTranscript = showTranscript || showExternalDraftCard;
   const compactVoiceSurface = windowWidth < 400;
   const tightVoiceSurface = windowWidth < 360;
+  const connectionState = getEffectiveConnectionState(store);
   const centerHeadline =
     !store.token && !busy && !store.sendingMessage && !store.voiceSessionActive
-      ? "Phone standalone"
-      : store.offlineMode && !busy && !store.sendingMessage && !store.voiceSessionActive
-      ? "Disconnected companion"
+      ? "On this phone"
+      : connectionState === "stand_alone" && !busy && !store.sendingMessage && !store.voiceSessionActive
+      ? "On this phone"
+      : connectionState === "reconnecting" && !busy && !store.sendingMessage && !store.voiceSessionActive
+      ? "Reconnecting"
       : busy || store.sendingMessage
       ? "Working"
       : store.voiceSessionActive
@@ -1045,10 +1034,6 @@ export function ChatScreen(props: {
         </View>
 
         <View style={styles.statusRow}>
-          <StatusChip
-            label={humanizeSurfaceConnectivity({ token: store.token, offlineMode: store.offlineMode })}
-            tone={!store.token || !store.offlineMode ? "teal" : "orange"}
-          />
           <StatusChip
             label={voiceSurfaceCapabilityLabel(store)}
             tone={voiceSurfaceCapabilityTone(store)}

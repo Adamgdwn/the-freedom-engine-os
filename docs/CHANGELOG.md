@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-04-22 (Freedom Anywhere recovery pass, release install cleanup, and reconnecting indicator fix)
+
+- established the first-principles Freedom Anywhere recovery docs and implementation
+  plan around the three canonical phone postures: `desktop_linked`, `reconnecting`,
+  and `stand_alone`
+- aligned shared mobile state contracts, gateway host-status production, and mobile UI
+  copy around that simpler posture model
+- cleaned up the connected Android device so only the current `com.freedommobile`
+  install remained, then replaced the debug build with a release APK to remove Metro /
+  Fast Refresh overlays from product evaluation
+- moved the main connection banner off the voice canvas and into the settings sheet as a
+  compact status mark beside `FREEDOM ANYWHERE SETTINGS`
+- fixed that compact status mark so `reconnecting` still reads as connected to Freedom
+  and only true `stand_alone` shows the disconnected mark
+
 ## 2026-04-22 (mobile Freedom voice precedence + connected posture hardening)
 
 - changed mobile spoken-reply routing so Freedom-hosted speech now wins over any stale
@@ -8,10 +23,10 @@
 - migrated legacy saved phone-native voice selections away on boot so new Freedom voice
   presets stay consistent across paired realtime sessions and non-realtime spoken replies
 - fixed realtime reconnect handling on the phone so transient socket drops no longer flip
-  a paired session into a false disconnected `Notes only` posture before the desktop is
+  a paired session into a false offline-safe `Saved for later` posture before the desktop is
   actually confirmed unreachable
 - rebuilt and reinstalled Android `0.2.74 (81)` and verified the live UI now shows
-  `Desktop linked` on the start surface and `Realtime voice` / `Listening` after tapping
+  `Connected to desktop` on the start surface and `Premium voice ready` / `Listening` after tapping
   `Talk`
 
 ## 2026-04-21 (desktop launcher drift + env precedence hardening)

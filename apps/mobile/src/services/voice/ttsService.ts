@@ -357,7 +357,7 @@ export class TtsService {
     if (backend === "freedom-cloud") {
       const provider = this.getFreedomSpeechProvider();
       return ready
-        ? `Freedom hosted speech is ready using ${provider?.voiceProfile.targetVoice ?? "marin"} via ${provider?.label ?? "the configured companion"}.`
+        ? `Freedom hosted speech is ready using ${provider?.voiceProfile.targetVoice ?? "marin"} via ${provider?.label ?? "the configured hosted path"}.`
         : "Freedom hosted speech is not ready right now, so spoken replies may pause until the Freedom voice path is back.";
     }
 

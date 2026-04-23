@@ -5,6 +5,7 @@ export * from "./commands/lifecycle.js";
 export * from "./pairing/pairing.js";
 export * from "./projectPrompts.js";
 export * from "./freedom.js";
+export * from "./mobileExperience.js";
 export * from "./modelRouter.js";
 export * from "./voiceProfile.js";
 export {

@@ -2,7 +2,7 @@ const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED === "tr
 
 module.exports = {
   expo: {
-    name: "Freedom",
+    name: "Freedom Anywhere",
     slug: "freedom-mobile-companion",
     android: {
       package: "com.freedommobile"

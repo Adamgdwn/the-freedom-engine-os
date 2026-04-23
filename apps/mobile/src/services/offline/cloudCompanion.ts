@@ -45,7 +45,7 @@ export class CloudCompanionService {
           : error instanceof Error
             ? error.message
             : "network request failed";
-      throw new Error(`Could not reach the web companion at ${baseUrl}. ${detail}`);
+      throw new Error(`Could not reach hosted support at ${baseUrl}. ${detail}`);
     } finally {
       clearTimeout(timeout);
     }
@@ -56,14 +56,14 @@ export class CloudCompanionService {
       try {
         payload = JSON.parse(text) as { error?: string; text?: string };
       } catch {
-        throw new Error("Web companion returned a malformed response.");
+        throw new Error("Hosted support returned a malformed response.");
       }
     }
     if (!response.ok) {
-      throw new Error(payload.error || `Web companion error (${response.status})`);
+      throw new Error(payload.error || `Hosted support error (${response.status})`);
     }
     if (!payload.text) {
-      throw new Error("Web companion returned an empty reply.");
+      throw new Error("Hosted support returned an empty reply.");
     }
     return { text: payload.text };
   }

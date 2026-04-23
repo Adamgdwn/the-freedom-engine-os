@@ -3,8 +3,15 @@ import { Keyboard, Modal, Platform, Pressable, ScrollView, Switch, Text, View } 
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   assistantVoiceCatalog,
+  FREEDOM_PHONE_PRODUCT_NAME,
   FREEDOM_PRODUCT_NAME,
   FREEDOM_RUNTIME_NAME,
+  describeDeferredExecutionState,
+  describeMobileConnectionState,
+  describeMobileVoiceState,
+  humanizeDeferredExecutionState,
+  humanizeMobileConnectionState,
+  humanizeMobileVoiceState,
   humanizeVoiceGender,
   humanizeVoicePace,
   summarizeAssistantVoiceProfile
@@ -12,7 +19,12 @@ import {
 import { Banner, StatusChip } from "./components";
 import { styles } from "./mobileStyles";
 import { ChatScreen, HostScreen, PairingScreen, SessionsScreen, StartScreen } from "./screens";
-import type { AppState } from "../store/appStore";
+import {
+  getEffectiveConnectionState,
+  getEffectiveDeferredExecutionState,
+  getEffectiveVoiceState,
+  type AppState
+} from "../store/appStore";
 import { useAppStore } from "../store/appStore";
 import { humanizeVoiceSessionPhase } from "../services/voice/voiceSessionMachine";
 import { MOBILE_APP_VERSION_CODE, MOBILE_APP_VERSION_NAME } from "../generated/runtimeConfig";
@@ -72,6 +84,8 @@ export function AppShell(): React.JSX.Element {
   const voiceStatus = humanizeVoiceStatus(store);
   const voiceCta = voiceActionCopy(store);
   const showGlobalBanners = store.view === "host" || store.view === "sessions";
+  const connectionState = getEffectiveConnectionState(store);
+  const settingsConnectionConnected = connectionState !== "stand_alone";
   const liveVoiceSummary = summarizeAssistantVoiceProfile(
     store.hostStatus?.voiceProfile ?? {
       targetVoice: store.selectedFreedomVoicePresetId,
@@ -87,7 +101,7 @@ export function AppShell(): React.JSX.Element {
       <SafeAreaView style={styles.root} edges={["top", "left", "right", "bottom"]}>
         <View style={styles.heroCard}>
           <Text style={styles.eyebrow}>{FREEDOM_RUNTIME_NAME}</Text>
-          <Text style={styles.heroTitle}>Desktop-grade {FREEDOM_PRODUCT_NAME}, one scan from your phone.</Text>
+          <Text style={styles.heroTitle}>Desktop-grade {FREEDOM_PHONE_PRODUCT_NAME}, one scan from your phone.</Text>
           <Text style={styles.heroBody}>Loading paired device state and restoring your phone link…</Text>
         </View>
       </SafeAreaView>
@@ -187,10 +201,23 @@ export function AppShell(): React.JSX.Element {
           <View style={styles.mobileSheet}>
             <View style={styles.mobileSheetHandle} />
             <View style={styles.mobileSheetHeader}>
-              <Text style={styles.mobileSheetEyebrow}>
-                {sheetMode === "settings" ? `${FREEDOM_PRODUCT_NAME} settings` : `${FREEDOM_PRODUCT_NAME} actions`}
-              </Text>
-              <Text style={styles.mobileSheetTitle}>{sheetMode === "settings" ? `${FREEDOM_PRODUCT_NAME} Settings` : `${FREEDOM_PRODUCT_NAME} Actions`}</Text>
+              <View style={styles.mobileSheetEyebrowRow}>
+                <Text style={styles.mobileSheetEyebrow}>
+                  {sheetMode === "settings" ? `${FREEDOM_PHONE_PRODUCT_NAME} settings` : `${FREEDOM_PHONE_PRODUCT_NAME} actions`}
+                </Text>
+                {sheetMode === "settings" ? (
+                  <Text
+                    accessibilityLabel={settingsConnectionConnected ? "Desktop connected" : "Desktop disconnected"}
+                    style={[
+                      styles.mobileSheetConnectionMark,
+                      settingsConnectionConnected ? styles.mobileSheetConnectionMarkConnected : styles.mobileSheetConnectionMarkDisconnected
+                    ]}
+                  >
+                    {settingsConnectionConnected ? "✓" : "×"}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.mobileSheetTitle}>{sheetMode === "settings" ? `${FREEDOM_PHONE_PRODUCT_NAME} Settings` : `${FREEDOM_PHONE_PRODUCT_NAME} Actions`}</Text>
               <Text style={styles.mobileSheetSubtitle}>
                 {sheetMode === "settings"
                   ? "Voice choices, reply behavior, runtime posture, and system adjustments live here."
@@ -354,7 +381,7 @@ export function AppShell(): React.JSX.Element {
                         value={liveVoiceSummary}
                       />
                       <Text style={styles.mobileSheetHelper}>
-                        This preset now carries across Freedom&apos;s live realtime voice and the hosted spoken-reply path used in fallback or standalone cloud mode. Freedom voice is AI-generated, and the old phone-native TTS is no longer auto-selected during normal use.
+                        This preset now carries across Freedom&apos;s live realtime voice and the hosted spoken-reply path used when the phone is operating stand-alone. Freedom voice is AI-generated, and the old phone-native TTS is no longer auto-selected during normal use.
                       </Text>
                     </View>
                     <View style={styles.voiceChoiceList}>
@@ -464,7 +491,7 @@ export function AppShell(): React.JSX.Element {
                     <View style={styles.mobileSheetInfoCard}>
                       <InfoRow label="App version" value={MOBILE_APP_VERSION_NAME} />
                       <InfoRow label="Build code" value={String(MOBILE_APP_VERSION_CODE)} />
-                      <InfoRow label="Product" value={`${FREEDOM_PRODUCT_NAME} mobile companion`} />
+                      <InfoRow label="Product" value={FREEDOM_PHONE_PRODUCT_NAME} />
                       <InfoRow label="Voice runtime" value={humanizeVoiceRuntimeMode(store)} />
                       <Text style={styles.mobileSheetHelper}>
                         Use this section to confirm the phone is running the APK you expect before testing voice or UI changes.
@@ -501,28 +528,13 @@ function InfoRow({ label, value }: { label: string; value: string }): React.JSX.
 }
 
 function humanizeVoiceStatus(store: AppState): string {
-  if (!store.voiceAvailable) {
-    return "Voice unavailable";
-  }
   if (store.voiceSessionActive) {
     if (store.voiceMuted) {
       return "Microphone muted";
     }
     return humanizeVoiceSessionPhase(store.voiceSessionPhase);
   }
-  if (!store.token) {
-    return "Standalone ready";
-  }
-  if (!store.realtimeConnected) {
-    return "Desktop reconnecting";
-  }
-  if (!store.hostStatus?.host.isOnline) {
-    return "Desktop offline";
-  }
-  if (store.hostStatus?.auth.status !== "logged_in") {
-    return "Freedom needs login";
-  }
-  return "Ready for voice";
+  return humanizeMobileVoiceState(getEffectiveVoiceState(store));
 }
 
 function humanizeVoiceRuntimeMode(store: AppState): string {
@@ -530,7 +542,7 @@ function humanizeVoiceRuntimeMode(store: AppState): string {
     return "LiveKit + OpenAI Realtime";
   }
   if (!store.token) {
-    return "Phone voice + standalone companion";
+    return "Phone voice + saved work";
   }
   return store.voiceRuntimeMode === "on_device_offline" ? "On-device voice + local model" : "Device STT + Freedom hosted speech";
 }
@@ -604,24 +616,24 @@ function voiceActionCopy(store: AppState): { label: string; hint: string } {
 }
 
 function humanizeDesktopStatus(store: AppState): string {
-  if (!store.token) {
-    return humanizeSurfaceConnectivity({ token: store.token, offlineMode: store.offlineMode });
-  }
-  return store.hostStatus?.host.isOnline ? "Desktop online" : "Desktop offline";
+  return humanizeSurfaceConnectivity({ token: store.token, connectionState: getEffectiveConnectionState(store) });
 }
 
 function humanizeSyncStatus(store: AppState): string {
   if (!store.token) {
-    return "Standalone mode";
+    return humanizeDeferredExecutionState(getEffectiveDeferredExecutionState(store));
   }
-  return store.realtimeConnected ? "Live sync on" : "Live sync reconnecting";
+  return humanizeMobileConnectionState(getEffectiveConnectionState(store));
 }
 
 function humanizeStatusDetail(store: AppState): string {
   if (!store.token) {
     return "Pair later when you want desktop sync, build routing, or canonical import back into shared history.";
   }
-  return store.hostStatus?.auth.detail ?? "Waiting for desktop heartbeat.";
+  const connectionState = getEffectiveConnectionState(store);
+  const voiceState = getEffectiveVoiceState(store);
+  const deferredState = getEffectiveDeferredExecutionState(store);
+  return `${describeMobileConnectionState(connectionState)} ${describeMobileVoiceState(voiceState)} ${describeDeferredExecutionState(deferredState)}`;
 }
 
 function capitalize(value: string): string {

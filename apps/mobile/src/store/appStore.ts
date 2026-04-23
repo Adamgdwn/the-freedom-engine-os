@@ -2,7 +2,11 @@ import { create } from "zustand";
 import { Platform } from "react-native";
 import {
   buildProjectStarterPrompt,
+  type DeferredExecutionState,
+  FREEDOM_PHONE_PRODUCT_NAME,
   getAssistantVoiceCatalogEntry,
+  type MobileConnectionState,
+  type MobileVoiceState,
   normalizeAssistantVoicePresetId,
   type AssistantVoiceProfile,
   type AssistantVoicePresetId,
@@ -304,8 +308,8 @@ function getDisconnectedAssistantReadyState(): { state: OfflineModelState; detai
       return {
         state: "ready",
         detail: companionBaseUrl
-          ? `Web companion ready via ${companionBaseUrl}.`
-          : "Web companion ready."
+          ? `Hosted support ready via ${companionBaseUrl}.`
+          : "Hosted support ready."
       };
     }
     default:
@@ -321,7 +325,7 @@ function getDisconnectedModeNotice(): string {
     case "bundled_model":
       return "Desktop unreachable. Cached chats and on-device ideation are still available.";
     case "cloud":
-      return "Desktop unreachable. Cached chats and the web companion are still available.";
+      return "Desktop unreachable. Cached chats and hosted support are still available.";
     default:
       return "Desktop unreachable. Cached chats and saved ideas are still available.";
   }
@@ -332,7 +336,7 @@ function getDisconnectedTurnNotice(): string {
     case "bundled_model":
       return "Running on-device ideation while the desktop is unreachable.";
     case "cloud":
-      return "Running the web companion while the desktop is unreachable.";
+      return "Running hosted support while the desktop is unreachable.";
     default:
       return "Saving this idea locally while the desktop is unreachable.";
   }
@@ -341,12 +345,87 @@ function getDisconnectedTurnNotice(): string {
 function getDisconnectedVoiceStartNotice(): string {
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
-      return "Offline voice starting. Speak naturally and Freedom will answer from the on-device model.";
+      return "Stand-alone voice is starting. Speak naturally and Freedom will answer from the on-device model.";
     case "cloud":
-      return "Disconnected voice starting. Speak naturally and Freedom will answer through the web companion.";
+      return "Stand-alone voice is starting. Speak naturally and Freedom will answer through the web support path.";
     default:
-      return "Disconnected voice starting. Speak naturally and Freedom will save your ideas for later sync.";
+      return "Stand-alone voice is starting. Speak naturally and Freedom will save your ideas for later sync.";
   }
+}
+
+function hasStructuredOfflineWork(state: Pick<AppState, "offlineImportDrafts">): boolean {
+  return Object.values(state.offlineImportDrafts).some((draft) => Boolean(draft.summary.trim() || draft.draftTurns.length));
+}
+
+function hasCapturedOfflineWork(state: Pick<AppState, "sessions" | "messagesBySession">): boolean {
+  if (state.sessions.length) {
+    return true;
+  }
+  return Object.values(state.messagesBySession).some((messages) => messages.length > 0);
+}
+
+function shouldUseOfflineSafeMode(state: Pick<AppState, "token" | "hostStatus">): boolean {
+  if (!state.token) {
+    return true;
+  }
+  return state.hostStatus?.connectionState === "stand_alone";
+}
+
+export function getEffectiveConnectionState(
+  state: Pick<AppState, "token" | "hostStatus" | "realtimeConnected" | "offlineMode">
+): MobileConnectionState {
+  if (!state.token) {
+    return "stand_alone";
+  }
+  if (!state.realtimeConnected && state.hostStatus?.connectionState === "desktop_linked") {
+    return "reconnecting";
+  }
+  return state.hostStatus?.connectionState ?? (state.offlineMode ? "stand_alone" : "reconnecting");
+}
+
+export function getEffectiveVoiceState(
+  state: Pick<
+    AppState,
+    "token" | "hostStatus" | "voiceAvailable" | "voiceSessionActive" | "voiceRuntimeMode" | "voiceSessionPhase" | "realtimeConnected" | "offlineMode"
+  >
+): MobileVoiceState {
+  if (!state.voiceAvailable) {
+    return "voice_unavailable";
+  }
+  if (state.voiceSessionActive) {
+    if (state.voiceRuntimeMode === "realtime_primary") {
+      if (state.voiceSessionPhase === "connecting") {
+        return "voice_primary_starting";
+      }
+      if (state.voiceSessionPhase === "reconnecting") {
+        return "voice_primary_recovering";
+      }
+      return "voice_primary_live";
+    }
+    return "voice_fallback_only";
+  }
+  if (!state.token) {
+    return "voice_fallback_only";
+  }
+  if (!state.realtimeConnected && state.hostStatus?.voiceState === "voice_primary_ready") {
+    return "voice_primary_recovering";
+  }
+  return state.hostStatus?.voiceState ?? (state.offlineMode ? "voice_fallback_only" : "voice_primary_starting");
+}
+
+export function getEffectiveDeferredExecutionState(
+  state: Pick<AppState, "token" | "hostStatus" | "offlineImportDrafts" | "sessions" | "messagesBySession" | "offlineMode">
+): DeferredExecutionState {
+  if (hasStructuredOfflineWork(state)) {
+    return shouldUseOfflineSafeMode(state) ? "awaiting_desktop" : "structured";
+  }
+  if (hasCapturedOfflineWork(state) && shouldUseOfflineSafeMode(state)) {
+    return "captured";
+  }
+  if (!state.token) {
+    return hasCapturedOfflineWork(state) ? "captured" : "awaiting_desktop";
+  }
+  return state.hostStatus?.deferredExecutionState ?? (state.offlineMode ? "awaiting_desktop" : "ready_to_execute");
 }
 
 const defaultVoiceTelemetry = (): VoiceTelemetry => ({
@@ -489,7 +568,7 @@ function getFreedomSpeechProvider(state: Pick<AppState, "baseUrl" | "offlineMode
     endpointUrl: standaloneBaseUrl,
     authorization: null,
     voiceProfile: getEffectiveFreedomVoiceProfile(state),
-    label: "the standalone companion"
+    label: "this phone while the desktop is away"
   };
 }
 
@@ -629,7 +708,7 @@ function truncateOfflinePreview(text: string): string {
 function buildNotesOnlyReply(): string {
   return (
     "Freedom saved that idea locally for later sync. " +
-    "This slim build does not bundle the old on-device model, and no web companion is configured yet."
+    "This slim build does not bundle the old on-device model, and no hosted support endpoint is configured yet."
   );
 }
 
@@ -661,7 +740,7 @@ async function requestDisconnectedCloudCompanionReply(
     throw lastError;
   }
 
-  throw new Error("Could not reach the web companion.");
+  throw new Error("Could not reach hosted support.");
 }
 
 async function ensureOfflineModelPrepared(
@@ -1151,6 +1230,12 @@ export const useAppStore = create<AppState>((set, get) => {
             replyToAddress: null,
             recipientCount: 0
           },
+          connectionState: "reconnecting",
+          connectionDetail: "Freedom Anywhere is waiting for the desktop to publish its first live status.",
+          voiceState: "voice_primary_recovering",
+          voiceDetail: "Freedom Anywhere is waiting to confirm whether the premium voice lane is ready on the desktop.",
+          deferredExecutionState: "awaiting_desktop",
+          deferredExecutionDetail: "The phone is paired, but the desktop has not published its live execution posture yet.",
           availability: "reconnecting",
           repairState: "reconnecting",
           runState: "ready",
@@ -1261,7 +1346,7 @@ export const useAppStore = create<AppState>((set, get) => {
           return accumulator;
         }, {}),
         notice: standaloneSessions.length
-          ? "Refreshing this phone locally. Saved standalone threads remain available without a desktop link."
+          ? "Refreshing this phone locally. Saved phone-only threads remain available without a desktop link."
           : standaloneSurfaceHint(),
         error: null
       }));
@@ -1330,8 +1415,8 @@ export const useAppStore = create<AppState>((set, get) => {
           accumulator[session.id] = get().renameDraftBySession[session.id] ?? session.title;
           return accumulator;
         }, {}),
-        offlineMode: false,
-        notice: null,
+        offlineMode: shouldUseOfflineSafeMode({ token, hostStatus }),
+        notice: hostStatus.connectionState === "stand_alone" ? getDisconnectedModeNotice() : null,
         error: null
       });
 
@@ -1362,10 +1447,13 @@ export const useAppStore = create<AppState>((set, get) => {
       maybeAutoSendVoiceResult(get, set).catch(() => undefined);
     } catch (error) {
       if (error instanceof Error && isDesktopUnreachableErrorMessage(error.message)) {
+        const nextOfflineMode = shouldUseOfflineSafeMode(get());
         set({
-          offlineMode: true,
+          offlineMode: nextOfflineMode,
           realtimeConnected: false,
-          notice: getDisconnectedModeNotice(),
+          notice: nextOfflineMode
+            ? getDisconnectedModeNotice()
+            : `${FREEDOM_PHONE_PRODUCT_NAME} is reconnecting to the desktop link now.`,
           error: null
         });
         await persistOfflineSnapshot(get);
@@ -1442,12 +1530,15 @@ export const useAppStore = create<AppState>((set, get) => {
       if (error instanceof Error && isNotFoundErrorMessage(error.message)) {
         const cachedMessages = get().messagesBySession[sessionId];
         if (cachedMessages?.length) {
+          const nextOfflineMode = shouldUseOfflineSafeMode(get());
           set((state) => ({
             sessions: state.sessions.map((session) => (session.id === sessionId ? sanitizeSessionForFreedom(session) : session)),
             selectedSessionId: sessionId,
             view: "chat",
-            offlineMode: true,
-            notice: "That desktop chat is unavailable right now. Showing the cached copy on this phone instead.",
+            offlineMode: nextOfflineMode,
+            notice: nextOfflineMode
+              ? "That desktop chat is unavailable right now. Showing the saved copy on this phone instead."
+              : `${FREEDOM_PHONE_PRODUCT_NAME} is reconnecting to the desktop link. Showing the saved copy for now.`,
             error: null
           }));
           await persistOfflineSnapshot(get);
@@ -1475,11 +1566,14 @@ export const useAppStore = create<AppState>((set, get) => {
       if (error instanceof Error && isDesktopUnreachableErrorMessage(error.message)) {
         const cachedMessages = get().messagesBySession[sessionId];
         if (cachedMessages) {
+          const nextOfflineMode = shouldUseOfflineSafeMode(get());
           set({
             selectedSessionId: sessionId,
             view: "chat",
-            offlineMode: true,
-            notice: "Desktop unreachable. Showing cached chat and disconnected companion tools.",
+            offlineMode: nextOfflineMode,
+            notice: nextOfflineMode
+              ? "Desktop is away right now. Showing saved chat and preserving new work on this phone."
+              : `${FREEDOM_PHONE_PRODUCT_NAME} is reconnecting to the desktop link. Showing the saved chat for now.`,
             error: null
           });
           await persistOfflineSnapshot(get);
@@ -2588,7 +2682,7 @@ export const useAppStore = create<AppState>((set, get) => {
       await persistSettings(get, { freedomVoicePresetId: targetVoice });
       set({
         selectedFreedomVoicePresetId: targetVoice,
-        notice: `${entry.label} is set as Freedom's standalone voice. The same preset will carry into live voice when the desktop link is back.`,
+        notice: `${entry.label} is set as Freedom's stand-alone voice on this phone. The same preset will carry into live voice when the desktop link is back.`,
         error: null
       });
     } catch (error) {
@@ -3403,7 +3497,8 @@ function applyStreamEvent(
       hostStatus: payload.hostStatus,
       selectedFreedomVoicePresetId: resolvedFreedomVoicePresetId,
       wakeControl: payload.hostStatus.wakeControl,
-      newSessionRootPath: get().newSessionRootPath || payload.hostStatus.host.approvedRoots[0] || ""
+      newSessionRootPath: get().newSessionRootPath || payload.hostStatus.host.approvedRoots[0] || "",
+      offlineMode: shouldUseOfflineSafeMode({ token: get().token, hostStatus: payload.hostStatus })
     });
     void persistSettings(get, {
       freedomVoicePresetId: resolvedFreedomVoicePresetId,

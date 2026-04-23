@@ -1,4 +1,10 @@
-import { FREEDOM_PRODUCT_NAME, type ChatSession } from "@freedom/shared";
+import {
+  FREEDOM_PHONE_PRODUCT_NAME,
+  FREEDOM_PRODUCT_NAME,
+  humanizeMobileConnectionState,
+  type ChatSession,
+  type MobileConnectionState
+} from "@freedom/shared";
 import { normalizeBaseUrl } from "../../config";
 import { DISCONNECTED_ASSISTANT_BASE_URL, DISCONNECTED_ASSISTANT_MODE } from "../../generated/runtimeConfig";
 import { sortSessionsForDisplay } from "../../utils/operatorConsole";
@@ -9,7 +15,7 @@ export type StandaloneAssistantMode = "bundled_model" | "cloud" | "notes_only";
 export const LOCAL_ONLY_SESSION_HOST_ID = "mobile-standalone";
 export const LOCAL_ONLY_SESSION_DEVICE_ID = "mobile-standalone-device";
 export const LOCAL_ONLY_SESSION_ROOT_PATH = "mobile://standalone";
-export const LOCAL_ONLY_SESSION_TITLE = `${FREEDOM_PRODUCT_NAME} Standalone`;
+export const LOCAL_ONLY_SESSION_TITLE = `${FREEDOM_PRODUCT_NAME} on this phone`;
 
 export function getStandaloneAssistantMode(): StandaloneAssistantMode {
   const configuredMode = String(DISCONNECTED_ASSISTANT_MODE);
@@ -69,7 +75,7 @@ export function createLocalStandaloneSession(deviceName: string): ChatSession {
     activeTurnId: null,
     stopRequested: false,
     lastError: null,
-    lastPreview: `Standalone notes on ${deviceName.trim() || "this phone"}.`,
+    lastPreview: `Saved on ${deviceName.trim() || "this phone"}.`,
     lastActivityAt: stamp,
     createdAt: stamp,
     updatedAt: stamp
@@ -78,32 +84,21 @@ export function createLocalStandaloneSession(deviceName: string): ChatSession {
 
 export function humanizeSurfaceConnectivity(input: {
   token: string | null;
-  offlineMode: boolean;
+  connectionState: MobileConnectionState;
 }): string {
   if (!input.token) {
-    return "Phone standalone";
+    return "On this phone";
   }
-  if (!input.offlineMode) {
-    return "Desktop linked";
-  }
-
-  switch (getStandaloneAssistantMode()) {
-    case "bundled_model":
-      return "Offline / On-device";
-    case "cloud":
-      return "Disconnected / Cloud";
-    default:
-      return "Disconnected / Notes";
-  }
+  return humanizeMobileConnectionState(input.connectionState);
 }
 
 export function standaloneSurfaceHint(): string {
   switch (getStandaloneAssistantMode()) {
     case "bundled_model":
-      return "Voice, saved notes, and the on-device model stay available on this phone.";
+      return `${FREEDOM_PHONE_PRODUCT_NAME} keeps voice, saved work, and the on-device model available on this phone.`;
     case "cloud":
-      return "Voice, saved notes, and hosted web lookup stay available without a desktop link.";
+      return `${FREEDOM_PHONE_PRODUCT_NAME} keeps voice, saved work, and hosted web lookup available while the desktop is away.`;
     default:
-      return "Voice capture and saved notes stay available on this phone. Pair later for desktop sync.";
+      return `${FREEDOM_PHONE_PRODUCT_NAME} keeps voice capture and saved work available on this phone. Pair later for desktop sync.`;
   }
 }
