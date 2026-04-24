@@ -42,7 +42,7 @@ import {
   OfflineAssistantService,
   type OfflineModelState
 } from "../services/offline/offlineAssistant";
-import { CloudCompanionService } from "../services/offline/cloudCompanion";
+import { RelayCompanionService } from "../services/offline/relayCompanion";
 import { AssistantSpeechRuntime } from "../services/voice/assistantSpeechRuntime";
 import { RealtimeVoiceService } from "../services/voice/realtimeVoiceService";
 import { TtsService, type TtsVoiceOption } from "../services/voice/ttsService";
@@ -51,6 +51,7 @@ import { WakeRelayClient } from "../services/wake/wakeRelayClient";
 import { normalizeBaseUrl, websocketUrlFromBase } from "../config";
 import {
   DEFAULT_BASE_URL,
+  RELAY_BASE_URL,
   VOICE_BACKCHANNEL_MAX_WORDS,
   VOICE_INTERRUPT_MIN_CHARS,
   VOICE_RUNTIME_MODE,
@@ -260,7 +261,7 @@ const fcm = new FcmService();
 const tts = new TtsService();
 const assistantSpeech = new AssistantSpeechRuntime(tts);
 const offlineAssistant = new OfflineAssistantService();
-const cloudCompanion = new CloudCompanionService();
+const relayCompanion = new RelayCompanionService();
 const wakeRelay = new WakeRelayClient();
 let socket: WebSocket | null = null;
 let unsubscribePushTokenRefresh: (() => void) | null = null;
@@ -296,22 +297,22 @@ function getDisconnectedAssistantMode(): DisconnectedAssistantMode {
 }
 
 function getDisconnectedAssistantRuntimeMode(): MobileVoiceRuntimeMode {
-  return getDisconnectedAssistantMode() === "bundled_model" ? "on_device_offline" : "device_fallback";
+  if (getDisconnectedAssistantMode() === "bundled_model") return "on_device_offline";
+  if (RELAY_BASE_URL) return "realtime_primary";
+  return "device_fallback";
 }
 
 function getDisconnectedAssistantReadyState(): { state: OfflineModelState; detail: string | null } {
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
       return offlineAssistant.getStatus();
-    case "cloud": {
-      const companionBaseUrl = getConfiguredDisconnectedAssistantBaseUrl();
+    case "cloud":
       return {
-        state: "ready",
-        detail: companionBaseUrl
-          ? `Hosted support ready via ${companionBaseUrl}.`
-          : "Hosted support ready."
+        state: RELAY_BASE_URL ? "ready" : "missing",
+        detail: RELAY_BASE_URL
+          ? `Freedom relay ready at ${RELAY_BASE_URL}.`
+          : "No relay configured. Set MOBILE_RELAY_BASE_URL in your .env and rebuild."
       };
-    }
     default:
       return {
         state: "missing",
@@ -368,6 +369,9 @@ function shouldUseOfflineSafeMode(state: Pick<AppState, "token" | "hostStatus">)
   if (!state.token) {
     return true;
   }
+  if (reconnectAttempts > GRACE_WINDOW_ATTEMPTS) {
+    return true;
+  }
   return state.hostStatus?.connectionState === "stand_alone";
 }
 
@@ -410,7 +414,7 @@ export function getEffectiveVoiceState(
   if (!state.realtimeConnected && state.hostStatus?.voiceState === "voice_primary_ready") {
     return "voice_primary_recovering";
   }
-  return state.hostStatus?.voiceState ?? (state.offlineMode ? "voice_fallback_only" : "voice_primary_starting");
+  return state.hostStatus?.voiceState ?? (state.offlineMode && !RELAY_BASE_URL ? "voice_fallback_only" : "voice_primary_starting");
 }
 
 export function getEffectiveDeferredExecutionState(
@@ -716,33 +720,6 @@ function getConfiguredDisconnectedAssistantBaseUrl(): string {
   return getStandaloneCompanionBaseUrl();
 }
 
-function listDisconnectedAssistantBaseUrls(_currentBaseUrl: string | null | undefined): string[] {
-  const configuredBaseUrl = getConfiguredDisconnectedAssistantBaseUrl();
-  return configuredBaseUrl ? [configuredBaseUrl] : [];
-}
-
-async function requestDisconnectedCloudCompanionReply(
-  currentBaseUrl: string,
-  request: (baseUrl: string) => Promise<string>
-): Promise<string> {
-  const candidateBaseUrls = listDisconnectedAssistantBaseUrls(currentBaseUrl);
-  let lastError: Error | null = null;
-
-  for (const candidateBaseUrl of candidateBaseUrls) {
-    try {
-      return await request(candidateBaseUrl);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-    }
-  }
-
-  if (lastError) {
-    throw lastError;
-  }
-
-  throw new Error("Could not reach hosted support.");
-}
-
 async function ensureOfflineModelPrepared(
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
 ): Promise<void> {
@@ -774,21 +751,13 @@ async function requestDisconnectedAssistantReply(messages: ChatMessage[], prompt
         messages: buildOfflineContextMessages(messages, prompt)
       });
     case "cloud":
-      return requestDisconnectedCloudCompanionReply(baseUrl, (candidateBaseUrl) =>
-        cloudCompanion.generateReply(
-          candidateBaseUrl,
-          buildOfflineContextMessages(messages, prompt).flatMap((message) => {
-            if (message.role === "system" || message.role === "user" || message.role === "assistant") {
-              return [
-                {
-                  role: message.role,
-                  content: typeof message.content === "string" ? message.content : ""
-                }
-              ];
-            }
-            return [];
-          })
-        )
+      return relayCompanion.generateReply(
+        buildOfflineContextMessages(messages, prompt).flatMap((message) => {
+          if (message.role === "system" || message.role === "user" || message.role === "assistant") {
+            return [{ role: message.role, content: typeof message.content === "string" ? message.content : "" }];
+          }
+          return [];
+        })
       );
     default:
       return buildNotesOnlyReply();
@@ -813,9 +782,7 @@ async function requestDisconnectedImportSummary(messages: ChatMessage[], draftTu
         temperature: 0.35
       });
     case "cloud":
-      return requestDisconnectedCloudCompanionReply(baseUrl, (candidateBaseUrl) =>
-        cloudCompanion.summarizeDraftTurns(candidateBaseUrl, draftTurns)
-      );
+      return relayCompanion.summarizeDraftTurns(draftTurns);
     default:
       return buildOfflineImportSummaryFallback(messages, draftTurns);
   }
@@ -2556,7 +2523,7 @@ export const useAppStore = create<AppState>((set, get) => {
     assistantSpeech.reset();
     voiceInterruptRequested = false;
 
-    if (!get().offlineMode && prefersRealtimePrimaryVoice()) {
+    if (prefersRealtimePrimaryVoice() || (get().offlineMode && RELAY_BASE_URL)) {
       try {
         await startRealtimeVoiceSession(get, set, targetSessionId);
         return;
@@ -3013,13 +2980,19 @@ async function startRealtimeVoiceSession(
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
   targetSessionId: string
 ): Promise<void> {
-  const token = requireValue(get().token, "Pair this phone with the desktop first.");
-  const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
-  const runtime = await api.createVoiceRuntimeSession(token, baseUrl, {
+  const sessionInput = {
     voiceSessionId: createVoiceSessionId(),
     chatSessionId: targetSessionId,
     assistantName: FREEDOM_PRODUCT_NAME
-  });
+  };
+
+  const runtime = get().offlineMode && RELAY_BASE_URL
+    ? await relayCompanion.createVoiceSession(sessionInput)
+    : await api.createVoiceRuntimeSession(
+        requireValue(get().token, "Pair this phone with the desktop first."),
+        requireValue(get().baseUrl, "Desktop URL is required."),
+        sessionInput
+      );
 
   await realtimeVoice.startSession(runtime as Parameters<RealtimeVoiceService["startSession"]>[0], buildRealtimeVoiceCallbacks(get, set));
 }
@@ -3443,6 +3416,10 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let shouldReconnect = false;
 
+const GRACE_WINDOW_ATTEMPTS = 3;
+const GRACE_WINDOW_DELAY_MS = 20_000;
+const SLOW_POLL_DELAY_MS = 10 * 60 * 1000;
+
 function disconnectSocket(options?: { keepReconnectIntent?: boolean }): void {
   clearReconnectTimer();
   shouldReconnect = options?.keepReconnectIntent ?? false;
@@ -3476,7 +3453,12 @@ function scheduleReconnect(
   }
 
   reconnectAttempts += 1;
-  const delayMs = Math.min(10_000, 1_000 * 2 ** Math.min(reconnectAttempts - 1, 3));
+
+  if (reconnectAttempts === GRACE_WINDOW_ATTEMPTS + 1) {
+    set({ offlineMode: true, notice: getDisconnectedModeNotice() });
+  }
+
+  const delayMs = reconnectAttempts > GRACE_WINDOW_ATTEMPTS ? SLOW_POLL_DELAY_MS : GRACE_WINDOW_DELAY_MS;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     if (!shouldReconnect) {

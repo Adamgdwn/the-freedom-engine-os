@@ -3,6 +3,7 @@ import {
   BookOpen,
   Bot,
   CalendarCheck,
+  Download,
   FolderSearch,
   FlaskConical,
   Fingerprint,
@@ -30,6 +31,7 @@ export const CONTROL_PLANE_NAVIGATION: NavigationItem[] = [
   { href: '/learning-registry', label: 'Learning Registry', shortLabel: 'Learning', icon: BookOpen },
   { href: '/personality', label: 'Personality', shortLabel: 'Persona', icon: Fingerprint },
   { href: '/model-router', label: 'Model Router', shortLabel: 'Router', icon: Shuffle },
+  { href: '/downloads', label: 'Downloads', shortLabel: 'Download', icon: Download },
 ];
 
 export function isNavigationItemActive(pathname: string, href: string) {

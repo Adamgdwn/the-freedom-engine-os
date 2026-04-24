@@ -6,10 +6,22 @@ const repoRoot = path.resolve(new URL(".", import.meta.url).pathname, "..");
 dotenv.config({ path: path.join(repoRoot, ".env"), override: true });
 
 const defaultBaseUrl = process.env.MOBILE_DEFAULT_BASE_URL?.trim() || "";
-const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED?.trim() === "true";
-const configuredDisconnectedAssistantBaseUrl = process.env.MOBILE_DISCONNECTED_ASSISTANT_BASE_URL?.trim() || "";
+const relayBaseUrl = process.env.MOBILE_RELAY_BASE_URL?.trim() || "";
+const relaySharedSecret = process.env.FREEDOM_RELAY_SHARED_SECRET?.trim() || "";
+const configuredDisconnectedAssistantBaseUrl =
+  process.env.MOBILE_DISCONNECTED_ASSISTANT_BASE_URL?.trim() || relayBaseUrl;
 const disconnectedAssistantBaseUrl = configuredDisconnectedAssistantBaseUrl;
-const disconnectedAssistantMode = bundledOfflineEnabled ? "bundled_model" : configuredDisconnectedAssistantBaseUrl ? "cloud" : "notes_only";
+const disconnectedAssistantMode = configuredDisconnectedAssistantBaseUrl ? "cloud" : "notes_only";
+if (disconnectedAssistantMode !== "cloud") {
+  process.stderr.write(
+    "warn: MOBILE_RELAY_BASE_URL is not set; this build falls back to notes_only and Freedom Anywhere will not have a stand-alone brain.\n"
+  );
+}
+if (disconnectedAssistantMode === "cloud" && !relaySharedSecret) {
+  process.stderr.write(
+    "warn: FREEDOM_RELAY_SHARED_SECRET is empty; relay calls from the mobile app will be rejected by the relay.\n"
+  );
+}
 const requestedVoiceRuntimeMode = process.env.MOBILE_VOICE_RUNTIME_MODE?.trim();
 const voiceRuntimeMode = requestedVoiceRuntimeMode === "device_fallback" ? "device_fallback" : "realtime_primary";
 const voiceSessionEnabled = process.env.MOBILE_VOICE_SESSION_ENABLED?.trim() !== "false";
@@ -35,6 +47,8 @@ await fs.writeFile(
   `export const DEFAULT_BASE_URL = ${JSON.stringify(defaultBaseUrl)};\n` +
     `export const DISCONNECTED_ASSISTANT_MODE = ${JSON.stringify(disconnectedAssistantMode)};\n` +
     `export const DISCONNECTED_ASSISTANT_BASE_URL = ${JSON.stringify(disconnectedAssistantBaseUrl)};\n` +
+    `export const RELAY_BASE_URL = ${JSON.stringify(relayBaseUrl)};\n` +
+    `export const RELAY_SHARED_SECRET = ${JSON.stringify(relaySharedSecret)};\n` +
     `export const FCM_ENABLED = ${JSON.stringify(fcmEnabled)};\n` +
     `export const MOBILE_APP_VERSION_NAME = ${JSON.stringify(mobileAppVersionName)};\n` +
     `export const MOBILE_APP_VERSION_CODE = ${Number.isFinite(mobileAppVersionCode) ? mobileAppVersionCode : 0};\n` +

@@ -1,9 +1,11 @@
 export const DEFAULT_BASE_URL = "http://pop-os.taildcb5c5.ts.net:43111";
-export const DISCONNECTED_ASSISTANT_MODE = "notes_only";
-export const DISCONNECTED_ASSISTANT_BASE_URL = "";
+export const DISCONNECTED_ASSISTANT_MODE = "cloud";
+export const DISCONNECTED_ASSISTANT_BASE_URL = "http://100.101.116.15:43311";
+export const RELAY_BASE_URL = "http://100.101.116.15:43311";
+export const RELAY_SHARED_SECRET = "PUT_A_LONG_RANDOM_SECRET_HERE";
 export const FCM_ENABLED = false;
-export const MOBILE_APP_VERSION_NAME = "0.2.74";
-export const MOBILE_APP_VERSION_CODE = 81;
+export const MOBILE_APP_VERSION_NAME = "0.2.75";
+export const MOBILE_APP_VERSION_CODE = 82;
 export const VOICE_RUNTIME_MODE = "realtime_primary";
 export const VOICE_SESSION_ENABLED = true;
 export const VOICE_INTERRUPT_MIN_CHARS = 8;
