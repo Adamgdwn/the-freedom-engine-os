@@ -26,6 +26,13 @@ import type {
 } from "@freedom/shared";
 
 export class ApiClient {
+  getMemoryDigest(
+    token: string,
+    baseUrl: string
+  ): Promise<{ configured: boolean; updatedAt: string; context: string }> {
+    return this.request("GET", `${baseUrl}/host/memory-digest`, token);
+  }
+
   async completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse> {
     return this.request("POST", `${baseUrl}/pairing/complete`, undefined, {
       pairingCode,

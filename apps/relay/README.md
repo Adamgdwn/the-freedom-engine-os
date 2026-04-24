@@ -1,15 +1,22 @@
 # @freedom/relay
 
-Always-on relay that gives Freedom Anywhere a working brain and a LiveKit voice
-path when the desktop gateway is unreachable. This repo holds the canonical
-source; the relay is deployed to a small always-on Tailscale node (today: a
-phone running Termux; tomorrow: a Pi, NAS, or VPS).
+Always-on relay that gives Freedom Anywhere a bounded stand-alone brain and a
+LiveKit voice path when the desktop gateway is unreachable. This repo holds the
+canonical source; the relay is deployed to a small always-on Tailscale node
+(today: a phone running Termux; tomorrow: a Pi, NAS, or VPS).
+
+The relay is support infrastructure for Freedom, not a second assistant
+product. When the desktop is available, Freedom Anywhere should still prefer the
+desktop-linked runtime. When the desktop is unavailable, the relay should keep
+the phone useful for capture, planning, summaries, and bounded voice sessions
+without pretending it has the full governed desktop execution surface.
 
 ## What the relay does
 
 - `GET /health` — liveness + which secrets are wired up.
-- `POST /chat` — proxies chat completions to OpenAI for the phone's stand-alone
-  brain. Phone sends a conversation, relay returns the reply.
+- `POST /chat` — bounded stand-alone chat / summary fallback for the phone while
+  the desktop is unavailable. This path should stay behaviorally aligned with
+  the main Freedom runtime and not evolve into a separate assistant identity.
 - `POST /livekit-token` — mints a short-lived LiveKit room token so the phone
   can run premium voice without the desktop gateway.
 - `POST /desktop-pulse` — desktop gateway posts here on startup; relay fans out
@@ -40,6 +47,19 @@ FIREBASE_SERVICE_ACCOUNT_JSON=/absolute/path/to/service-account.json
 
 The shared secret must also be set on the desktop gateway (for `/desktop-pulse`)
 and passed into the mobile build (for `/chat` and `/livekit-token`).
+
+## Integration Notes
+
+- The relay is intentionally a fallback surface. It should preserve the same
+  `Freedom` identity and stand-alone boundaries described in the phone product
+  spec.
+- The current `/chat` route is a bounded OpenAI-backed fallback. If you later
+  run the full Freedom voice agent on the relay host, prefer keeping `/chat`
+  behavior aligned with that same runtime context instead of letting chat and
+  voice drift into different personalities or authority models.
+- The relay voice token response should continue matching the shared
+  `VoiceRuntimeSessionResponse` contract used by the gateway so mobile does not
+  need a second relay-specific runtime path.
 
 ## Run locally
 

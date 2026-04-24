@@ -6,15 +6,21 @@ export type RelayMessage = {
   content: string;
 };
 
+type RelayChatPurpose = "standalone_chat" | "offline_summary";
+
 const RELAY_TIMEOUT_MS = 20_000;
 
 export class RelayCompanionService {
-  async generateReply(messages: RelayMessage[]): Promise<string> {
-    const data = await this.post<{ reply: string }>("/chat", { messages });
+  async generateReply(messages: RelayMessage[], runtimeContext?: string): Promise<string> {
+    const data = await this.post<{ reply: string }>("/chat", {
+      messages,
+      purpose: "standalone_chat" satisfies RelayChatPurpose,
+      runtimeContext: runtimeContext?.trim() || undefined
+    });
     return data.reply;
   }
 
-  async summarizeDraftTurns(draftTurns: string[]): Promise<string> {
+  async summarizeDraftTurns(draftTurns: string[], runtimeContext?: string): Promise<string> {
     const messages: RelayMessage[] = [
       {
         role: "system",
@@ -26,7 +32,11 @@ export class RelayCompanionService {
         content: draftTurns.map((turn, i) => `${i + 1}. ${turn}`).join("\n")
       }
     ];
-    const data = await this.post<{ reply: string }>("/chat", { messages });
+    const data = await this.post<{ reply: string }>("/chat", {
+      messages,
+      purpose: "offline_summary" satisfies RelayChatPurpose,
+      runtimeContext: runtimeContext?.trim() || undefined
+    });
     return data.reply;
   }
 
@@ -34,7 +44,8 @@ export class RelayCompanionService {
     return this.post<VoiceRuntimeSessionResponse>("/livekit-token", {
       voiceSessionId: input.voiceSessionId,
       chatSessionId: input.chatSessionId ?? null,
-      assistantName: input.assistantName
+      assistantName: input.assistantName,
+      runtimeContext: typeof input.runtimeContext === "string" ? input.runtimeContext.trim() || null : null
     });
   }
 

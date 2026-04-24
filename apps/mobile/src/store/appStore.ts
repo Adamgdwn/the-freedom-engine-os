@@ -147,6 +147,12 @@ interface PendingExternalRequestState {
 
 interface OfflineImportState extends OfflineImportDraft {}
 
+interface CachedMemoryDigest {
+  configured: boolean;
+  updatedAt: string;
+  context: string;
+}
+
 export interface AppState {
   booting: boolean;
   refreshing: boolean;
@@ -160,6 +166,7 @@ export interface AppState {
   currentDeviceId: string | null;
   hostStatus: HostStatus | null;
   buildLaneSummary: ConversationBuildLaneSummary | null;
+  cachedMemoryDigest: CachedMemoryDigest | null;
   devices: PairedDevice[];
   sessions: ChatSession[];
   selectedSessionId: string | null;
@@ -649,7 +656,8 @@ async function persistOfflineSnapshot(get: () => AppState): Promise<void> {
     sessions: get().sessions,
     messagesBySession: get().messagesBySession,
     importsBySession: get().offlineImportDrafts,
-    selectedSessionId: get().selectedSessionId
+    selectedSessionId: get().selectedSessionId,
+    memoryDigest: get().cachedMemoryDigest
   });
 }
 
@@ -682,7 +690,11 @@ function updateSessionLocally(state: AppState, sessionId: string, overrides: Par
   );
 }
 
-function buildOfflineContextMessages(messages: ChatMessage[], prompt: string): RNLlamaOAICompatibleMessage[] {
+function buildOfflineContextMessages(
+  messages: ChatMessage[],
+  prompt: string,
+  memoryDigest: CachedMemoryDigest | null = null
+): RNLlamaOAICompatibleMessage[] {
   const history = messages
     .filter((item) => item.role === "user" || item.role === "assistant" || item.role === "system")
     .slice(-10)
@@ -691,17 +703,60 @@ function buildOfflineContextMessages(messages: ChatMessage[], prompt: string): R
       content: item.content
     }));
 
+  const cachedMemoryMessage = memoryDigest?.context?.trim()
+    ? [{
+        role: "system" as const,
+        content: `Cached durable memory:\n${memoryDigest.context.trim()}`
+      }]
+    : [];
+
   return [
     {
       role: "system",
       content: OFFLINE_ASSISTANT_SYSTEM_PROMPT
     },
+    ...cachedMemoryMessage,
     ...history,
     {
       role: "user",
       content: prompt
     }
   ];
+}
+
+function buildRelayRuntimeContext(messages: ChatMessage[], prompt: string): string {
+  const recentTurns = messages
+    .filter((item) => item.role === "user" || item.role === "assistant")
+    .slice(-6);
+  const assistantPreview = recentTurns
+    .filter((item) => item.role === "assistant")
+    .slice(-2)
+    .map((item) => item.content.trim())
+    .filter(Boolean)
+    .join("\n\n");
+
+  return [
+    "Phone posture: stand-alone fallback while the desktop is unavailable.",
+    "Desktop-backed governed execution is not available in this lane.",
+    `Current user request: ${prompt.trim()}`,
+    recentTurns.length ? `Recent cached turn count: ${recentTurns.length}` : null,
+    assistantPreview ? `Recent assistant preview:\n${assistantPreview}` : null
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildRelaySummaryContext(messages: ChatMessage[], draftTurns: string[]): string {
+  const latestUserPrompt = draftTurns.at(-1)?.trim() || "";
+  return [
+    "Phone posture: stand-alone fallback while the desktop is unavailable.",
+    "This summary is for later desktop review, not immediate execution.",
+    latestUserPrompt ? `Latest offline prompt: ${latestUserPrompt}` : null,
+    messages.length ? `Cached session message count: ${messages.length}` : null,
+    draftTurns.length ? `Offline draft turn count: ${draftTurns.length}` : null
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function truncateOfflinePreview(text: string): string {
@@ -744,31 +799,48 @@ async function ensureOfflineModelPrepared(
   });
 }
 
-async function requestDisconnectedAssistantReply(messages: ChatMessage[], prompt: string, baseUrl: string): Promise<string> {
+async function requestDisconnectedAssistantReply(
+  messages: ChatMessage[],
+  prompt: string,
+  baseUrl: string,
+  memoryDigest: CachedMemoryDigest | null
+): Promise<string> {
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
       return offlineAssistant.generateReply({
-        messages: buildOfflineContextMessages(messages, prompt)
+        messages: buildOfflineContextMessages(messages, prompt, memoryDigest)
       });
     case "cloud":
       return relayCompanion.generateReply(
-        buildOfflineContextMessages(messages, prompt).flatMap((message) => {
+        buildOfflineContextMessages(messages, prompt, memoryDigest).flatMap((message) => {
           if (message.role === "system" || message.role === "user" || message.role === "assistant") {
             return [{ role: message.role, content: typeof message.content === "string" ? message.content : "" }];
           }
           return [];
-        })
+        }),
+        buildRelayRuntimeContext(messages, prompt)
       );
     default:
       return buildNotesOnlyReply();
   }
 }
 
-async function requestDisconnectedImportSummary(messages: ChatMessage[], draftTurns: string[], baseUrl: string): Promise<string> {
+async function requestDisconnectedImportSummary(
+  messages: ChatMessage[],
+  draftTurns: string[],
+  baseUrl: string,
+  memoryDigest: CachedMemoryDigest | null
+): Promise<string> {
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
       return offlineAssistant.generateReply({
         messages: [
+          ...(memoryDigest?.context?.trim()
+            ? [{
+                role: "system" as const,
+                content: `Cached durable memory:\n${memoryDigest.context.trim()}`
+              }]
+            : []),
           {
             role: "system",
             content: "Summarize these offline mobile ideation notes for later desktop review. Keep it factual, concise, and focused on next steps."
@@ -782,7 +854,7 @@ async function requestDisconnectedImportSummary(messages: ChatMessage[], draftTu
         temperature: 0.35
       });
     case "cloud":
-      return relayCompanion.summarizeDraftTurns(draftTurns);
+      return relayCompanion.summarizeDraftTurns(draftTurns, buildRelaySummaryContext(messages, draftTurns));
     default:
       return buildOfflineImportSummaryFallback(messages, draftTurns);
   }
@@ -879,7 +951,7 @@ async function sendOfflineIdeationTurn(
     const reply =
       getDisconnectedAssistantMode() === "bundled_model"
         ? await offlineAssistant.generateReply({
-            messages: buildOfflineContextMessages(messages, text),
+            messages: buildOfflineContextMessages(messages, text, get().cachedMemoryDigest),
             onToken: (content) => {
               const updatedAt = new Date().toISOString();
               set((state) => ({
@@ -894,7 +966,7 @@ async function sendOfflineIdeationTurn(
               }));
             }
           })
-        : await requestDisconnectedAssistantReply(messages, text, get().baseUrl);
+        : await requestDisconnectedAssistantReply(messages, text, get().baseUrl, get().cachedMemoryDigest);
     const completedAt = new Date().toISOString();
     set((state) => ({
       sendingMessage: false,
@@ -963,6 +1035,7 @@ export const useAppStore = create<AppState>((set, get) => {
   currentDeviceId: null,
   hostStatus: null,
   buildLaneSummary: null,
+  cachedMemoryDigest: null,
   devices: [],
   sessions: [],
   selectedSessionId: null,
@@ -1140,6 +1213,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selectedSessionId: cachedOfflineState?.selectedSessionId ?? null,
       messagesBySession: cachedOfflineState?.messagesBySession ?? {},
       offlineImportDrafts: cachedOfflineState?.importsBySession ?? {},
+      cachedMemoryDigest: cachedOfflineState?.memoryDigest ?? null,
       voiceAvailable: realtimeVoiceAvailable || deviceVoiceAvailable,
       voiceRuntimeMode: resolvedVoiceRuntimeMode,
       voiceRuntimeBinding: null,
@@ -1324,7 +1398,7 @@ export const useAppStore = create<AppState>((set, get) => {
     set({ refreshing: true });
     try {
       const previousView = get().view;
-      const [hostStatus, buildLaneSummary, sessions, devices, outboundRecipients] = await Promise.all([
+      const [hostStatus, buildLaneSummary, sessions, devices, outboundRecipients, memoryDigest] = await Promise.all([
         api.getHostStatus(token, baseUrl),
         api.getBuildLaneSummary(token, baseUrl).catch((error) => {
           if (error instanceof Error && isNotFoundErrorMessage(error.message)) {
@@ -1339,7 +1413,8 @@ export const useAppStore = create<AppState>((set, get) => {
             return [];
           }
           throw error;
-        })
+        }),
+        api.getMemoryDigest(token, baseUrl).catch(() => get().cachedMemoryDigest)
       ]);
       const mergedSessions = mergeRemoteAndLocalSessions(sessions, get().sessions);
       const currentSelected = get().selectedSessionId;
@@ -1370,6 +1445,7 @@ export const useAppStore = create<AppState>((set, get) => {
       set({
         hostStatus,
         buildLaneSummary,
+        cachedMemoryDigest: memoryDigest ?? null,
         wakeControl: hostStatus.wakeControl,
         devices,
         outboundRecipients,
@@ -1850,7 +1926,12 @@ export const useAppStore = create<AppState>((set, get) => {
     set({ offlineSummarizing: true, notice: "Summarizing offline ideation for import review.", error: null });
     try {
       await ensureOfflineModelPrepared(set);
-      const summary = await requestDisconnectedImportSummary(get().messagesBySession[sessionId] ?? [], draft.draftTurns, get().baseUrl);
+      const summary = await requestDisconnectedImportSummary(
+        get().messagesBySession[sessionId] ?? [],
+        draft.draftTurns,
+        get().baseUrl,
+        get().cachedMemoryDigest
+      );
       set((state) => ({
         offlineSummarizing: false,
         offlineImportDrafts: {
@@ -2980,10 +3061,12 @@ async function startRealtimeVoiceSession(
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
   targetSessionId: string
 ): Promise<void> {
+  const runtimeContext = get().cachedMemoryDigest?.context?.trim() || undefined;
   const sessionInput = {
     voiceSessionId: createVoiceSessionId(),
     chatSessionId: targetSessionId,
-    assistantName: FREEDOM_PRODUCT_NAME
+    assistantName: FREEDOM_PRODUCT_NAME,
+    runtimeContext
   };
 
   const runtime = get().offlineMode && RELAY_BASE_URL

@@ -144,19 +144,21 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     def on_user_input_transcribed(event) -> None:
         nonlocal user_transcript_count
         transcript = getattr(event, "transcript", "").strip()
+        is_final = bool(getattr(event, "is_final", True))
         if transcript:
-            user_transcript_count += 1
-            persist_voice_runtime_transcript(
-                ctx.room.name,
-                f"{ctx.room.name}:user:{user_transcript_count}",
-                "user",
-                transcript,
-            )
+            if is_final:
+                user_transcript_count += 1
+                persist_voice_runtime_transcript(
+                    ctx.room.name,
+                    f"{ctx.room.name}:user:{user_transcript_count}",
+                    "user",
+                    transcript,
+                )
             asyncio.create_task(publish_event({
                 "type": "transcript",
                 "text": transcript,
                 "source": "user",
-                "final": True,
+                "final": is_final,
             }))
 
     @session.on("conversation_item_added")

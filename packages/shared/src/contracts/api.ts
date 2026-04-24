@@ -41,6 +41,12 @@ export interface HostWorkPollOptions {
   acceptQueued?: boolean;
 }
 
+export interface HostMemoryDigestResponse {
+  configured: boolean;
+  updatedAt: string | null;
+  context: string;
+}
+
 export interface MobileApi {
   completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse>;
   getHostStatus(token: string): Promise<HostStatus>;
@@ -77,6 +83,7 @@ export interface HostApi {
   failTurn(token: string, input: HostFailTurnRequest): Promise<ChatSession>;
   interruptTurn(token: string, input: HostInterruptTurnRequest): Promise<ChatSession>;
   getHostStatus(token: string): Promise<HostStatus>;
+  getMemoryDigest(token: string): Promise<HostMemoryDigestResponse>;
   getVoiceProfile(token: string): Promise<HostVoiceProfileResponse>;
   getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
   updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse>;

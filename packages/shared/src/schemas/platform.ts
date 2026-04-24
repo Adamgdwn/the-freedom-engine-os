@@ -467,7 +467,8 @@ export const realtimeTicketResponseSchema = z.object({
 export const createVoiceRuntimeSessionRequestSchema = z.object({
   voiceSessionId: z.string().min(8).max(120),
   chatSessionId: z.string().min(1),
-  assistantName: z.string().min(1).max(120).optional()
+  assistantName: z.string().min(1).max(120).optional(),
+  runtimeContext: z.string().min(1).max(16000).optional()
 });
 
 export const voiceRuntimeSessionResponseSchema = z.object({

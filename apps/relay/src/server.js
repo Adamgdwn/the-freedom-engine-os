@@ -11,11 +11,13 @@ const startedAt = new Date().toISOString();
 const relaySharedSecret = process.env.FREEDOM_RELAY_SHARED_SECRET?.trim() || "";
 const openaiApiKey = process.env.OPENAI_API_KEY?.trim() || "";
 const openaiModel = process.env.FREEDOM_RELAY_OPENAI_MODEL?.trim() || "gpt-4o-mini";
+const relayRealtimeModel = process.env.FREEDOM_RELAY_REALTIME_MODEL?.trim() || "gpt-realtime-mini";
 const livekitApiKey = process.env.LIVEKIT_API_KEY?.trim() || "";
 const livekitApiSecret = process.env.LIVEKIT_API_SECRET?.trim() || "";
 const livekitUrl = process.env.LIVEKIT_URL?.trim() || "";
 const firebaseProjectId = process.env.FIREBASE_PROJECT_ID?.trim() || "";
 const firebaseServiceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() || "";
+const relayVoiceBootstraps = new Map();
 
 let firebaseMessaging = null;
 
@@ -36,6 +38,16 @@ async function loadFirebaseMessaging() {
 }
 
 const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
+const RELAY_STANDALONE_CHAT_PROMPT = [
+  "You are Freedom supporting Freedom Anywhere while the desktop is unavailable.",
+  "Freedom Anywhere is the phone doorway into Freedom, not a separate assistant product.",
+  "In stand-alone mode, help with capture, planning, brainstorming, summaries, and practical next steps until the desktop returns.",
+  "Do not claim live desktop access, governed execution, canonical sync, durable memory reads, or completed actions you cannot verify here.",
+  "If a request needs deeper business execution, coding, or governed autonomy, frame the next best step and preserve intent for the main Freedom runtime.",
+  "Keep replies concise, practical, and consistent with Freedom's calm operating posture."
+].join(" ");
+const RELAY_STANDALONE_SUMMARY_PROMPT =
+  "Summarize this stand-alone Freedom Anywhere work for later desktop review. Keep it factual, concise, and focused on next steps.";
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
@@ -69,6 +81,10 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (req.method === "GET" && url.pathname === "/voice-runtime-bootstrap") {
+      return handleVoiceRuntimeBootstrap(req, res, url);
+    }
+
     if (req.method === "POST" && url.pathname === "/chat") {
       return handleChat(req, res);
     }
@@ -92,14 +108,18 @@ async function handleChat(req, res) {
   if (!openai) return sendJson(res, 503, { error: "OPENAI_API_KEY is not configured on the relay." });
 
   const body = await readJson(req);
-  const messages = Array.isArray(body?.messages) ? body.messages : null;
+  const messages = normalizeMessages(body?.messages);
   if (!messages || messages.length === 0) {
     return sendJson(res, 400, { error: "messages[] is required." });
   }
 
+  const purpose = typeof body?.purpose === "string" ? body.purpose.trim() : "standalone_chat";
+  const runtimeContext = typeof body?.runtimeContext === "string" ? body.runtimeContext.trim() : "";
+  const systemMessages = buildRelaySystemMessages(purpose, runtimeContext);
+
   const completion = await openai.chat.completions.create({
     model: body.model?.trim() || openaiModel,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    messages: [...systemMessages, ...messages].map((m) => ({ role: m.role, content: m.content })),
     temperature: typeof body.temperature === "number" ? body.temperature : 0.6
   });
 
@@ -122,6 +142,14 @@ async function handleLivekitToken(req, res) {
   const voiceSessionId = /^voice-mobile-[a-z0-9-]{8,}$/.test(rawVoiceSessionId)
     ? rawVoiceSessionId
     : `voice-mobile-${randomUUID()}`;
+  const chatSessionId = typeof body?.chatSessionId === "string" ? body.chatSessionId.trim() : "";
+  if (!chatSessionId) {
+    return sendJson(res, 400, { error: "chatSessionId is required." });
+  }
+  const assistantName = typeof body?.assistantName === "string" && body.assistantName.trim()
+    ? body.assistantName.trim()
+    : "Freedom";
+  const runtimeContext = typeof body?.runtimeContext === "string" ? body.runtimeContext.trim() : "";
   const hostId = typeof body?.hostId === "string" && body.hostId.trim() ? body.hostId.trim() : "standalone";
   const roomName = `${hostId}-${voiceSessionId}`;
   const participantIdentity = `voice-mobile-${randomUUID()}`;
@@ -139,6 +167,16 @@ async function handleLivekitToken(req, res) {
     canSubscribe: true
   });
 
+  relayVoiceBootstraps.set(roomName, {
+    roomName,
+    chatSessionId,
+    runtimeContext,
+    assistantName,
+    createdAt: new Date().toISOString(),
+    expiresAt
+  });
+  pruneExpiredVoiceBootstraps();
+
   return sendJson(res, 200, {
     token: await accessToken.toJwt(),
     wsUrl: livekitUrl,
@@ -147,16 +185,40 @@ async function handleLivekitToken(req, res) {
     expiresAt,
     binding: {
       voiceSessionId,
-      chatSessionId: typeof body?.chatSessionId === "string" ? body.chatSessionId : null,
-      assistantName: typeof body?.assistantName === "string" ? body.assistantName : "Freedom",
+      chatSessionId,
+      assistantName,
+      model: relayRealtimeModel,
       runtimeMode: "realtime_primary",
       transport: "livekit_webrtc",
       roomName,
       participantIdentity,
-      degraded: false,
-      source: "relay"
+      degraded: false
     }
   });
+}
+
+function handleVoiceRuntimeBootstrap(req, res, url) {
+  if (!requireSharedSecret(req, res)) return;
+  pruneExpiredVoiceBootstraps();
+  const roomName = url.searchParams.get("roomName")?.trim();
+  if (!roomName) {
+    return sendJson(res, 400, { error: "roomName is required." });
+  }
+  const bootstrap = relayVoiceBootstraps.get(roomName);
+  if (!bootstrap) {
+    return sendJson(res, 404, { error: "Voice runtime bootstrap not found." });
+  }
+  return sendJson(res, 200, bootstrap);
+}
+
+function pruneExpiredVoiceBootstraps() {
+  const now = Date.now();
+  for (const [roomName, bootstrap] of relayVoiceBootstraps.entries()) {
+    const expiresAt = Date.parse(bootstrap.expiresAt || "");
+    if (Number.isFinite(expiresAt) && expiresAt < now - 5 * 60 * 1000) {
+      relayVoiceBootstraps.delete(roomName);
+    }
+  }
 }
 
 async function handleDesktopPulse(req, res) {
@@ -199,6 +261,40 @@ function requireSharedSecret(req, res) {
     return false;
   }
   return true;
+}
+
+function buildRelaySystemMessages(purpose, runtimeContext) {
+  const basePrompt = purpose === "offline_summary"
+    ? RELAY_STANDALONE_SUMMARY_PROMPT
+    : RELAY_STANDALONE_CHAT_PROMPT;
+  const contextBlock = runtimeContext
+    ? `Stand-alone runtime context:\n${runtimeContext}`
+    : null;
+
+  return [
+    { role: "system", content: basePrompt },
+    ...(contextBlock ? [{ role: "system", content: contextBlock }] : [])
+  ];
+}
+
+function normalizeMessages(value) {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value.flatMap((message) => {
+    if (!message || typeof message !== "object") {
+      return [];
+    }
+
+    const role = typeof message.role === "string" ? message.role.trim() : "";
+    const content = typeof message.content === "string" ? message.content.trim() : "";
+    if (!content || (role !== "system" && role !== "user" && role !== "assistant")) {
+      return [];
+    }
+
+    return [{ role, content }];
+  });
 }
 
 async function readJson(req) {

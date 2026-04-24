@@ -212,6 +212,11 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/host/memory-digest") {
+      sendJson(res, 200, await store.getMemoryDigest(readBearer(req)));
+      return;
+    }
+
     if (method === "GET" && url.pathname === "/api/desktop-shell/state") {
       assertLoopbackRequest(req);
       sendJson(res, 200, await store.getDesktopShellState());

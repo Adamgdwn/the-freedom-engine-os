@@ -1,3 +1,5 @@
+import { loadFreedomRuntimeContext } from "@/lib/freedom-runtime-context";
+
 export type MobileCompanionMessage = {
   role: "system" | "user" | "assistant";
   content: string;
@@ -75,10 +77,16 @@ export async function requestMobileCompanionReply(input: MobileCompanionReplyReq
     };
   }
 
+  const runtimeContext = await loadFreedomRuntimeContext({ messages });
+  const runtimeContextMessage = runtimeContext
+    ? [{ role: "system" as const, content: `Runtime context:\n${runtimeContext}` }]
+    : [];
+
   return {
     text: await requestOpenAIChat(
       [
         { role: "system", content: MOBILE_COMPANION_REPLY_PROMPT },
+        ...runtimeContextMessage,
         ...messages
       ],
       0.55
@@ -93,10 +101,19 @@ export async function requestMobileCompanionSummary(input: MobileCompanionSummar
     throw new Error("No draft turns were provided.");
   }
 
+  const runtimeContext = await loadFreedomRuntimeContext({
+    messages: draftTurns.map((turn) => ({ role: "user" as const, content: turn })),
+    messageLimit: 4,
+  });
+  const runtimeContextMessage = runtimeContext
+    ? [{ role: "system" as const, content: `Runtime context:\n${runtimeContext}` }]
+    : [];
+
   return {
     text: await requestOpenAIChat(
       [
         { role: "system", content: MOBILE_COMPANION_SUMMARY_PROMPT },
+        ...runtimeContextMessage,
         {
           role: "user",
           content: draftTurns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")

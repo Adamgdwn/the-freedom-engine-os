@@ -259,6 +259,40 @@ def _gateway_request(
     return parsed if isinstance(parsed, dict) else None
 
 
+def _relay_request(
+    method: str,
+    pathname: str,
+    body: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    relay_base_url = os.getenv("FREEDOM_RELAY_BASE_URL") or "http://127.0.0.1:43211"
+    relay_secret = os.getenv("FREEDOM_RELAY_SHARED_SECRET")
+    if not relay_base_url or not relay_secret:
+        return None
+
+    endpoint = parse.urljoin(relay_base_url.rstrip("/") + "/", pathname.lstrip("/"))
+    payload = None if body is None else json.dumps(body).encode("utf-8")
+    req = request.Request(endpoint, data=payload, method=method)
+    req.add_header("x-freedom-relay-secret", relay_secret)
+    if payload is not None:
+        req.add_header("Content-Type", "application/json")
+
+    try:
+        with request.urlopen(req, timeout=5) as response:
+            raw = response.read().decode("utf-8")
+    except (error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+
+    if not raw.strip():
+        return None
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _loopback_gateway_base_url() -> str:
     host_state = _read_host_runtime_state() or {}
     gateway_url = os.getenv("FREEDOM_GATEWAY_URL") or host_state.get("gatewayUrl") or "http://127.0.0.1:43111"
@@ -399,7 +433,21 @@ def get_voice_runtime_bootstrap(room_name: str | None) -> dict[str, object] | No
     if not room_name:
         return None
     encoded_room_name = parse.quote(room_name, safe="")
-    return _gateway_request("GET", f"/host/voice-runtime-bootstrap?roomName={encoded_room_name}")
+    return _gateway_request(
+        "GET",
+        f"/host/voice-runtime-bootstrap?roomName={encoded_room_name}",
+    ) or _relay_request(
+        "GET",
+        f"/voice-runtime-bootstrap?roomName={encoded_room_name}",
+    )
+
+
+def get_relay_runtime_context(room_name: str | None) -> str:
+    bootstrap = get_voice_runtime_bootstrap(room_name)
+    if not isinstance(bootstrap, dict):
+        return ""
+    runtime_context = bootstrap.get("runtimeContext")
+    return str(runtime_context).strip() if isinstance(runtime_context, str) else ""
 
 
 def persist_voice_runtime_transcript(
@@ -1012,6 +1060,7 @@ def get_recent_thread_context(room_name: str | None, limit: int = 8) -> str:
 
 def build_runtime_context(room_name: str | None = None) -> str:
     sections = [
+        get_relay_runtime_context(room_name),
         get_recent_thread_context(room_name),
         get_open_task_context(),
         get_learning_signal_context(),

@@ -20,6 +20,11 @@ export interface StoredOfflineState {
   messagesBySession: Record<string, ChatMessage[]>;
   importsBySession: Record<string, OfflineImportDraft>;
   selectedSessionId: string | null;
+  memoryDigest?: {
+    configured: boolean;
+    updatedAt: string;
+    context: string;
+  } | null;
 }
 
 function trimMessages(messages: ChatMessage[]): ChatMessage[] {
@@ -46,7 +51,8 @@ function trimState(state: StoredOfflineState): StoredOfflineState {
     sessions,
     messagesBySession,
     importsBySession,
-    selectedSessionId: state.selectedSessionId && allowedSessionIds.has(state.selectedSessionId) ? state.selectedSessionId : sessions[0]?.id ?? null
+    selectedSessionId: state.selectedSessionId && allowedSessionIds.has(state.selectedSessionId) ? state.selectedSessionId : sessions[0]?.id ?? null,
+    memoryDigest: state.memoryDigest ?? null
   };
 }
 

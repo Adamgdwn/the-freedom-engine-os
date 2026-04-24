@@ -8,6 +8,7 @@ import type {
   HostFailTurnRequest,
   HostHeartbeatRequest,
   HostInterruptTurnRequest,
+  HostMemoryDigestResponse,
   HostVoiceProfileResponse,
   HostStartTurnRequest,
   HostStatus,
@@ -62,6 +63,10 @@ export class HttpGatewayClient implements HostApi {
 
   getHostStatus(token: string): Promise<HostStatus> {
     return this.request("GET", "/host/status", token);
+  }
+
+  getMemoryDigest(token: string): Promise<HostMemoryDigestResponse> {
+    return this.request("GET", "/host/memory-digest", token);
   }
 
   getVoiceProfile(token: string): Promise<HostVoiceProfileResponse> {
