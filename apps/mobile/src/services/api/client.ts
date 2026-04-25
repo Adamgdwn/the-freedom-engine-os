@@ -19,6 +19,8 @@ import type {
   RenameDeviceRequest,
   SendExternalMessageRequest,
   SendExternalMessageResponse,
+  SyncMobileLearningSignalsRequest,
+  SyncMobileLearningSignalsResponse,
   VoiceRuntimeSessionResponse,
   UpdateNotificationPrefsRequest,
   UpdateHostVoiceProfileRequest,
@@ -26,6 +28,13 @@ import type {
 } from "@freedom/shared";
 
 export class ApiClient {
+  getMemoryDigest(
+    token: string,
+    baseUrl: string
+  ): Promise<{ configured: boolean; updatedAt: string; context: string }> {
+    return this.request("GET", `${baseUrl}/host/memory-digest`, token);
+  }
+
   async completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse> {
     return this.request("POST", `${baseUrl}/pairing/complete`, undefined, {
       pairingCode,
@@ -100,6 +109,14 @@ export class ApiClient {
     input: CreateVoiceRuntimeSessionRequest
   ): Promise<VoiceRuntimeSessionResponse> {
     return this.request("POST", `${baseUrl}/voice/runtime/session`, token, input);
+  }
+
+  syncMobileLearningSignals(
+    token: string,
+    baseUrl: string,
+    input: SyncMobileLearningSignalsRequest
+  ): Promise<SyncMobileLearningSignalsResponse> {
+    return this.request("POST", `${baseUrl}/host/learning-signals/sync`, token, input);
   }
 
   renameDevice(token: string, baseUrl: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice> {

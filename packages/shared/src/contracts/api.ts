@@ -21,6 +21,8 @@ import type {
   PairedDevice,
   PostMessageRequest,
   RealtimeTicketResponse,
+  SyncMobileLearningSignalsRequest,
+  SyncMobileLearningSignalsResponse,
   RegisterPushTokenRequest,
   RegisterHostRequest,
   RegisterHostResponse,
@@ -41,6 +43,12 @@ export interface HostWorkPollOptions {
   acceptQueued?: boolean;
 }
 
+export interface HostMemoryDigestResponse {
+  configured: boolean;
+  updatedAt: string | null;
+  context: string;
+}
+
 export interface MobileApi {
   completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse>;
   getHostStatus(token: string): Promise<HostStatus>;
@@ -56,6 +64,7 @@ export interface MobileApi {
   stopSession(token: string, sessionId: string): Promise<ChatSession>;
   createRealtimeTicket(token: string): Promise<RealtimeTicketResponse>;
   createVoiceRuntimeSession(token: string, input: CreateVoiceRuntimeSessionRequest): Promise<VoiceRuntimeSessionResponse>;
+  syncMobileLearningSignals(token: string, input: SyncMobileLearningSignalsRequest): Promise<SyncMobileLearningSignalsResponse>;
   renameDevice(token: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice>;
   revokeDevice(token: string, deviceId: string): Promise<PairedDevice>;
   registerPushToken(token: string, deviceId: string, input: RegisterPushTokenRequest): Promise<PairedDevice>;
@@ -77,6 +86,7 @@ export interface HostApi {
   failTurn(token: string, input: HostFailTurnRequest): Promise<ChatSession>;
   interruptTurn(token: string, input: HostInterruptTurnRequest): Promise<ChatSession>;
   getHostStatus(token: string): Promise<HostStatus>;
+  getMemoryDigest(token: string): Promise<HostMemoryDigestResponse>;
   getVoiceProfile(token: string): Promise<HostVoiceProfileResponse>;
   getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
   updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse>;

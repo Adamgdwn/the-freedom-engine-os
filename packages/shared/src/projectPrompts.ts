@@ -91,6 +91,9 @@ export function buildTurnPrompt(input: TurnPromptInput): string {
     input.sessionTitle?.trim() ? `- Session title: ${input.sessionTitle.trim()}` : null,
     input.sessionKind ? `- Session kind: ${input.sessionKind}` : null,
     input.responseStyle ? `- Preferred response style: ${humanizeResponseStyle(input.responseStyle)}` : null,
+    "- The user request below is the canonical content for this turn.",
+    "- If it contains literal values such as email addresses, phone numbers, URLs, IDs, code, or quoted text, treat them as present exactly as written.",
+    "- Do not claim you cannot read or see text that appears in the user request.",
     input.inputMode === "voice"
       ? "- The user sent this from voice input. Focus on intent and do not nitpick transcription quirks."
       : null,

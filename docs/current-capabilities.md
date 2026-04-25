@@ -1,6 +1,6 @@
 # Current Capabilities
 
-Last updated: 2026-04-22
+Last updated: 2026-04-25
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -65,6 +65,9 @@ or the boundary between modeled and fully operational capability.
 - Premium mobile realtime voice now persists final user and assistant transcript turns
   into the threaded gateway history and restores recent thread context when a new voice
   session starts, so conversation continuity is no longer lost at session boundaries.
+- That same new-session continuity bootstrap is now aligned across desktop gateway and
+  stand-alone relay voice paths, so Freedom Anywhere does not switch to a weaker
+  room-memory model just because the desktop is unavailable.
 - Realtime mobile interruption now suppresses the phone-local spoken-reply path during
   the active LiveKit session, which prevents the old split-brain "two voices after
   interrupt" behavior from replaying stale local transcript audio beside the live reply.
@@ -76,6 +79,8 @@ or the boundary between modeled and fully operational capability.
 - Durable storage of approval-gated self-programming requests.
 - Durable storage of persona overlays and persona-adjustment requests.
 - Supabase-backed server-side memory load and persist path.
+- Paired-mobile write-back path for stand-alone `learning` signals into the same
+  canonical Freedom memory store used by connected runtime surfaces.
 - Runtime read access for Freedom to inspect open tasks, recent learning signals,
   pending self-programming requests, approved persona overlays, and trusted email recipients during voice sessions.
 - Runtime read access for the live voice agent to inspect governed repo control files
@@ -126,6 +131,9 @@ or the boundary between modeled and fully operational capability.
   `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured, later sync imports
   those notes as non-executing history, and optional builds can still bundle the old
   on-device model only when explicitly requested.
+- During stand-alone review/import flow, Freedom Anywhere can now queue conservative
+  durable `learning` candidates locally and sync them back into Freedom's canonical
+  learning store once the paired desktop path is available again.
 - The current live slim build still compiles the offline-safe fallback as `notes_only` because no
   explicit `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is configured in the active repo env.
 - Freedom Anywhere now emphasizes:
@@ -197,7 +205,9 @@ or the boundary between modeled and fully operational capability.
   typed model layer:
   when Freedom should document, summarize, archive, discard, learn a new skill, and where
   durable documents should live for future retrieval.
-- Those decisions are not yet wired into live chat disposition, document placement, or retrieval workflows.
+- Those decisions are not yet fully wired into live chat disposition, document placement,
+  or retrieval workflows, although stand-alone mobile now has an initial durable-learning
+  extraction and canonical sync path for bounded `learning` signals.
 
 ### Model Routing
 
@@ -242,6 +252,8 @@ or the boundary between modeled and fully operational capability.
   agent-control page rather than existing only as roadmap documentation.
 - Approval still gates actual code execution, release, external spend, and connector
   expansion; this is a real runtime routing loop, not approval-free self-modification.
+- Stand-alone mobile sync is currently limited to durable `learning` signals; it does
+  not yet auto-sync self-programming requests or persona changes, by design.
 
 ### Autonomous Research
 
@@ -294,4 +306,7 @@ or the boundary between modeled and fully operational capability.
 - Replace stub venture/approval/weekly-metric tools with real Supabase-backed retrieval.
 - Connect modeled model-routing policy to real runtime decisions.
 - Turn approved self-programming requests into a governed execution pipeline.
+- Extend the new stand-alone learning-sync foundation into reviewed/offline-safe
+  self-programming and persona-improvement proposals only after their governance and
+  provenance posture is explicit.
 - Unify the older mobile/gateway email recipient store with the newer control-plane email store if a single recipient registry is desired.

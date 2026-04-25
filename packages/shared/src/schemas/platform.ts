@@ -50,6 +50,8 @@ export const outboundChannelSchema = z.enum(["email"]);
 export const wakeRequestStatusSchema = z.enum(["sent", "awake", "timeout", "error"]);
 export const voiceRuntimeModeSchema = z.enum(["realtime_primary", "device_fallback", "on_device_offline"]);
 export const voiceTransportSchema = z.enum(["livekit_webrtc", "device_local"]);
+export const learningSignalKindSchema = z.enum(["preference", "focus", "workflow", "capability"]);
+export const learningSignalStatusSchema = z.enum(["observed", "tracking", "internalized"]);
 export const assistantVoicePresetSchema = z.enum(assistantVoicePresetIds);
 export const voiceGenderPresentationSchema = z.enum(voiceGenderPresentationIds);
 export const voiceWarmthSchema = z.enum(voiceWarmthIds);
@@ -467,7 +469,37 @@ export const realtimeTicketResponseSchema = z.object({
 export const createVoiceRuntimeSessionRequestSchema = z.object({
   voiceSessionId: z.string().min(8).max(120),
   chatSessionId: z.string().min(1),
-  assistantName: z.string().min(1).max(120).optional()
+  assistantName: z.string().min(1).max(120).optional(),
+  runtimeContext: z.string().min(1).max(16000).optional(),
+  recentMessages: z.array(z.object({
+    id: z.string().min(1).max(160),
+    role: z.union([z.literal("user"), z.literal("assistant")]),
+    content: z.string().min(1).max(8000),
+    createdAt: z.string().datetime()
+  })).max(10).optional()
+});
+
+export const mobileLearningSignalSchema = z.object({
+  id: z.string().min(1).max(160),
+  topic: z.string().min(1).max(200),
+  summary: z.string().min(1).max(1000),
+  kind: learningSignalKindSchema,
+  status: learningSignalStatusSchema,
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  sourceSessionId: z.string().min(1).max(160).nullable().optional(),
+  capturedAt: z.string().datetime().optional()
+});
+
+export const syncMobileLearningSignalsRequestSchema = z.object({
+  signals: z.array(mobileLearningSignalSchema).max(20)
+});
+
+export const syncMobileLearningSignalsResponseSchema = z.object({
+  configured: z.boolean(),
+  synced: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  syncedSignalIds: z.array(z.string().min(1).max(160)).max(20)
 });
 
 export const voiceRuntimeSessionResponseSchema = z.object({
@@ -621,6 +653,9 @@ export type StreamEvent = z.infer<typeof streamEventSchema>;
 export type RealtimeTicketResponse = z.infer<typeof realtimeTicketResponseSchema>;
 export type CreateVoiceRuntimeSessionRequest = z.infer<typeof createVoiceRuntimeSessionRequestSchema>;
 export type VoiceRuntimeSessionResponse = z.infer<typeof voiceRuntimeSessionResponseSchema>;
+export type MobileLearningSignal = z.infer<typeof mobileLearningSignalSchema>;
+export type SyncMobileLearningSignalsRequest = z.infer<typeof syncMobileLearningSignalsRequestSchema>;
+export type SyncMobileLearningSignalsResponse = z.infer<typeof syncMobileLearningSignalsResponseSchema>;
 export type UpdateHostVoiceProfileRequest = z.infer<typeof updateHostVoiceProfileRequestSchema>;
 export type HostVoiceProfileResponse = z.infer<typeof hostVoiceProfileResponseSchema>;
 export type HostBuildLaneResponse = z.infer<typeof hostBuildLaneResponseSchema>;

@@ -43,6 +43,7 @@ const PROCESS_START_TIMEOUT_MS = 5_000;
 const PROCESS_AUTH_TIMEOUT_MS = 4_000;
 const PROCESS_TAILSCALE_TIMEOUT_MS = 4_000;
 const PROCESS_HEARTBEAT_TIMEOUT_MS = 4_000;
+const PROCESS_MEMORY_DIGEST_TIMEOUT_MS = 3_000;
 const MAX_ACTIVE_RUNS = 2;
 const HOST_WORK_WAIT_MS = 20_000;
 const HOST_INTERRUPT_WAIT_MS = 2_000;
@@ -281,10 +282,13 @@ export class DesktopHostRuntime {
         PROCESS_HEARTBEAT_TIMEOUT_MS,
         "gateway heartbeat",
       );
+      const runtimeContext = await this.loadRuntimeContext();
 
       const bridge = await this.resolveBridge(plan.provider, auth);
       const buildPrompt = () =>
-        plan.provider === "codex" ? buildCodexPrompt(work) : buildCommandPrompt(work, plan.reason);
+        plan.provider === "codex"
+          ? buildCodexPrompt(work)
+          : buildCommandPrompt(work, plan.reason, runtimeContext);
 
       const runTurn = async (threadId: string | null) =>
         bridge.runTurn({
@@ -432,6 +436,24 @@ export class DesktopHostRuntime {
     }
     return this.localBridge;
   }
+
+  private async loadRuntimeContext(): Promise<string | null> {
+    if (!this.hostToken) {
+      return null;
+    }
+
+    try {
+      const digest = await withTimeout(
+        this.gateway.getMemoryDigest(this.hostToken),
+        PROCESS_MEMORY_DIGEST_TIMEOUT_MS,
+        "gateway memory digest",
+      );
+      const context = digest.context.trim();
+      return context ? context : null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 function buildCodexPrompt(work: HostWorkMessage): string {
@@ -445,14 +467,15 @@ function buildCodexPrompt(work: HostWorkMessage): string {
   });
 }
 
-function buildCommandPrompt(work: HostWorkMessage, routingReason: string): string {
+function buildCommandPrompt(work: HostWorkMessage, routingReason: string, runtimeContext: string | null): string {
   const sections = [
     buildThreadInstructions({
       sessionTitle: work.session.title,
       sessionKind: work.session.kind,
     }),
     `Routing note: ${routingReason}`,
-    "This command lane is stateless for the current turn. Reply directly from the supplied context and do not assume hidden thread memory.",
+    runtimeContext ? `Runtime context:\n${runtimeContext}` : null,
+    "Use the supplied runtime context as durable continuity for this turn. Do not invent hidden memory beyond what is provided here.",
     work.task.resumeContext ? `Resume context: ${work.task.resumeContext}` : null,
     buildCodexPrompt(work),
   ].filter(Boolean);

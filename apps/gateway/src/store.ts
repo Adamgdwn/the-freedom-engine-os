@@ -48,6 +48,8 @@ import type {
   RunState,
   SendExternalMessageRequest,
   SendExternalMessageResponse,
+  SyncMobileLearningSignalsRequest,
+  SyncMobileLearningSignalsResponse,
   StreamEvent,
   TaskItem,
   TailscaleStatus,
@@ -122,12 +124,43 @@ interface DesktopShellState {
   desktopMessages: ChatMessage[];
 }
 
+export interface MemoryDigest {
+  configured: boolean;
+  updatedAt: string;
+  context: string;
+}
+
 interface ProgrammingRequestMemoryRow {
   id: string;
   capability: string;
   reason: string;
   status: string;
   created_at: string;
+  updated_at: string;
+}
+
+interface TaskMemoryRow {
+  topic: string;
+  summary: string;
+  status: string;
+  updated_at: string;
+}
+
+interface LearningSignalMemoryRow {
+  id?: string;
+  topic: string;
+  summary: string;
+  kind: string;
+  status: string;
+  created_at?: string;
+  updated_at: string;
+}
+
+interface PersonaOverlayMemoryRow {
+  title: string;
+  instruction: string;
+  status: string;
+  change_type: string;
   updated_at: string;
 }
 
@@ -346,6 +379,53 @@ export class GatewayStore {
   async getBuildLaneSummary(token: string): Promise<ConversationBuildLaneSummary> {
     const principal = await this.requirePrincipal(token);
     return loadConversationBuildLaneSummary(principal.host.id);
+  }
+
+  async getMemoryDigest(token: string): Promise<MemoryDigest> {
+    const principal = await this.requirePrincipal(token);
+    return loadMemoryDigest(principal.host.id);
+  }
+
+  async syncMobileLearningSignals(
+    token: string,
+    input: SyncMobileLearningSignalsRequest
+  ): Promise<SyncMobileLearningSignalsResponse> {
+    const principal = await this.requireDevice(token);
+    const signals = dedupeLearningSignalsForSync(input.signals ?? []);
+    if (!signals.length) {
+      return { configured: isProgrammingMemoryConfigured(), synced: 0, skipped: 0, syncedSignalIds: [] };
+    }
+
+    if (!isProgrammingMemoryConfigured()) {
+      return {
+        configured: false,
+        synced: 0,
+        skipped: signals.length,
+        syncedSignalIds: []
+      };
+    }
+
+    const syncedSignalIds = await upsertLearningSignals(signals);
+    const synced = syncedSignalIds.length;
+    const skipped = Math.max(0, signals.length - synced);
+
+    const state = await this.readState();
+    this.addAuditEvent(state, {
+      hostId: principal.host.id,
+      deviceId: principal.device.id,
+      sessionId: null,
+      type: "mobile_learning_synced",
+      originSurface: "mobile_companion",
+      detail: `Synced ${synced} learning signal${synced === 1 ? "" : "s"} from Freedom Anywhere${skipped ? ` (${skipped} skipped)` : ""}.`
+    });
+    await this.writeState(state);
+
+    return {
+      configured: true,
+      synced,
+      skipped,
+      syncedSignalIds
+    };
   }
 
   async updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<AssistantVoiceProfile> {
@@ -2524,6 +2604,212 @@ async function fetchProgrammingRequestRows(limit: number): Promise<ProgrammingRe
   } catch {
     return [];
   }
+}
+
+async function fetchTaskMemoryRows(limit: number): Promise<TaskMemoryRow[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_voice_tasks", supabaseUrl);
+  url.searchParams.set("select", "topic,summary,status,updated_at");
+  url.searchParams.set("order", "updated_at.desc");
+  url.searchParams.set("limit", String(limit));
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`
+      }
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? (parsed as TaskMemoryRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchLearningSignalRows(limit: number): Promise<LearningSignalMemoryRow[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_learning_signals", supabaseUrl);
+  url.searchParams.set("select", "topic,summary,kind,status,updated_at");
+  url.searchParams.set("order", "updated_at.desc");
+  url.searchParams.set("limit", String(limit));
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`
+      }
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? (parsed as LearningSignalMemoryRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function upsertLearningSignals(signals: SyncMobileLearningSignalsRequest["signals"]): Promise<string[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey || !signals.length) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_learning_signals", supabaseUrl);
+  url.searchParams.set("on_conflict", "id");
+
+  const body = signals.map((signal) => ({
+    id: signal.id,
+    topic: signal.topic.trim(),
+    summary: signal.summary.trim(),
+    kind: signal.kind,
+    status: signal.status,
+    created_at: signal.createdAt,
+    updated_at: signal.updatedAt
+  }));
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+        "content-type": "application/json",
+        prefer: "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify(body)
+    });
+    return response.ok ? body.map((signal) => signal.id) : [];
+  } catch {
+    return [];
+  }
+}
+
+function dedupeLearningSignalsForSync(signals: SyncMobileLearningSignalsRequest["signals"]): SyncMobileLearningSignalsRequest["signals"] {
+  const seen = new Set<string>();
+  const deduped: SyncMobileLearningSignalsRequest["signals"] = [];
+
+  for (const signal of signals) {
+    const key = [
+      signal.id.trim().toLowerCase(),
+      signal.topic.trim().toLowerCase(),
+      signal.kind,
+      signal.summary.trim().toLowerCase()
+    ].join("::");
+    if (!signal.topic.trim() || !signal.summary.trim() || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(signal);
+  }
+
+  return deduped;
+}
+
+async function fetchPersonaOverlayRows(limit: number): Promise<PersonaOverlayMemoryRow[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_persona_overlays", supabaseUrl);
+  url.searchParams.set("select", "title,instruction,status,change_type,updated_at");
+  url.searchParams.set("order", "updated_at.desc");
+  url.searchParams.set("limit", String(limit));
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`
+      }
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? (parsed as PersonaOverlayMemoryRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function loadMemoryDigest(hostId: string): Promise<MemoryDigest> {
+  const [tasks, learningSignals, buildLane, personaOverlays] = await Promise.all([
+    fetchTaskMemoryRows(6),
+    fetchLearningSignalRows(6),
+    loadConversationBuildLaneSummary(hostId),
+    fetchPersonaOverlayRows(6)
+  ]);
+
+  const sections = [
+    tasks.length
+      ? [
+          "Open task memory:",
+          ...tasks
+            .filter((task) => ["active", "parked", "ready"].includes(task.status))
+            .slice(0, 6)
+            .map((task) => `- ${task.topic}: ${task.summary} (${task.status})`)
+        ].join("\n")
+      : "",
+    learningSignals.length
+      ? [
+          "Recent durable memory:",
+          ...learningSignals.map((signal) => `- ${signal.topic}: ${signal.summary} (${signal.kind}, ${signal.status})`)
+        ].join("\n")
+      : "",
+    buildLane.items.length
+      ? [
+          "Conversation build lane:",
+          ...buildLane.items.slice(0, 6).map((item) => `- ${item.title} [${item.approvalState}]: ${item.summary}`)
+        ].join("\n")
+      : "",
+    personaOverlays.length
+      ? [
+          "Approved persona overlays:",
+          ...personaOverlays
+            .filter((overlay) => overlay.status === "approved" && overlay.change_type !== "retirement")
+            .slice(0, 6)
+            .map((overlay) => `- ${overlay.title}: ${overlay.instruction}`)
+        ].join("\n")
+      : ""
+  ].filter(Boolean);
+
+  const updatedAt = [
+    ...tasks.map((row) => row.updated_at),
+    ...learningSignals.map((row) => row.updated_at),
+    ...buildLane.items.map((item) => item.updatedAt),
+    ...personaOverlays.map((row) => row.updated_at)
+  ]
+    .filter(Boolean)
+    .sort()
+    .at(-1) ?? nowIso();
+
+  return {
+    configured: isProgrammingMemoryConfigured(),
+    updatedAt,
+    context: sections.join("\n\n").trim()
+  };
 }
 
 function isProgrammingMemoryConfigured(): boolean {
