@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-04-25 (durable local memory fallback + mobile processing indicator)
+
+- fixed a core long-term-memory gap by making the desktop gateway keep a durable
+  local cache of learning signals and conversation memories, so Freedom memory
+  capture and recall no longer depend entirely on live Supabase availability
+- taught the gateway memory digest and server-side runtime memory snapshot to
+  merge that local durable cache with the remote memory store, which makes the
+  rich long-term memory path materially more resilient during backend drift or
+  partial local development setups
+- seeded Freedom's operating-principle memory through the real memory sync path
+  so rich long-term memory and self-improvement expectations are part of the
+  live durable record instead of only existing as prompt wording
+- added a small centered light-blue biohazard spinner to the Freedom Anywhere
+  Start and Talk voice surfaces while Freedom is in the existing `processing`
+  state, so the phone has a cleaner visual cue when Freedom is thinking or
+  searching without inventing a second overlapping activity indicator
+
 ## 2026-04-25 (governed A3 operator-loop foundation)
 
 - added a first canonical `A3` operator-run contract and ledger so Freedom can

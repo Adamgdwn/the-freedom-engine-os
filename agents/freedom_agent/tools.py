@@ -976,6 +976,36 @@ def get_voice_profile_context() -> str:
     )
 
 
+def get_memory_digest_context() -> str:
+    digest = _gateway_request("GET", "/host/memory-digest")
+    if not isinstance(digest, dict):
+        return ""
+
+    context = digest.get("context")
+    if not isinstance(context, str):
+        return ""
+
+    return context.strip()
+
+
+def _runtime_context_setting_lines(runtime_context: str) -> list[str]:
+    if not runtime_context.strip():
+        return []
+
+    interesting_prefixes = (
+        "- Freedom voice preset selected on this phone:",
+        "- Effective Freedom voice profile:",
+        "- Spoken reply voice on this phone:",
+        "- Auto-read replies:",
+        "- Auto-send voice turns:",
+        "- Reply style:",
+        "- Voice runtime mode:",
+        "- Desktop live voice profile:",
+        "- Cached memory digest updated at:",
+    )
+    return [line.strip() for line in runtime_context.splitlines() if line.strip().startswith(interesting_prefixes)]
+
+
 async def _publish_event(message: dict[str, object]) -> None:
     if _event_room is None:
         return
@@ -1263,8 +1293,17 @@ def get_recent_thread_context(room_name: str | None, limit: int = 8) -> str:
 
 
 def build_runtime_context(room_name: str | None = None) -> str:
+    relay_runtime_context = get_relay_runtime_context(room_name)
+    memory_digest_context = get_memory_digest_context()
+    relay_has_memory_digest = (
+        "Recent durable memory:" in relay_runtime_context
+        or "Relationship memory:" in relay_runtime_context
+        or "Conversation continuity:" in relay_runtime_context
+        or "Open task memory:" in relay_runtime_context
+    )
     sections = [
-        get_relay_runtime_context(room_name),
+        relay_runtime_context,
+        "" if relay_has_memory_digest else memory_digest_context,
         get_recent_thread_context(room_name),
         get_open_task_context(),
         get_learning_signal_context(),
@@ -1342,11 +1381,46 @@ async def review_runtime_status() -> str:
         sections.append(f"Default live web search provider: {search_provider} ({search_model}).")
 
     sections.extend(host_block)
-    sections.append(
-        "Note: this runtime can review the published mobile build and live Freedom voice profile, "
-        "but it still cannot inspect the phone's current local Spoken Reply Voice selection directly."
-    )
+    live_runtime_context = get_relay_runtime_context(_event_room.name if _event_room else None)
+    if live_runtime_context:
+        sections.append(
+            "Active paired mobile runtime context is attached for this session, so current phone and desktop settings from that snapshot should be treated as available."
+        )
+        setting_lines = _runtime_context_setting_lines(live_runtime_context)
+        if setting_lines:
+            sections.append("Current paired mobile snapshot:\n" + "\n".join(setting_lines))
+    else:
+        sections.append(
+            "No live paired mobile runtime snapshot is attached to this session right now, so current phone-local settings may be incomplete until a fresh paired turn or voice session provides them."
+        )
     return "\n".join(sections)
+
+
+@function_tool
+async def review_memory_digest() -> str:
+    """
+    Review the live durable memory digest that Freedom can use across sessions.
+
+    Use this before claiming memory is unavailable, non-persistent, or empty.
+    """
+    digest = _gateway_request("GET", "/host/memory-digest")
+    if not isinstance(digest, dict):
+        return "The live memory digest is unavailable right now."
+
+    configured = bool(digest.get("configured"))
+    updated_at = str(digest.get("updatedAt") or "").strip()
+    context = str(digest.get("context") or "").strip()
+    if not context:
+        if configured:
+            return "Durable memory is configured, but the current live digest is empty or too sparse to summarize."
+        return "Durable memory is not configured in this runtime right now."
+
+    prefix = "Live durable memory digest:"
+    if updated_at:
+        prefix += f" updated {updated_at}."
+    if not configured:
+        prefix += " Memory infrastructure is not fully configured, so treat this as partial continuity only."
+    return f"{prefix}\n{context}"
 
 
 @function_tool

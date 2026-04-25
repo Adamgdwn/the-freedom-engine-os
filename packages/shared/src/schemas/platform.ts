@@ -255,6 +255,7 @@ export const taskItemSchema = z.object({
   threadId: z.string().min(1).nullable(),
   turnId: z.string().min(1).nullable(),
   resumeContext: z.string().nullable(),
+  runtimeContext: z.string().nullable(),
   toolState: z.record(z.string(), z.unknown()).nullable(),
   resourceKey: z.string().min(1),
   readOnly: z.boolean(),
@@ -367,7 +368,8 @@ export const postMessageRequestSchema = z.object({
   text: z.string().min(1).max(20000),
   inputMode: inputModeSchema.optional(),
   responseStyle: responseStyleSchema.optional(),
-  transcriptPolished: z.boolean().optional()
+  transcriptPolished: z.boolean().optional(),
+  runtimeContext: z.string().min(1).max(16000).optional()
 });
 
 export const offlineImportRequestSchema = z.object({

@@ -225,6 +225,8 @@ export function AppShell(): React.JSX.Element {
                   ? "Voice choices, reply behavior, runtime posture, and system adjustments live here."
                   : "Capture, retrieval, build routing, and live action controls stay together here without crowding the voice canvas."}
               </Text>
+              {store.notice ? <Banner text={store.notice} tone="info" /> : null}
+              {store.error ? <Banner text={store.error} tone="error" /> : null}
             </View>
 
             <ScrollView
@@ -433,7 +435,7 @@ export function AppShell(): React.JSX.Element {
                           <Pressable
                             key={voice.id}
                             style={[styles.voiceChoiceCard, isActive ? styles.voiceChoiceCardActive : null]}
-                            onPress={() => store.selectFreedomVoicePreset(voice.id)}
+                            onPress={() => store.selectFreedomVoicePreset(voice.id).catch((error) => console.warn(error))}
                           >
                             <View style={styles.voiceChoiceHeader}>
                               <Text style={[styles.voiceChoiceTitle, isActive ? styles.voiceChoiceTitleActive : null]}>

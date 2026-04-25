@@ -71,7 +71,10 @@ that ties business outcomes back to freedom outcomes.
 - The repo is now linked to Supabase project `basbwglynuyfxcqxfyur`, and the initial
   migration has been pushed.
 - The `supabase/migrations/` directory is now the canonical schema source for remote updates.
-- Persistent Freedom memory now requires `SUPABASE_SERVICE_ROLE_KEY` on the server side.
+- Persistent Freedom memory still uses `SUPABASE_SERVICE_ROLE_KEY` on the server side
+  for the canonical remote store, but the desktop gateway now also keeps a durable
+  local cache of learning signals and conversation memories so Freedom does not fall
+  back to effectively stateless behavior when the remote store is unavailable.
 - Freedom email now lives in the web control plane at `/communications`.
 - Trusted recipients are stored in Supabase and are the safety boundary for outbound mail.
 - Freedom can prepare email drafts from voice, but the operator still confirms the send
@@ -82,6 +85,9 @@ that ties business outcomes back to freedom outcomes.
 - The Android companion now treats the phone as command-and-capture:
   launch opens on a sparse Start screen, live conversation stays on a dedicated Talk
   canvas, and secondary controls live behind the hidden utility sheet.
+- While Freedom is in the existing mobile `processing` phase, the Start and Talk
+  canvases now show a small centered light-blue biohazard spinner instead of silently
+  sitting idle.
 - Local memory backup:
   run `npm run backup:freedom-memory`
 - Local memory restore:

@@ -32,6 +32,8 @@ import type {
   UpdateSessionRequest
 } from "@freedom/shared";
 
+type MobilePostMessageRequest = PostMessageRequest & { runtimeContext?: string };
+
 export class ApiClient {
   getMemoryDigest(
     token: string,
@@ -49,6 +51,10 @@ export class ApiClient {
 
   getHostStatus(token: string, baseUrl: string): Promise<HostStatus> {
     return this.request("GET", `${baseUrl}/host/status`, token);
+  }
+
+  getVoiceProfile(token: string, baseUrl: string): Promise<AssistantVoiceProfile> {
+    return this.request("GET", `${baseUrl}/host/voice-profile`, token);
   }
 
   getBuildLaneSummary(token: string, baseUrl: string): Promise<HostBuildLaneResponse> {
@@ -108,7 +114,7 @@ export class ApiClient {
     return this.request("GET", `${baseUrl}/sessions/${encodeURIComponent(sessionId)}/messages`, token);
   }
 
-  postMessage(token: string, baseUrl: string, sessionId: string, input: PostMessageRequest): Promise<ChatMessage> {
+  postMessage(token: string, baseUrl: string, sessionId: string, input: MobilePostMessageRequest): Promise<ChatMessage> {
     return this.request("POST", `${baseUrl}/sessions/${encodeURIComponent(sessionId)}/messages`, token, input);
   }
 
@@ -245,7 +251,10 @@ export class ApiClient {
 }
 
 function shouldBypassCache(method: string, url: string): boolean {
-  return method.toUpperCase() === "GET" && /\/host\/operator-runs(?:[/?]|$)/.test(url);
+  return (
+    method.toUpperCase() === "GET" &&
+    /\/host\/(?:operator-runs|status|voice-profile)(?:[/?]|$)/.test(url)
+  );
 }
 
 function appendFreshQuery(url: string): string {

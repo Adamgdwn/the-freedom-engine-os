@@ -92,7 +92,7 @@ function sanitizeLearningSignals(
       sourceSessionId: sessionId,
       capturedAt: now,
     } satisfies MobileLearningSignal];
-  }).slice(0, 4);
+  }).slice(0, 8);
 }
 
 function sanitizeConversationMemories(
@@ -138,7 +138,7 @@ function sanitizeConversationMemories(
       sourceSessionId: sessionId,
       capturedAt: now,
     } satisfies MobileConversationMemory];
-  }).slice(0, 4);
+  }).slice(0, 8);
 }
 
 function sanitizeFollowUps(
@@ -172,7 +172,7 @@ function sanitizeFollowUps(
       createdAt: now,
       updatedAt: now,
     } satisfies MemoryFollowUpCandidate];
-  }).slice(0, 2);
+  }).slice(0, 4);
 }
 
 function buildFallbackResult(input: MemoryTriageInput): MemoryTriageResult {
@@ -196,13 +196,28 @@ function buildFallbackResult(input: MemoryTriageInput): MemoryTriageResult {
     });
   }
 
-  if (/\b(business partner|autonomous partner|co-founder|cofounder|long-term memory)\b/i.test(lowerTranscript)) {
+  if (/\b(business partner|autonomous partner|co-founder|cofounder|long-term memory|persistent memory|self-improve|self improve|self-evolve|self evolve)\b/i.test(lowerTranscript)) {
     conversationMemories.push({
       id: buildMemoryId("relationship", "Partnership expectation"),
       topic: "Partnership expectation",
       summary: truncateText(transcript, 1000),
       category: "relationship",
       confidence: 0.78,
+      status: "observed",
+      createdAt: now,
+      updatedAt: now,
+      sourceSessionId: input.sessionId,
+      capturedAt: now,
+    });
+  }
+
+  if (/\b(principle|tenant|tenet|must|important|core|foundational)\b/i.test(lowerTranscript)) {
+    conversationMemories.push({
+      id: buildMemoryId("context", "Operating principle"),
+      topic: "Operating principle",
+      summary: truncateText(transcript, 1000),
+      category: "context",
+      confidence: 0.72,
       status: "observed",
       createdAt: now,
       updatedAt: now,
@@ -253,12 +268,13 @@ export async function triageMemoryWithChatGPT(input: MemoryTriageInput): Promise
           role: "system",
           content:
             "You are Freedom's governed memory-triage layer. Review the interaction and decide what is worth durable learning. " +
-            "Only record durable user facts, preferences, goals, relationship expectations, recurring workflow patterns, and capability gaps. " +
+            "Only record durable user facts, preferences, goals, relationship expectations, recurring workflow patterns, operating principles, and capability gaps. " +
             "Do not treat Freedom's own claims as memory facts. Prefer user-stated intent over assistant phrasing. " +
             "Return strict JSON with shape: " +
             "{\"summary\":\"...\",\"learningSignals\":[{\"topic\":\"...\",\"summary\":\"...\",\"kind\":\"preference|focus|workflow|capability\"}]," +
             "\"conversationMemories\":[{\"topic\":\"...\",\"summary\":\"...\",\"category\":\"identity|preference|project|relationship|context\",\"confidence\":0.0,\"status\":\"observed|confirmed|active\"}]," +
             "\"followUpQuestions\":[{\"question\":\"...\",\"rationale\":\"...\"}]}. " +
+            "Prioritize explicit long-term role expectations, identity-level preferences, recurring principles, durable workflow rules, and what Freedom should remember across sessions. " +
             "Use followUpQuestions only when learning would materially improve future usefulness and the current evidence is incomplete. " +
             "Prefer zero items over weak guesses. Keep summaries concise.",
         },

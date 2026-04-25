@@ -189,3 +189,68 @@ test("offline import remains idempotent for the same client import id", async ()
     await cleanup();
   }
 });
+
+test("paired mobile devices can update the shared Freedom voice profile", async () => {
+  const { store, cleanup } = await createTempStore();
+  try {
+    const host = await pairHost(store, "Desktop A", "/tmp/a");
+
+    const updated = await store.updateVoiceProfile(host.deviceToken, {
+      targetVoice: "ash"
+    });
+
+    assert.equal(updated.targetVoice, "ash");
+    assert.equal(updated.displayName, "Ash");
+
+    const fetched = await store.getVoiceProfile(host.deviceToken);
+    assert.equal(fetched.targetVoice, "ash");
+  } finally {
+    await cleanup();
+  }
+});
+
+test("mobile durable memory sync persists locally even without the remote memory backend", async () => {
+  const { store, cleanup } = await createTempStore();
+  try {
+    const host = await pairHost(store, "Desktop A", "/tmp/a");
+
+    const learning = await store.syncMobileLearningSignals(host.deviceToken, {
+      signals: [{
+        id: "signal-rich-memory",
+        topic: "Memory expectation",
+        summary: "User expects rich long-term memory that persists across conversations.",
+        kind: "workflow",
+        status: "observed",
+        createdAt: "2026-04-25T12:00:00.000Z",
+        updatedAt: "2026-04-25T12:00:00.000Z",
+        sourceSessionId: "session-1",
+        capturedAt: "2026-04-25T12:00:00.000Z",
+      }],
+    });
+    const memories = await store.syncMobileConversationMemories(host.deviceToken, {
+      memories: [{
+        id: "memory-rich-memory",
+        topic: "Operating principle",
+        summary: "Freedom should keep a rich long-term memory and self-improve over time.",
+        category: "context",
+        confidence: 0.9,
+        status: "confirmed",
+        sourceSessionId: "session-1",
+        createdAt: "2026-04-25T12:00:00.000Z",
+        updatedAt: "2026-04-25T12:00:00.000Z",
+        capturedAt: "2026-04-25T12:00:00.000Z",
+      }],
+    });
+    const digest = await store.getMemoryDigest(host.hostToken);
+
+    assert.equal(learning.configured, true);
+    assert.equal(learning.synced, 1);
+    assert.equal(memories.configured, true);
+    assert.equal(memories.synced, 1);
+    assert.match(digest.context, /Long-term operator memory:/);
+    assert.match(digest.context, /Stable preferences and workflow patterns:/);
+    assert.match(digest.context, /rich long-term memory/i);
+  } finally {
+    await cleanup();
+  }
+});

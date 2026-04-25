@@ -47,31 +47,35 @@ For a fast operator-facing view of what is actually live right now, use
    can be triaged by ChatGPT for durable learning, with only the approved memory
    channels (`learning signals`, `conversation memory`, open task memory, build-lane
    items, and persona overlays) written into canonical persistence.
-8. Voice memory updates are persisted through a server-only Next.js API into Supabase,
-   and the Python worker hydrates recent open-task, learning, programming, recipient,
-   approved persona-overlay, and conversation-memory context into the live session
-   prompt.
-9. The operator reviews persona-adjustment, revision, and retirement requests in the
+8. That memory path is no longer purely remote-store dependent: the desktop gateway now
+   keeps a durable local cache of learning signals and conversation memories, merges it
+   with the remote Supabase-backed store when available, and exposes the combined digest
+   back to mobile and voice runtime callers.
+9. Voice memory updates are persisted through a server-only Next.js API into Supabase
+   when configured, and the Python worker hydrates recent open-task, learning,
+   programming, recipient, approved persona-overlay, and conversation-memory context
+   into the live session prompt.
+10. The operator reviews persona-adjustment, revision, and retirement requests in the
    Personality page and only approved overlays remain active runtime refinements.
-10. When Freedom prepares an external email, the Python worker publishes a draft event,
+11. When Freedom prepares an external email, the Python worker publishes a draft event,
    the control plane presents it for explicit confirmation, and the server sends it
    only to a trusted recipient recorded in Supabase.
-11. Local backup and restore scripts export the durable memory tables into repo-local
+12. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
-12. Desktop-host routes non-voice work through a shared model-router policy so routine
+13. Desktop-host routes non-voice work through a shared model-router policy so routine
     read-only turns can stay on a configured local command lane while escalated work can
     use an operator-selected external lane such as `OpenAI / ChatGPT`, `Codex`, or
     `Claude Code`.
-13. The desktop host now supervises the LiveKit/OpenAI voice worker, while the mobile
+14. The desktop host now supervises the LiveKit/OpenAI voice worker, while the mobile
     app can also continue in a bounded offline ideation posture with cached chats and a
     bundled on-device model when the desktop is unreachable.
-14. The live voice agent can inspect its own repo-side governance and tool YAML, and
+15. The live voice agent can inspect its own repo-side governance and tool YAML, and
     after explicit confirmation it can bridge approved programming work into the desktop
     execution lane instead of stopping only at a request-for-later posture.
-15. Significant ideas that arise in conversation are meant to be promoted into the
+16. Significant ideas that arise in conversation are meant to be promoted into the
     dedicated Pop!_OS build lane, where business case, approval posture, and execution
     evidence are made explicit before or during implementation.
-16. Future persistence will swap the seed layer for Supabase queries while preserving the
+17. Future persistence will swap the seed layer for Supabase queries while preserving the
     same entity boundaries.
 
 ## Dependencies
@@ -95,7 +99,9 @@ For a fast operator-facing view of what is actually live right now, use
 - External email is draft-first and confirmation-gated. Freedom can prepare the send,
   but the operator still authorizes the actual outbound delivery in the UI.
 - Durable Freedom memory is server-written and locally exportable; self-programming
-  requests are persisted but still stop at explicit approval.
+  requests are persisted but still stop at explicit approval. The gateway now also keeps
+  a durable local cache for learning signals and conversation memories so rich memory is
+  not reduced to a thin prompt layer when the remote store is absent.
 - Score weights are editable in the UI and versioned in-memory now, with schema support
   for durable history later.
 - Freedom is the product identity on desktop and phone; the runtime surfaces

@@ -94,6 +94,10 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Durable storage of approval-gated self-programming requests.
 - Durable storage of persona overlays and persona-adjustment requests.
 - Supabase-backed server-side memory load and persist path.
+- Gateway-local durable memory fallback for `learning signals` and
+  `conversation memory`, so Freedom can still retain and recall long-term memory
+  across conversations even when the remote Supabase memory path is unavailable
+  or misconfigured.
 - Paired-mobile write-back path for stand-alone `learning` signals into the same
   canonical Freedom memory store used by connected runtime surfaces.
 - Paired-mobile write-back path for stand-alone `conversation memory` into that
@@ -178,6 +182,9 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Freedom Anywhere now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.
+- The Start and Talk voice surfaces now show a small centered light-blue
+  biohazard spinner while Freedom is in the existing `processing` phase, so
+  thinking/searching is visible without adding another footer control or banner.
 - The settings sheet now uses one compact connection mark beside `FREEDOM ANYWHERE SETTINGS`:
   reconnecting still reads as connected to Freedom, and only true `stand_alone`
   shows the disconnected mark.

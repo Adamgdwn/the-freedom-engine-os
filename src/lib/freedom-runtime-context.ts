@@ -80,6 +80,63 @@ function formatConversationMemorySection(snapshot: FreedomMemorySnapshot): strin
   ].join('\n');
 }
 
+function dedupeLines(lines: string[], limit: number): string[] {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const line of lines) {
+    const key = line.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(line);
+    if (deduped.length >= limit) {
+      break;
+    }
+  }
+  return deduped;
+}
+
+function formatLongTermMemorySection(snapshot: FreedomMemorySnapshot): string {
+  const lines = dedupeLines(
+    [
+      ...snapshot.conversationMemories
+        .filter((memory) => ['identity', 'relationship', 'project', 'context'].includes(memory.category))
+        .slice(0, 12)
+        .map((memory) => `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`),
+      ...snapshot.conversationMemories
+        .filter((memory) => memory.category === 'preference')
+        .slice(0, 8)
+        .map((memory) => `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`),
+      ...snapshot.learningSignals
+        .filter((signal) => ['preference', 'workflow', 'focus', 'capability'].includes(signal.kind))
+        .slice(0, 10)
+        .map((signal) => `- ${signal.topic}: ${signal.summary} (${signal.kind}, ${signal.status})`),
+    ],
+    16,
+  );
+
+  return lines.length ? `Long-term operator memory:\n${lines.join('\n')}` : '';
+}
+
+function formatPreferenceAndWorkflowSection(snapshot: FreedomMemorySnapshot): string {
+  const lines = dedupeLines(
+    [
+      ...snapshot.conversationMemories
+        .filter((memory) => memory.category === 'preference')
+        .slice(0, 8)
+        .map((memory) => `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`),
+      ...snapshot.learningSignals
+        .filter((signal) => ['preference', 'workflow', 'focus', 'capability'].includes(signal.kind))
+        .slice(0, 10)
+        .map((signal) => `- ${signal.topic}: ${signal.summary} (${signal.kind}, ${signal.status})`),
+    ],
+    12,
+  );
+
+  return lines.length ? `Stable preferences and workflow patterns:\n${lines.join('\n')}` : '';
+}
+
 function formatPendingProgrammingSection(snapshot: FreedomMemorySnapshot): string {
   const pendingRequests = snapshot.programmingRequests
     .filter((request) => request.status === 'pending' && !request.buildLane)
@@ -137,6 +194,8 @@ export async function loadFreedomRuntimeContext(
   const snapshot = await loadFreedomMemorySnapshot();
   const sections = [
     formatRecentConversationSection(options.messages ?? [], options.messageLimit ?? 6),
+    formatLongTermMemorySection(snapshot),
+    formatPreferenceAndWorkflowSection(snapshot),
     formatConversationMemorySection(snapshot),
     formatOpenTaskSection(snapshot),
     formatLearningSection(snapshot),

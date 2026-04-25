@@ -246,6 +246,7 @@ describe("refresh affordances", () => {
     mockStore.realtimeConnected = true;
     mockStore.voiceMuted = false;
     mockStore.voiceSessionActive = false;
+    mockStore.voiceSessionPhase = "idle";
     mockStore.sessions = [];
     mockStore.selectedSessionId = null;
     mockStore.composer = "";
@@ -353,6 +354,54 @@ describe("refresh affordances", () => {
     expect(talkButton.props.disabled).toBe(true);
     expect(mockStore.toggleListening).not.toHaveBeenCalled();
     expect(mockStore.setView).not.toHaveBeenCalled();
+  });
+
+  test("start surface shows the biohazard thinking spinner while Freedom is processing", async () => {
+    mockStore.view = "start";
+    mockStore.voiceSessionActive = true;
+    mockStore.voiceSessionPhase = "processing";
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    const spinner = tree!.root.findByProps({ testID: "voice-thinking-spinner" });
+    expect(spinner).toBeTruthy();
+  });
+
+  test("chat surface shows the biohazard thinking spinner while Freedom is processing", async () => {
+    mockStore.view = "chat";
+    mockStore.voiceSessionActive = true;
+    mockStore.voiceSessionPhase = "processing";
+    mockStore.selectedSessionId = "session-1";
+    mockStore.sessions = [
+      {
+        id: "session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        rootPath: "/tmp/workspace",
+        title: "Voice thread",
+        kind: "operator",
+        status: "idle",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        memorySummary: null,
+        interruptionMode: "adaptive",
+      },
+    ];
+    mockStore.messagesBySession = { "session-1": [] };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    const spinner = tree!.root.findByProps({ testID: "voice-thinking-spinner" });
+    expect(spinner).toBeTruthy();
   });
 
   test("shared refresh scroll interaction keeps overscroll enabled", () => {

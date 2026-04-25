@@ -111,8 +111,10 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
   learning, concise redirection, and approval-gated self-programming behave
   consistently.
 - Supabase-backed memory, backup, and restore still need stronger validation for
-  reload survival and clean capture of learning signals, conversation-memory
-  entries, parked tasks, and self-programming requests.
+  remote reload survival and clean capture of parked tasks and self-programming
+  requests. The gateway now has a local durable fallback for learning signals
+  and conversation-memory entries, so those two channels are no longer a pure
+  single-backend dependency.
 - The new conversation-memory lane still needs production validation for memory
   quality, duplicate suppression, confidence thresholds, and the balance between
   canonical Supabase memory and gateway-state continuity fallback.

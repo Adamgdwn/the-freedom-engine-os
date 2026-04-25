@@ -600,6 +600,32 @@ export const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 24
   },
+  voiceSurfaceThinkingSpinnerWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8
+  },
+  voiceSurfaceThinkingSpinner: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: "rgba(125, 211, 252, 0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(125, 211, 252, 0.38)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#7dd3fc",
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3
+  },
+  voiceSurfaceThinkingSpinnerGlyph: {
+    color: "#7dd3fc",
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "700"
+  },
   voiceSurfaceStatusPill: {
     maxWidth: "88%",
     borderRadius: 18,

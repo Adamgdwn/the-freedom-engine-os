@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Linking, Platform, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
+import { Animated, Easing, Linking, Platform, Pressable, RefreshControl, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 import {
   assistantVoiceCatalog,
   FREEDOM_PHONE_PRODUCT_NAME,
@@ -95,6 +95,40 @@ function voiceSurfaceCapabilityTone(state: AppState): "teal" | "orange" {
     return disconnectedCompanionTone(state);
   }
   return connectedVoiceLaneTone(state);
+}
+
+function ThinkingSpinner(): React.JSX.Element {
+  const spin = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const animation = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 1800,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+      spin.stopAnimation();
+      spin.setValue(0);
+    };
+  }, [spin]);
+
+  const rotation = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <View testID="voice-thinking-spinner" style={styles.voiceSurfaceThinkingSpinnerWrap}>
+      <Animated.View style={[styles.voiceSurfaceThinkingSpinner, { transform: [{ rotate: rotation }] }]}>
+        <Text style={styles.voiceSurfaceThinkingSpinnerGlyph}>☣</Text>
+      </Animated.View>
+    </View>
+  );
 }
 
 export function PairingScreen(props: {
@@ -214,6 +248,7 @@ export function StartScreen(props: {
   const surfaceMessageTone = store.error ? "error" : "info";
   const compactVoiceSurface = windowWidth < 400;
   const tightVoiceSurface = windowWidth < 360;
+  const showThinkingSpinner = store.voiceSessionPhase === "processing";
 
   return (
     <ScrollView
@@ -248,6 +283,7 @@ export function StartScreen(props: {
         <Text style={[styles.voiceSurfaceSubhead, compactVoiceSurface ? styles.voiceSurfaceSubheadCompact : null]}>
           {voiceHint}
         </Text>
+        {showThinkingSpinner ? <ThinkingSpinner /> : null}
         {surfaceMessage ? (
           <View
             style={[
@@ -1151,6 +1187,7 @@ export function ChatScreen(props: {
         : selectedSession?.title ?? "Talk to Freedom";
   const surfaceMessage = store.error ?? store.notice;
   const surfaceMessageTone = store.error ? "error" : "info";
+  const showThinkingSpinner = store.voiceSessionPhase === "processing";
   const primaryActionLabel = busy || store.sendingMessage ? "Stop" : store.voiceSessionActive ? "End" : "Talk";
   const secondaryActionGlyph = showComposerPanel && hasDraftText ? "↑" : "◉";
   const secondaryActionDisabled = showComposerPanel && hasDraftText ? !canSend : !store.voiceAvailable;
@@ -1259,6 +1296,7 @@ export function ChatScreen(props: {
           >
             {centerSubhead}
           </Text>
+          {showThinkingSpinner ? <ThinkingSpinner /> : null}
           {surfaceMessage ? (
             <View
               style={[

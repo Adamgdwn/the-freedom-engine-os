@@ -464,6 +464,7 @@ function buildCodexPrompt(work: HostWorkMessage): string {
     responseStyle: work.message.responseStyle,
     inputMode: work.message.inputMode,
     transcriptPolished: work.message.transcriptPolished,
+    runtimeContext: work.task.runtimeContext,
   });
 }
 

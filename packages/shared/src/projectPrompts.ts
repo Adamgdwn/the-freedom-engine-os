@@ -27,6 +27,7 @@ export interface TurnPromptInput {
   responseStyle?: ResponseStyle | null;
   inputMode?: InputMode | null;
   transcriptPolished?: boolean | null;
+  runtimeContext?: string | null;
 }
 
 export const PROJECT_TEMPLATES: ProjectTemplate[] = [
@@ -91,9 +92,14 @@ export function buildTurnPrompt(input: TurnPromptInput): string {
     input.sessionTitle?.trim() ? `- Session title: ${input.sessionTitle.trim()}` : null,
     input.sessionKind ? `- Session kind: ${input.sessionKind}` : null,
     input.responseStyle ? `- Preferred response style: ${humanizeResponseStyle(input.responseStyle)}` : null,
+    input.runtimeContext?.trim() ? `- Supplemental mobile runtime context follows below.` : null,
+    input.runtimeContext?.trim()
+      ? "- Treat the supplemental runtime context as authoritative for the current paired phone/desktop settings and any supplied durable memory for this turn."
+      : null,
     "- The user request below is the canonical content for this turn.",
     "- If it contains literal values such as email addresses, phone numbers, URLs, IDs, code, or quoted text, treat them as present exactly as written.",
     "- Do not claim you cannot read or see text that appears in the user request.",
+    "- Do not claim you cannot see current settings or durable memory if those details appear in the supplied runtime context.",
     input.inputMode === "voice"
       ? "- The user sent this from voice input. Focus on intent and do not nitpick transcription quirks."
       : null,
@@ -107,7 +113,13 @@ export function buildTurnPrompt(input: TurnPromptInput): string {
     return input.userText.trim();
   }
 
-  return `${instructions.join("\n")}\n\nUser request:\n${input.userText.trim()}`;
+  return [
+    instructions.join("\n"),
+    input.runtimeContext?.trim() ? `Supplemental runtime context:\n${input.runtimeContext.trim()}` : null,
+    `User request:\n${input.userText.trim()}`
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export function humanizeResponseStyle(style: ResponseStyle): string {

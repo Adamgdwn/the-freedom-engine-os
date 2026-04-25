@@ -1,5 +1,8 @@
 import 'server-only';
 
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
 import type { FreedomConversationMemory } from '@/lib/freedom-conversation-memory';
 import type { FreedomPersonaOverlay } from '@/lib/freedom-persona';
 import type { FreedomMemorySnapshot, FreedomMemoryUpdateRequest } from '@/lib/freedom-memory';
@@ -24,6 +27,7 @@ type TaskRow = {
 
 type LearningSignalRow = {
   id: string;
+  host_id?: string | null;
   topic: string;
   summary: string;
   kind: VoiceLearningSignal['kind'];
@@ -34,6 +38,7 @@ type LearningSignalRow = {
 
 type ConversationMemoryRow = {
   id: string;
+  host_id?: string | null;
   topic: string;
   summary: string;
   category: FreedomConversationMemory['category'];
@@ -69,6 +74,22 @@ type PersonaOverlayRow = {
 type SupabaseResult<T> = {
   data: T[] | null;
   error: { code?: string } | null;
+};
+
+type GatewayTaskRecord = {
+  id?: string;
+  title?: string;
+  status?: VoiceTask['status'];
+  origin?: string;
+  lastError?: string | null;
+  updatedAt?: string;
+  createdAt?: string;
+};
+
+type GatewayLocalState = {
+  tasks?: GatewayTaskRecord[];
+  durableLearningSignals?: LearningSignalRow[];
+  durableConversationMemories?: ConversationMemoryRow[];
 };
 
 function toEpoch(value: string) {
@@ -180,9 +201,43 @@ function dataOrEmpty<T>(result: SupabaseResult<T>): T[] {
   return isMissingTableError(result.error) ? [] : (result.data ?? []);
 }
 
+function gatewayLocalStatePath() {
+  const configuredDir = process.env.GATEWAY_DATA_DIR?.trim();
+  if (configuredDir) {
+    return path.resolve(process.cwd(), configuredDir, 'state.json');
+  }
+  return path.resolve(process.cwd(), 'apps/gateway/.local-data/gateway/state.json');
+}
+
+async function loadGatewayLocalMemorySnapshot(): Promise<FreedomMemorySnapshot | null> {
+  try {
+    const raw = await readFile(gatewayLocalStatePath(), 'utf8');
+    const parsed = JSON.parse(raw) as GatewayLocalState;
+    const tasks = (parsed.tasks ?? []).map((task) => ({
+      id: task.id ?? 'gateway-task',
+      topic: task.title ?? 'Freedom task',
+      status: task.status ?? 'queued',
+      summary: task.lastError?.trim() || `${task.origin ?? 'gateway'} task`,
+      createdAt: toEpoch(task.createdAt ?? task.updatedAt ?? new Date().toISOString()),
+      updatedAt: toEpoch(task.updatedAt ?? task.createdAt ?? new Date().toISOString()),
+    }));
+
+    return {
+      tasks,
+      learningSignals: (parsed.durableLearningSignals ?? []).map(mapLearningSignal),
+      conversationMemories: (parsed.durableConversationMemories ?? []).map(mapConversationMemory),
+      programmingRequests: [],
+      personaOverlays: [],
+      configured: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot> {
   if (!isSupabaseAdminConfigured()) {
-    return {
+    return (await loadGatewayLocalMemorySnapshot()) ?? {
       tasks:               [],
       learningSignals:     [],
       conversationMemories: [],
@@ -244,7 +299,7 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
     throw personaOverlaysResult.error;
   }
 
-  return {
+  const snapshot = {
     tasks:               dataOrEmpty(tasksResult).map(mapTask),
     learningSignals:     dataOrEmpty(learningSignalsResult).map(mapLearningSignal),
     conversationMemories: dataOrEmpty(conversationMemoriesResult).map(mapConversationMemory),
@@ -252,6 +307,17 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
     personaOverlays:     dataOrEmpty(personaOverlaysResult).map(mapPersonaOverlay),
     configured:          true,
   };
+
+  if (
+    snapshot.learningSignals.length ||
+    snapshot.conversationMemories.length ||
+    snapshot.programmingRequests.length ||
+    snapshot.personaOverlays.length
+  ) {
+    return snapshot;
+  }
+
+  return (await loadGatewayLocalMemorySnapshot()) ?? snapshot;
 }
 
 export async function persistFreedomMemoryUpdate(request: FreedomMemoryUpdateRequest) {

@@ -118,6 +118,7 @@ interface VoiceRuntimeSessionRecord {
   chatSessionId: string;
   voiceSessionId: string;
   participantIdentity: string;
+  runtimeContext: string | null;
   createdAt: string;
   expiresAt: string;
 }
@@ -132,6 +133,8 @@ interface GatewayState {
   tasks: TaskRecord[];
   messages: ChatMessage[];
   voiceRuntimeSessions: VoiceRuntimeSessionRecord[];
+  durableLearningSignals: LearningSignalMemoryRow[];
+  durableConversationMemories: ConversationMemoryRow[];
   memoryFollowUps: MemoryFollowUpRecord[];
   operatorRuns: OperatorRunRecord[];
   outboundRecipients: OutboundRecipientRecord[];
@@ -168,6 +171,7 @@ interface TaskMemoryRow {
 
 interface LearningSignalMemoryRow {
   id?: string;
+  host_id?: string | null;
   topic: string;
   summary: string;
   kind: string;
@@ -178,6 +182,7 @@ interface LearningSignalMemoryRow {
 
 interface ConversationMemoryRow {
   id?: string;
+  host_id?: string | null;
   topic: string;
   summary: string;
   category: "identity" | "preference" | "project" | "relationship" | "context";
@@ -186,6 +191,236 @@ interface ConversationMemoryRow {
   source_session_id?: string | null;
   created_at?: string;
   updated_at: string;
+}
+
+function dedupeMemoryLines(lines: string[], limit: number): string[] {
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const line of lines) {
+    const key = line.trim().toLowerCase();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(line);
+    if (deduped.length >= limit) {
+      break;
+    }
+  }
+  return deduped;
+}
+
+function formatConversationMemoryLine(memory: ConversationMemoryRow): string {
+  return `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`;
+}
+
+function formatLearningSignalLine(signal: LearningSignalMemoryRow): string {
+  return `- ${signal.topic}: ${signal.summary} (${signal.kind}, ${signal.status})`;
+}
+
+function formatTaskMemoryLine(task: TaskMemoryRow): string {
+  return `- ${task.topic}: ${task.summary} (${task.status})`;
+}
+
+function normalizeRowKey(value: string | null | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function learningSignalRowKey(row: Pick<LearningSignalMemoryRow, "id" | "host_id" | "topic" | "kind">): string {
+  const hostKey = normalizeRowKey(row.host_id);
+  if (row.id) {
+    return `${hostKey}::id::${normalizeRowKey(row.id)}`;
+  }
+  return `${hostKey}::kind::${normalizeRowKey(row.kind)}::topic::${normalizeRowKey(row.topic)}`;
+}
+
+function conversationMemoryRowKey(
+  row: Pick<ConversationMemoryRow, "id" | "host_id" | "topic" | "category">,
+): string {
+  const hostKey = normalizeRowKey(row.host_id);
+  if (row.id) {
+    return `${hostKey}::id::${normalizeRowKey(row.id)}`;
+  }
+  return `${hostKey}::category::${normalizeRowKey(row.category)}::topic::${normalizeRowKey(row.topic)}`;
+}
+
+function taskMemoryRowKey(row: Pick<TaskMemoryRow, "topic" | "status">): string {
+  return `${normalizeRowKey(row.topic)}::${normalizeRowKey(row.status)}`;
+}
+
+function isNewerMemoryRow(leftUpdatedAt: string | undefined, rightUpdatedAt: string | undefined): boolean {
+  return (leftUpdatedAt ?? "") > (rightUpdatedAt ?? "");
+}
+
+function mergeLearningSignalRows(
+  primary: LearningSignalMemoryRow[],
+  secondary: LearningSignalMemoryRow[],
+  limit = 200,
+): LearningSignalMemoryRow[] {
+  const merged = new Map<string, LearningSignalMemoryRow>();
+  for (const row of [...primary, ...secondary]) {
+    const key = learningSignalRowKey(row);
+    const existing = merged.get(key);
+    if (!existing || isNewerMemoryRow(row.updated_at, existing.updated_at)) {
+      merged.set(key, row);
+    }
+  }
+  return [...merged.values()]
+    .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+    .slice(0, limit);
+}
+
+function mergeConversationMemoryRows(
+  primary: ConversationMemoryRow[],
+  secondary: ConversationMemoryRow[],
+  limit = 240,
+): ConversationMemoryRow[] {
+  const merged = new Map<string, ConversationMemoryRow>();
+  for (const row of [...primary, ...secondary]) {
+    const key = conversationMemoryRowKey(row);
+    const existing = merged.get(key);
+    if (!existing || isNewerMemoryRow(row.updated_at, existing.updated_at)) {
+      merged.set(key, row);
+    }
+  }
+  return [...merged.values()]
+    .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+    .slice(0, limit);
+}
+
+function mergeTaskMemoryRows(
+  primary: TaskMemoryRow[],
+  secondary: TaskMemoryRow[],
+  limit = 40,
+): TaskMemoryRow[] {
+  const merged = new Map<string, TaskMemoryRow>();
+  for (const row of [...primary, ...secondary]) {
+    const key = taskMemoryRowKey(row);
+    const existing = merged.get(key);
+    if (!existing || isNewerMemoryRow(row.updated_at, existing.updated_at)) {
+      merged.set(key, row);
+    }
+  }
+  return [...merged.values()]
+    .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+    .slice(0, limit);
+}
+
+function toLocalLearningSignalRows(
+  hostId: string,
+  signals: SyncMobileLearningSignalsRequest["signals"],
+): LearningSignalMemoryRow[] {
+  return signals.map((signal) => ({
+    id: signal.id,
+    host_id: hostId,
+    topic: signal.topic.trim(),
+    summary: signal.summary.trim(),
+    kind: signal.kind,
+    status: signal.status,
+    created_at: signal.createdAt,
+    updated_at: signal.updatedAt,
+  }));
+}
+
+function toLocalConversationMemoryRows(
+  hostId: string,
+  memories: SyncMobileConversationMemoriesRequest["memories"],
+): ConversationMemoryRow[] {
+  return memories.map((memory) => ({
+    id: memory.id,
+    host_id: hostId,
+    topic: memory.topic.trim(),
+    summary: memory.summary.trim(),
+    category: memory.category,
+    confidence: memory.confidence,
+    status: memory.status,
+    source_session_id: memory.sourceSessionId ?? null,
+    created_at: memory.createdAt,
+    updated_at: memory.updatedAt,
+  }));
+}
+
+function persistLearningSignalsToState(
+  state: GatewayState,
+  hostId: string,
+  signals: SyncMobileLearningSignalsRequest["signals"],
+): string[] {
+  const rows = toLocalLearningSignalRows(hostId, signals);
+  if (!rows.length) {
+    return [];
+  }
+  state.durableLearningSignals = mergeLearningSignalRows(state.durableLearningSignals, rows);
+  return rows.map((row) => row.id).filter((value): value is string => Boolean(value));
+}
+
+function persistConversationMemoriesToState(
+  state: GatewayState,
+  hostId: string,
+  memories: SyncMobileConversationMemoriesRequest["memories"],
+): string[] {
+  const rows = toLocalConversationMemoryRows(hostId, memories);
+  if (!rows.length) {
+    return [];
+  }
+  state.durableConversationMemories = mergeConversationMemoryRows(state.durableConversationMemories, rows);
+  return rows.map((row) => row.id).filter((value): value is string => Boolean(value));
+}
+
+function mapStateTaskToMemoryRow(task: TaskRecord): TaskMemoryRow {
+  return {
+    topic: task.title,
+    summary: task.lastError?.trim() || `${task.origin.replace(/_/g, " ")} task for session ${task.sessionId}`,
+    status: task.status,
+    updated_at: task.updatedAt,
+  };
+}
+
+function buildLongTermProfileSection(
+  conversationMemories: ConversationMemoryRow[],
+  learningSignals: LearningSignalMemoryRow[],
+): string {
+  const relationshipAndIdentity = conversationMemories.filter((memory) =>
+    ["identity", "relationship", "project", "context"].includes(memory.category),
+  );
+  const preferenceAndWorkflow = [
+    ...conversationMemories.filter((memory) => memory.category === "preference"),
+    ...learningSignals.filter((signal) => ["preference", "workflow", "focus", "capability"].includes(signal.kind)),
+  ];
+
+  const deduped = dedupeMemoryLines(
+    [
+      ...relationshipAndIdentity.map(formatConversationMemoryLine),
+      ...preferenceAndWorkflow.map(formatLearningSignalLine),
+    ],
+    16,
+  );
+  if (!deduped.length) {
+    return "";
+  }
+
+  return ["Long-term operator memory:", ...deduped].join("\n");
+}
+
+function buildPreferenceAndWorkflowSection(
+  conversationMemories: ConversationMemoryRow[],
+  learningSignals: LearningSignalMemoryRow[],
+): string {
+  const deduped = dedupeMemoryLines(
+    [
+      ...conversationMemories
+        .filter((memory) => memory.category === "preference")
+        .map(formatConversationMemoryLine),
+      ...learningSignals
+        .filter((signal) => ["preference", "workflow", "focus", "capability"].includes(signal.kind))
+        .map(formatLearningSignalLine),
+    ],
+    12,
+  );
+  if (!deduped.length) {
+    return "";
+  }
+
+  return ["Stable preferences and workflow patterns:", ...deduped].join("\n");
 }
 
 interface PersonaOverlayMemoryRow {
@@ -251,6 +486,8 @@ const defaultState = (): GatewayState => ({
   tasks: [],
   messages: [],
   voiceRuntimeSessions: [],
+  durableLearningSignals: [],
+  durableConversationMemories: [],
   memoryFollowUps: [],
   operatorRuns: [],
   outboundRecipients: [],
@@ -406,7 +643,7 @@ export class GatewayStore {
   }
 
   async getVoiceProfile(token: string): Promise<AssistantVoiceProfile> {
-    const principal = await this.requireHost(token);
+    const principal = await this.requirePrincipal(token);
     return resolveHostVoiceProfile(principal.host);
   }
 
@@ -462,13 +699,21 @@ export class GatewayStore {
 
   async getMemoryDigest(token: string): Promise<MemoryDigest> {
     const principal = await this.requirePrincipal(token);
-    const digest = await loadMemoryDigest(principal.host.id);
     const state = await this.readState();
+    const backfilled = await seedDurableMemoryFromRecentSessions(state, principal.host.id);
+    if (backfilled) {
+      await this.writeState(state);
+    }
+    const digest = await loadMemoryDigest(principal.host.id, state);
+    const derivedLongTermContext = buildStateLongTermMemoryContext(state, principal.host.id);
     const derivedContext = buildStateConversationMemoryContext(state, principal.host.id);
     const followUpContext = buildStateMemoryFollowUpContext(state, principal.host.id);
+    const hasLongTermContext =
+      digest.context.includes("Long-term operator memory:")
+      || digest.context.includes("Stable preferences and workflow patterns:");
     const hasConversationContext =
       digest.context.includes("Relationship memory:") || digest.context.includes("Conversation continuity:");
-    if ((!derivedContext || hasConversationContext) && !followUpContext) {
+    if ((!derivedLongTermContext || hasLongTermContext) && (!derivedContext || hasConversationContext) && !followUpContext) {
       return digest;
     }
 
@@ -476,6 +721,7 @@ export class GatewayStore {
       configured: digest.configured,
       updatedAt: digest.updatedAt,
       context: [
+        !hasLongTermContext ? derivedLongTermContext : "",
         !hasConversationContext ? derivedContext : "",
         followUpContext,
         digest.context,
@@ -490,23 +736,16 @@ export class GatewayStore {
     const principal = await this.requireDevice(token);
     const signals = dedupeLearningSignalsForSync(input.signals ?? []);
     if (!signals.length) {
-      return { configured: isProgrammingMemoryConfigured(), synced: 0, skipped: 0, syncedSignalIds: [] };
+      return { configured: true, synced: 0, skipped: 0, syncedSignalIds: [] };
     }
-
-    if (!isProgrammingMemoryConfigured()) {
-      return {
-        configured: false,
-        synced: 0,
-        skipped: signals.length,
-        syncedSignalIds: []
-      };
-    }
-
-    const syncedSignalIds = await upsertLearningSignals(signals);
-    const synced = syncedSignalIds.length;
-    const skipped = Math.max(0, signals.length - synced);
 
     const state = await this.readState();
+    const syncedSignalIds = persistLearningSignalsToState(state, principal.host.id, signals);
+    if (isRemoteProgrammingMemoryConfigured()) {
+      await upsertLearningSignals(signals);
+    }
+    const synced = signals.length;
+    const skipped = 0;
     this.addAuditEvent(state, {
       hostId: principal.host.id,
       deviceId: principal.device.id,
@@ -532,23 +771,16 @@ export class GatewayStore {
     const principal = await this.requireDevice(token);
     const memories = dedupeConversationMemoriesForSync(input.memories ?? []);
     if (!memories.length) {
-      return { configured: isProgrammingMemoryConfigured(), synced: 0, skipped: 0, syncedMemoryIds: [] };
+      return { configured: true, synced: 0, skipped: 0, syncedMemoryIds: [] };
     }
-
-    if (!isProgrammingMemoryConfigured()) {
-      return {
-        configured: false,
-        synced: 0,
-        skipped: memories.length,
-        syncedMemoryIds: []
-      };
-    }
-
-    const syncedMemoryIds = await upsertConversationMemories(memories);
-    const synced = syncedMemoryIds.length;
-    const skipped = Math.max(0, memories.length - synced);
 
     const state = await this.readState();
+    const syncedMemoryIds = persistConversationMemoriesToState(state, principal.host.id, memories);
+    if (isRemoteProgrammingMemoryConfigured()) {
+      await upsertConversationMemories(memories);
+    }
+    const synced = memories.length;
+    const skipped = 0;
     this.addAuditEvent(state, {
       hostId: principal.host.id,
       deviceId: principal.device.id,
@@ -568,7 +800,7 @@ export class GatewayStore {
   }
 
   async updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<AssistantVoiceProfile> {
-    const principal = await this.requireHost(token);
+    const principal = await this.requirePrincipal(token);
     const state = await this.readState();
     const host = state.hosts.find((item) => item.id === principal.host.id);
     if (!host) {
@@ -670,6 +902,7 @@ export class GatewayStore {
         chatSessionId: chatSession.id,
         voiceSessionId,
         participantIdentity,
+        runtimeContext: input.runtimeContext?.trim() || null,
         createdAt: nowIso(),
         expiresAt,
       },
@@ -727,10 +960,10 @@ export class GatewayStore {
         content: item.content.trim(),
         createdAt: item.createdAt,
       }));
-    const digest = await loadMemoryDigest(principal.host.id);
+    const digest = await loadMemoryDigest(principal.host.id, state);
     const derivedContext = buildStateConversationMemoryContext(state, principal.host.id);
     const followUpContext = buildStateMemoryFollowUpContext(state, principal.host.id);
-    const runtimeContext = [derivedContext, followUpContext, digest.context].filter(Boolean).join("\n\n").trim();
+    const runtimeContext = [binding.runtimeContext, derivedContext, followUpContext, digest.context].filter(Boolean).join("\n\n").trim();
 
     return {
       roomName,
@@ -1303,6 +1536,7 @@ export class GatewayStore {
       threadId: activeTasks[0]?.threadId ?? targetSession.threadId,
       turnId: null,
       resumeContext: activeTasks[0]?.title ?? null,
+      runtimeContext: input.runtimeContext?.trim() || null,
       toolState: null,
       resourceKey: targetSession.rootPath,
       readOnly,
@@ -2154,8 +2388,11 @@ export class GatewayStore {
     });
 
     const durableSignals = buildDurableLearningSignalsFromOutcome(run, outcome);
-    if (isProgrammingMemoryConfigured() && durableSignals.length) {
-      await upsertLearningSignals(dedupeLearningSignalsForSync(durableSignals));
+    if (durableSignals.length) {
+      persistLearningSignalsToState(state, input.hostId, dedupeLearningSignalsForSync(durableSignals));
+      if (isRemoteProgrammingMemoryConfigured()) {
+        await upsertLearningSignals(dedupeLearningSignalsForSync(durableSignals));
+      }
     }
   }
 
@@ -2343,6 +2580,7 @@ export class GatewayStore {
       threadId: activeTasks[0]?.threadId ?? session.threadId,
       turnId: null,
       resumeContext: activeTasks[0]?.title ?? null,
+      runtimeContext: input.runtimeContext?.trim() || null,
       toolState: null,
       resourceKey: session.rootPath,
       readOnly: inferTaskReadOnly(message.content),
@@ -3039,7 +3277,7 @@ async function loadConversationBuildLaneSummary(hostId: string): Promise<Convers
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 
   return {
-    configured: isProgrammingMemoryConfigured(),
+    configured: isRemoteProgrammingMemoryConfigured(),
     items,
     pendingCount: items.filter((item) => isBuildLaneApprovalPending(item.approvalState)).length,
     approvedCount: items.filter((item) => isBuildLaneApprovalApproved(item.approvalState)).length,
@@ -3327,11 +3565,11 @@ function deriveConversationMemoriesFromMessages(
   const userMessages = messages
     .filter((message) => message.role === "user" && message.status === "completed" && message.content.trim())
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    .slice(-8);
+    .slice(-20);
   const assistantMessages = messages
     .filter((message) => message.role === "assistant" && message.status === "completed" && message.content.trim())
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
-    .slice(-4);
+    .slice(-8);
   const results: SyncMobileConversationMemoriesRequest["memories"] = [];
 
   for (const message of userMessages) {
@@ -3361,22 +3599,30 @@ function deriveConversationMemoriesFromMessages(
 
     if (/\bmy name is\b|\bi am\b|\bi'm\b/i.test(normalized)) {
       pushMemory("User identity", "identity", 0.88);
-      continue;
     }
     if (/\b(i like|i love|i prefer|my favorite|i usually prefer)\b/i.test(normalized)) {
       pushMemory("User preference", "preference", 0.8);
-      continue;
     }
     if (/\b(i am working on|i'm working on|we are building|we're building|my project|i need help with|i want to build)\b/i.test(normalized)) {
       pushMemory("Current project", "project", 0.78);
-      continue;
     }
     if (/\b(business partner|long-term partner|autonomous partner|co-founder|cofounder)\b/i.test(normalized)) {
       pushMemory("Partnership expectation", "relationship", 0.84);
-      continue;
     }
-    if (/\bremember\b|this matters to me|keep in mind\b/i.test(normalized)) {
+    if (/\bremember\b|this matters to me|keep in mind\b|important to me\b/i.test(normalized)) {
       pushMemory("Relationship context", "relationship", 0.72);
+    }
+    if (/\b(principle|tenant|tenet|must|core to freedom|foundational|non-negotiable)\b/i.test(normalized)) {
+      pushMemory("Operating principle", "context", 0.82);
+    }
+    if (/\b(long[- ]term memory|persistent memory|remember from conversation to conversation|cross-session memory)\b/i.test(normalized)) {
+      pushMemory("Memory expectation", "relationship", 0.86);
+    }
+    if (/\b(self-improve|self improve|self-evolve|self evolve|evolve over time|improve future performance)\b/i.test(normalized)) {
+      pushMemory("Self-improvement expectation", "relationship", 0.84);
+    }
+    if (/\bworkflow\b|\bhow i work\b|\boperating cadence\b|\bfriction\b/i.test(normalized)) {
+      pushMemory("Workflow expectation", "context", 0.76);
     }
   }
 
@@ -3404,7 +3650,7 @@ function deriveConversationMemoriesFromMessages(
     }
   }
 
-  return dedupeConversationMemoriesForSync(results).slice(0, 3);
+  return dedupeConversationMemoriesForSync(results).slice(0, 10);
 }
 
 function mergeMemoryFollowUps(
@@ -3464,8 +3710,8 @@ async function promoteSessionMemoryInsights(
     return;
   }
 
-  const digest = await loadMemoryDigest(hostId).catch(() => ({
-    configured: isProgrammingMemoryConfigured(),
+  const digest = await loadMemoryDigest(hostId, state).catch(() => ({
+    configured: true,
     updatedAt: nowIso(),
     context: "",
   }));
@@ -3482,11 +3728,15 @@ async function promoteSessionMemoryInsights(
     ? dedupeConversationMemoriesForSync(triage.conversationMemories)
     : deriveConversationMemoriesFromMessages(session.id, session.title, messages);
 
-  if (isProgrammingMemoryConfigured()) {
-    if (triage.learningSignals.length) {
+  if (triage.learningSignals.length) {
+    persistLearningSignalsToState(state, hostId, dedupeLearningSignalsForSync(triage.learningSignals));
+    if (isRemoteProgrammingMemoryConfigured()) {
       await upsertLearningSignals(dedupeLearningSignalsForSync(triage.learningSignals));
     }
-    if (derivedConversationMemories.length) {
+  }
+  if (derivedConversationMemories.length) {
+    persistConversationMemoriesToState(state, hostId, derivedConversationMemories);
+    if (isRemoteProgrammingMemoryConfigured()) {
       await upsertConversationMemories(derivedConversationMemories);
     }
   }
@@ -3500,14 +3750,14 @@ function buildStateConversationMemoryContext(state: GatewayState, hostId: string
   const sessions = state.sessions
     .filter((session) => session.hostId === hostId)
     .sort((left, right) => (right.lastActivityAt ?? right.updatedAt).localeCompare(left.lastActivityAt ?? left.updatedAt))
-    .slice(0, 4);
+    .slice(0, 8);
   const memories = sessions.flatMap((session) =>
     deriveConversationMemoriesFromMessages(
       session.id,
       session.title,
       state.messages.filter((message) => message.sessionId === session.id)
     )
-  ).slice(0, 6);
+  ).slice(0, 12);
 
   if (!memories.length) {
     return "";
@@ -3519,41 +3769,184 @@ function buildStateConversationMemoryContext(state: GatewayState, hostId: string
   ].join("\n");
 }
 
-async function loadMemoryDigest(hostId: string): Promise<MemoryDigest> {
-  const [tasks, learningSignals, conversationMemories, buildLane, personaOverlays] = await Promise.all([
-    fetchTaskMemoryRows(6),
-    fetchLearningSignalRows(6),
-    fetchConversationMemoryRows(8),
+function buildStateLongTermMemoryContext(state: GatewayState, hostId: string): string {
+  const sessions = state.sessions
+    .filter((session) => session.hostId === hostId)
+    .sort((left, right) => (right.lastActivityAt ?? right.updatedAt).localeCompare(left.lastActivityAt ?? left.updatedAt))
+    .slice(0, 16);
+  const derivedMemories = sessions.flatMap((session) =>
+    deriveConversationMemoriesFromMessages(
+      session.id,
+      session.title,
+      state.messages.filter((message) => message.sessionId === session.id),
+    ),
+  );
+  if (!derivedMemories.length) {
+    return "";
+  }
+
+  const normalizedRows: ConversationMemoryRow[] = derivedMemories.map((memory) => ({
+    id: memory.id,
+    topic: memory.topic,
+    summary: memory.summary,
+    category: memory.category,
+    confidence: memory.confidence,
+    status: memory.status,
+    source_session_id: memory.sourceSessionId,
+    created_at: memory.createdAt,
+    updated_at: memory.updatedAt,
+  }));
+  const derivedSignals: LearningSignalMemoryRow[] = normalizedRows
+    .filter((memory) => memory.category === "preference" || memory.topic === "Workflow expectation")
+    .map((memory, index) => ({
+      id: memory.id ?? `derived-signal-${index}`,
+      topic: memory.topic,
+      summary: memory.summary,
+      kind: memory.topic === "Workflow expectation" ? "workflow" : "preference",
+      status: "observed",
+      created_at: memory.created_at,
+      updated_at: memory.updated_at,
+    }));
+
+  return [
+    buildLongTermProfileSection(normalizedRows, derivedSignals),
+    buildPreferenceAndWorkflowSection(normalizedRows, derivedSignals),
+  ].filter(Boolean).join("\n\n");
+}
+
+async function seedDurableMemoryFromRecentSessions(state: GatewayState, hostId: string): Promise<boolean> {
+  const sessions = state.sessions
+    .filter((session) => session.hostId === hostId)
+    .sort((left, right) => (right.lastActivityAt ?? right.updatedAt).localeCompare(left.lastActivityAt ?? left.updatedAt))
+    .slice(0, 16);
+  const derivedMemories = dedupeConversationMemoriesForSync(
+    sessions.flatMap((session) =>
+      deriveConversationMemoriesFromMessages(
+        session.id,
+        session.title,
+        state.messages.filter((message) => message.sessionId === session.id),
+      ),
+    ),
+  );
+  if (!derivedMemories.length) {
+    return false;
+  }
+
+  const beforeMemoryCount = state.durableConversationMemories.length;
+  const beforeSignalCount = state.durableLearningSignals.length;
+  persistConversationMemoriesToState(state, hostId, derivedMemories);
+
+  const derivedSignals = dedupeLearningSignalsForSync(
+    derivedMemories.flatMap((memory) => {
+      if (memory.category === "preference") {
+        return [{
+          id: `derived-pref-${memory.id}`,
+          topic: memory.topic,
+          summary: memory.summary,
+          kind: "preference" as const,
+          status: "observed" as const,
+          createdAt: memory.createdAt,
+          updatedAt: memory.updatedAt,
+          sourceSessionId: memory.sourceSessionId ?? null,
+          capturedAt: memory.createdAt,
+        }];
+      }
+      if (memory.topic === "Workflow expectation") {
+        return [{
+          id: `derived-workflow-${memory.id}`,
+          topic: memory.topic,
+          summary: memory.summary,
+          kind: "workflow" as const,
+          status: "observed" as const,
+          createdAt: memory.createdAt,
+          updatedAt: memory.updatedAt,
+          sourceSessionId: memory.sourceSessionId ?? null,
+          capturedAt: memory.createdAt,
+        }];
+      }
+      return [];
+    }),
+  );
+  if (derivedSignals.length) {
+    persistLearningSignalsToState(state, hostId, derivedSignals);
+  }
+
+  if (isRemoteProgrammingMemoryConfigured()) {
+    await upsertConversationMemories(derivedMemories);
+    if (derivedSignals.length) {
+      await upsertLearningSignals(derivedSignals);
+    }
+  }
+
+  return (
+    state.durableConversationMemories.length > beforeMemoryCount ||
+    state.durableLearningSignals.length > beforeSignalCount
+  );
+}
+
+function filterLocalLearningSignals(state: GatewayState | undefined, hostId: string): LearningSignalMemoryRow[] {
+  return (state?.durableLearningSignals ?? []).filter((row) => !row.host_id || row.host_id === hostId);
+}
+
+function filterLocalConversationMemories(state: GatewayState | undefined, hostId: string): ConversationMemoryRow[] {
+  return (state?.durableConversationMemories ?? []).filter((row) => !row.host_id || row.host_id === hostId);
+}
+
+function filterLocalTaskMemories(state: GatewayState | undefined, hostId: string): TaskMemoryRow[] {
+  return (state?.tasks ?? [])
+    .filter((task) => {
+      const session = state?.sessions.find((item) => item.id === task.sessionId);
+      return session?.hostId === hostId;
+    })
+    .map(mapStateTaskToMemoryRow);
+}
+
+async function loadMemoryDigest(hostId: string, state?: GatewayState): Promise<MemoryDigest> {
+  const [remoteTasks, remoteLearningSignals, remoteConversationMemories, buildLane, personaOverlays] = await Promise.all([
+    fetchTaskMemoryRows(20),
+    fetchLearningSignalRows(20),
+    fetchConversationMemoryRows(24),
     loadConversationBuildLaneSummary(hostId),
-    fetchPersonaOverlayRows(6)
+    fetchPersonaOverlayRows(12)
   ]);
 
+  const tasks = mergeTaskMemoryRows(remoteTasks, filterLocalTaskMemories(state, hostId));
+  const learningSignals = mergeLearningSignalRows(remoteLearningSignals, filterLocalLearningSignals(state, hostId), 20);
+  const conversationMemories = mergeConversationMemoryRows(
+    remoteConversationMemories,
+    filterLocalConversationMemories(state, hostId),
+    24,
+  );
+
+  const openTasks = tasks
+    .filter((task) => ["active", "parked", "ready"].includes(task.status))
+    .slice(0, 10);
+
   const sections = [
-    tasks.length
+    buildLongTermProfileSection(conversationMemories, learningSignals),
+    buildPreferenceAndWorkflowSection(conversationMemories, learningSignals),
+    openTasks.length
       ? [
           "Open task memory:",
-          ...tasks
-            .filter((task) => ["active", "parked", "ready"].includes(task.status))
-            .slice(0, 6)
-            .map((task) => `- ${task.topic}: ${task.summary} (${task.status})`)
+          ...openTasks.map(formatTaskMemoryLine)
         ].join("\n")
       : "",
     learningSignals.length
       ? [
           "Recent durable memory:",
-          ...learningSignals.map((signal) => `- ${signal.topic}: ${signal.summary} (${signal.kind}, ${signal.status})`)
+          ...learningSignals.slice(0, 12).map(formatLearningSignalLine)
         ].join("\n")
       : "",
     conversationMemories.length
       ? [
           "Relationship memory:",
-          ...conversationMemories.map((memory) => `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`)
+          ...conversationMemories.slice(0, 16).map(formatConversationMemoryLine)
         ].join("\n")
       : "",
     buildLane.items.length
       ? [
           "Conversation build lane:",
-          ...buildLane.items.slice(0, 6).map((item) => `- ${item.title} [${item.approvalState}]: ${item.summary}`)
+          ...buildLane.items.slice(0, 10).map((item) => `- ${item.title} [${item.approvalState}]: ${item.summary}`)
         ].join("\n")
       : "",
     personaOverlays.length
@@ -3561,7 +3954,7 @@ async function loadMemoryDigest(hostId: string): Promise<MemoryDigest> {
           "Approved persona overlays:",
           ...personaOverlays
             .filter((overlay) => overlay.status === "approved" && overlay.change_type !== "retirement")
-            .slice(0, 6)
+            .slice(0, 10)
             .map((overlay) => `- ${overlay.title}: ${overlay.instruction}`)
         ].join("\n")
       : ""
@@ -3579,13 +3972,13 @@ async function loadMemoryDigest(hostId: string): Promise<MemoryDigest> {
     .at(-1) ?? nowIso();
 
   return {
-    configured: isProgrammingMemoryConfigured(),
+    configured: true,
     updatedAt,
     context: sections.join("\n\n").trim()
   };
 }
 
-function isProgrammingMemoryConfigured(): boolean {
+function isRemoteProgrammingMemoryConfigured(): boolean {
   return Boolean(
     (process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim()) &&
       process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
@@ -3977,6 +4370,7 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
         threadId: record.threadId ?? null,
         turnId: record.turnId ?? null,
         resumeContext: record.resumeContext ?? null,
+        runtimeContext: record.runtimeContext ?? null,
         toolState: record.toolState ?? null,
         resourceKey: record.resourceKey ?? "",
         readOnly: record.readOnly ?? false,
@@ -4004,9 +4398,38 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
       chatSessionId: record.chatSessionId ?? "",
       voiceSessionId: record.voiceSessionId ?? "",
       participantIdentity: record.participantIdentity ?? "",
+      runtimeContext: record.runtimeContext ?? null,
       createdAt: record.createdAt ?? now,
       expiresAt: record.expiresAt ?? now,
     })),
+    durableLearningSignals: ((input as Partial<GatewayState>).durableLearningSignals ?? []).map((signal) => {
+      const record = signal as Partial<LearningSignalMemoryRow>;
+      return {
+        id: record.id ?? createId("memorysignal"),
+        host_id: record.host_id ?? null,
+        topic: record.topic ?? "",
+        summary: record.summary ?? "",
+        kind: record.kind ?? "workflow",
+        status: record.status ?? "observed",
+        created_at: record.created_at ?? now,
+        updated_at: record.updated_at ?? record.created_at ?? now,
+      } as LearningSignalMemoryRow;
+    }),
+    durableConversationMemories: ((input as Partial<GatewayState>).durableConversationMemories ?? []).map((memory) => {
+      const record = memory as Partial<ConversationMemoryRow>;
+      return {
+        id: record.id ?? createId("memorycontext"),
+        host_id: record.host_id ?? null,
+        topic: record.topic ?? "",
+        summary: record.summary ?? "",
+        category: record.category ?? "context",
+        confidence: typeof record.confidence === "number" ? record.confidence : 0.72,
+        status: record.status ?? "observed",
+        source_session_id: record.source_session_id ?? null,
+        created_at: record.created_at ?? now,
+        updated_at: record.updated_at ?? record.created_at ?? now,
+      } as ConversationMemoryRow;
+    }),
     memoryFollowUps: ((input as Partial<GatewayState>).memoryFollowUps ?? []).map((followUp) => {
       const record = followUp as Partial<MemoryFollowUpRecord>;
       return {

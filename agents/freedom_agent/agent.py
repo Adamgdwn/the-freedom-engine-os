@@ -45,6 +45,7 @@ from tools import (
     review_dispatcher_tool_manifest,
     review_dispatcher_tool_status,
     review_governance_controls,
+    review_memory_digest,
     review_runtime_status,
     review_build_lane_queue,
     review_voice_profile,
@@ -213,6 +214,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
                 instructions=instructions,
                 tools=[
                     review_runtime_status,
+                    review_memory_digest,
                     review_governance_controls,
                     read_governed_repo_file,
                     review_dispatcher_tool_status,

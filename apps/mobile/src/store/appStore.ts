@@ -678,6 +678,131 @@ function getEffectiveFreedomVoiceProfile(
   return state.hostStatus?.voiceProfile ?? buildLocalFreedomVoiceProfile(state.selectedFreedomVoicePresetId);
 }
 
+function pickNewerVoiceProfile(
+  incoming: AssistantVoiceProfile | null | undefined,
+  current: AssistantVoiceProfile | null | undefined
+): AssistantVoiceProfile | null | undefined {
+  if (!incoming) {
+    return current ?? incoming;
+  }
+  if (!current) {
+    return incoming;
+  }
+  return incoming.updatedAt >= current.updatedAt ? incoming : current;
+}
+
+function mergeHostStatusVoiceProfile(
+  incoming: HostStatus,
+  current: HostStatus | null | undefined
+): HostStatus {
+  const voiceProfile = pickNewerVoiceProfile(incoming.voiceProfile, current?.voiceProfile);
+  return voiceProfile && voiceProfile !== incoming.voiceProfile
+    ? {
+        ...incoming,
+        voiceProfile
+      }
+    : incoming;
+}
+
+function buildSystemStateContext(
+  state: Pick<
+    AppState,
+    | "token"
+    | "offlineMode"
+    | "hostStatus"
+    | "selectedFreedomVoicePresetId"
+    | "selectedAssistantVoiceId"
+    | "autoSpeak"
+    | "autoSendVoice"
+    | "responseStyle"
+    | "voiceAvailable"
+    | "voiceSessionActive"
+    | "voiceSessionPhase"
+    | "voiceMuted"
+    | "voiceRuntimeMode"
+    | "voiceRuntimeBinding"
+    | "wakeControl"
+    | "currentDeviceId"
+    | "operatorRunLedger"
+    | "cachedMemoryDigest"
+  >
+): string {
+  const connectionState = getEffectiveConnectionState(state as AppState);
+  const voiceState = getEffectiveVoiceState(state as AppState);
+  const hostStatus = state.hostStatus;
+  const liveVoiceProfile = getEffectiveFreedomVoiceProfile(state);
+  const reviewGapCount =
+    state.operatorRunLedger?.runs.filter((run) => !run.consequenceReview && run.status !== "completed" && run.status !== "cancelled").length ?? 0;
+
+  return [
+    "System state snapshot for Freedom Anywhere:",
+    "- This snapshot is authoritative for the current paired phone and desktop settings for this turn.",
+    `- Surface connection state: ${connectionState}`,
+    `- Surface offline mode: ${state.offlineMode ? "enabled" : "disabled"}`,
+    `- Effective voice state: ${voiceState}`,
+    `- Freedom voice preset selected on this phone: ${state.selectedFreedomVoicePresetId}`,
+    `- Effective Freedom voice profile: ${liveVoiceProfile.displayName} (${liveVoiceProfile.targetVoice}), source ${liveVoiceProfile.source}`,
+    `- Spoken reply voice on this phone: ${state.selectedAssistantVoiceId ?? "automatic/default"}`,
+    `- Auto-read replies: ${state.autoSpeak ? "on" : "off"}`,
+    `- Auto-send voice turns: ${state.autoSendVoice ? "on" : "off"}`,
+    `- Reply style: ${state.responseStyle}`,
+    `- Voice available on this phone: ${state.voiceAvailable ? "yes" : "no"}`,
+    `- Voice runtime mode: ${state.voiceRuntimeMode}`,
+    `- Voice session active: ${state.voiceSessionActive ? "yes" : "no"}`,
+    `- Voice session phase: ${state.voiceSessionPhase}`,
+    `- Voice muted: ${state.voiceMuted ? "yes" : "no"}`,
+    state.voiceRuntimeBinding ? `- Voice runtime binding: ${state.voiceRuntimeBinding}` : null,
+    state.currentDeviceId ? `- Current paired device id: ${state.currentDeviceId}` : null,
+    state.wakeControl ? `- Wake control available: ${state.wakeControl.enabled ? "yes" : "no"}` : null,
+    hostStatus ? `- Desktop host online: ${hostStatus.host.isOnline ? "yes" : "no"}` : null,
+    hostStatus ? `- Desktop auth state: ${hostStatus.auth.status}` : null,
+    hostStatus ? `- Desktop mobile connection state: ${hostStatus.connectionState}` : null,
+    hostStatus ? `- Desktop deferred execution state: ${hostStatus.deferredExecutionState}` : null,
+    hostStatus ? `- Desktop run state: ${hostStatus.runState}` : null,
+    hostStatus ? `- Desktop paired device count: ${hostStatus.pairedDeviceCount}` : null,
+    hostStatus?.voiceProfile
+      ? `- Desktop live voice profile: ${hostStatus.voiceProfile.displayName} (${hostStatus.voiceProfile.targetVoice}), source ${hostStatus.voiceProfile.source}`
+      : null,
+    state.operatorRunLedger
+      ? `- Operator runs visible on phone: ${state.operatorRunLedger.runs.length} total, ${reviewGapCount} review gaps`
+      : null,
+    state.cachedMemoryDigest?.updatedAt ? `- Cached memory digest updated at: ${state.cachedMemoryDigest.updatedAt}` : null,
+    !state.token ? "- Desktop pairing token: not present on this phone right now." : null
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildConnectedRuntimeContext(
+  state: Pick<
+    AppState,
+    | "token"
+    | "offlineMode"
+    | "hostStatus"
+    | "selectedFreedomVoicePresetId"
+    | "selectedAssistantVoiceId"
+    | "autoSpeak"
+    | "autoSendVoice"
+    | "responseStyle"
+    | "voiceAvailable"
+    | "voiceSessionActive"
+    | "voiceSessionPhase"
+    | "voiceMuted"
+    | "voiceRuntimeMode"
+    | "voiceRuntimeBinding"
+    | "wakeControl"
+    | "currentDeviceId"
+    | "operatorRunLedger"
+    | "cachedMemoryDigest"
+  >
+): string | undefined {
+  const context = [state.cachedMemoryDigest?.context?.trim(), buildSystemStateContext(state)]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  return context || undefined;
+}
+
 function getFreedomSpeechProvider(state: Pick<AppState, "baseUrl" | "offlineMode" | "token" | "selectedFreedomVoicePresetId" | "hostStatus">) {
   if (!state.offlineMode && state.baseUrl) {
     return {
@@ -1129,7 +1254,8 @@ function buildOfflineContextMessages(
   messages: ChatMessage[],
   prompt: string,
   memoryDigest: CachedMemoryDigest | null = null,
-  offlineWorkSnapshot: OfflineWorkSnapshot | null = null
+  offlineWorkSnapshot: OfflineWorkSnapshot | null = null,
+  systemStateContext: string | null = null
 ): RNLlamaOAICompatibleMessage[] {
   const history = messages
     .filter((item) => item.role === "user" || item.role === "assistant" || item.role === "system")
@@ -1151,6 +1277,12 @@ function buildOfflineContextMessages(
         content: buildOfflineWorkContext(offlineWorkSnapshot)
       }]
     : [];
+  const systemStateMessage = systemStateContext?.trim()
+    ? [{
+        role: "system" as const,
+        content: systemStateContext.trim()
+      }]
+    : [];
 
   return [
     {
@@ -1159,6 +1291,7 @@ function buildOfflineContextMessages(
     },
     ...cachedMemoryMessage,
     ...offlineWorkMessage,
+    ...systemStateMessage,
     ...history,
     {
       role: "user",
@@ -1167,7 +1300,12 @@ function buildOfflineContextMessages(
   ];
 }
 
-function buildRelayRuntimeContext(messages: ChatMessage[], prompt: string, offlineWorkSnapshot: OfflineWorkSnapshot | null): string {
+function buildRelayRuntimeContext(
+  messages: ChatMessage[],
+  prompt: string,
+  offlineWorkSnapshot: OfflineWorkSnapshot | null,
+  systemStateContext: string | null
+): string {
   const recentTurns = messages
     .filter((item) => item.role === "user" || item.role === "assistant")
     .slice(-6);
@@ -1183,6 +1321,7 @@ function buildRelayRuntimeContext(messages: ChatMessage[], prompt: string, offli
     "Immediate desktop-backed governed execution is not available in this lane.",
     "Freedom's full governed runtime can inspect approved code and repo control files when the desktop lane is active and permissions allow it.",
     offlineWorkSnapshot ? buildOfflineWorkContext(offlineWorkSnapshot) : null,
+    systemStateContext?.trim() || null,
     `Current user request: ${prompt.trim()}`,
     recentTurns.length ? `Recent cached turn count: ${recentTurns.length}` : null,
     assistantPreview ? `Recent assistant preview:\n${assistantPreview}` : null
@@ -1209,13 +1348,15 @@ function truncateOfflinePreview(text: string): string {
   return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
 }
 
-function buildNotesOnlyReply(offlineWorkSnapshot: OfflineWorkSnapshot | null): string {
+function buildNotesOnlyReply(offlineWorkSnapshot: OfflineWorkSnapshot | null, systemStateContext: string | null): string {
   const snapshot = offlineWorkSnapshot;
   const pendingSummary = snapshot
     ? ` Right now this phone has ${snapshot.pendingOfflineDraftTurnCount} pending offline draft turn${snapshot.pendingOfflineDraftTurnCount === 1 ? "" : "s"} across ${snapshot.pendingOfflineDraftSessionCount} note set${snapshot.pendingOfflineDraftSessionCount === 1 ? "" : "s"} and ${snapshot.pendingDeferredRunCount} deferred operator run${snapshot.pendingDeferredRunCount === 1 ? "" : "s"}.`
     : "";
+  const liveVoiceLine = systemStateContext?.match(/Effective Freedom voice profile: ([^\n]+)/)?.[1] ?? null;
   return (
     "Freedom saved that idea locally in this app's phone cache for later sync; it is not stored in a browsable offline folder."
+    + (liveVoiceLine ? ` The current Freedom voice on this phone is ${liveVoiceLine}.` : "")
     + pendingSummary
     + " This slim build does not bundle the old on-device model, and no hosted support endpoint is configured yet."
   );
@@ -1254,25 +1395,26 @@ async function requestDisconnectedAssistantReply(
   prompt: string,
   baseUrl: string,
   memoryDigest: CachedMemoryDigest | null,
-  offlineWorkSnapshot: OfflineWorkSnapshot | null
+  offlineWorkSnapshot: OfflineWorkSnapshot | null,
+  systemStateContext: string | null
 ): Promise<string> {
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
       return offlineAssistant.generateReply({
-        messages: buildOfflineContextMessages(messages, prompt, memoryDigest, offlineWorkSnapshot)
+        messages: buildOfflineContextMessages(messages, prompt, memoryDigest, offlineWorkSnapshot, systemStateContext)
       });
     case "cloud":
       return relayCompanion.generateReply(
-        buildOfflineContextMessages(messages, prompt, memoryDigest, offlineWorkSnapshot).flatMap((message) => {
+        buildOfflineContextMessages(messages, prompt, memoryDigest, offlineWorkSnapshot, systemStateContext).flatMap((message) => {
           if (message.role === "system" || message.role === "user" || message.role === "assistant") {
             return [{ role: message.role, content: typeof message.content === "string" ? message.content : "" }];
           }
           return [];
         }),
-        buildRelayRuntimeContext(messages, prompt, offlineWorkSnapshot)
+        buildRelayRuntimeContext(messages, prompt, offlineWorkSnapshot, systemStateContext)
       );
     default:
-      return buildNotesOnlyReply(offlineWorkSnapshot);
+      return buildNotesOnlyReply(offlineWorkSnapshot, systemStateContext);
   }
 }
 
@@ -1675,10 +1817,11 @@ async function sendOfflineIdeationTurn(
   try {
     const messages = get().messagesBySession[sessionId] ?? [];
     const offlineWorkSnapshot = buildOfflineWorkSnapshot(get());
+    const systemStateContext = buildSystemStateContext(get());
     const reply =
       getDisconnectedAssistantMode() === "bundled_model"
         ? await offlineAssistant.generateReply({
-            messages: buildOfflineContextMessages(messages, text, get().cachedMemoryDigest, offlineWorkSnapshot),
+            messages: buildOfflineContextMessages(messages, text, get().cachedMemoryDigest, offlineWorkSnapshot, systemStateContext),
             onToken: (content) => {
               const updatedAt = new Date().toISOString();
               set((state) => ({
@@ -1693,7 +1836,14 @@ async function sendOfflineIdeationTurn(
               }));
             }
           })
-        : await requestDisconnectedAssistantReply(messages, text, get().baseUrl, get().cachedMemoryDigest, offlineWorkSnapshot);
+        : await requestDisconnectedAssistantReply(
+            messages,
+            text,
+            get().baseUrl,
+            get().cachedMemoryDigest,
+            offlineWorkSnapshot,
+            systemStateContext
+          );
     const completedAt = new Date().toISOString();
     set((state) => ({
       sendingMessage: false,
@@ -2140,8 +2290,9 @@ export const useAppStore = create<AppState>((set, get) => {
     set({ refreshing: true });
     try {
       const previousView = get().view;
-      const [hostStatus, buildLaneSummary, operatorRunLedger, sessions, devices, outboundRecipients, memoryDigest] = await Promise.all([
+      const [hostStatus, voiceProfile, buildLaneSummary, operatorRunLedger, sessions, devices, outboundRecipients, memoryDigest] = await Promise.all([
         api.getHostStatus(token, baseUrl),
+        api.getVoiceProfile(token, baseUrl).catch(() => null),
         api.getBuildLaneSummary(token, baseUrl).catch((error) => {
           if (error instanceof Error && isNotFoundErrorMessage(error.message)) {
             return null;
@@ -2164,6 +2315,15 @@ export const useAppStore = create<AppState>((set, get) => {
         }),
         api.getMemoryDigest(token, baseUrl).catch(() => get().cachedMemoryDigest)
       ]);
+      const resolvedHostStatus = mergeHostStatusVoiceProfile(
+        voiceProfile
+          ? {
+              ...hostStatus,
+              voiceProfile,
+            }
+          : hostStatus,
+        get().hostStatus
+      );
       const mergedSessions = mergeRemoteAndLocalSessions(sessions, get().sessions);
       const currentSelected = get().selectedSessionId;
       const nextSelected = pickPreferredSessionId(currentSelected, mergedSessions);
@@ -2174,43 +2334,43 @@ export const useAppStore = create<AppState>((set, get) => {
 
       const resolvedFreedomVoicePresetId = resolveSelectedFreedomVoicePresetId(
         get().selectedFreedomVoicePresetId,
-        hostStatus
+        resolvedHostStatus
       );
 
       if (
         currentDeviceId !== get().currentDeviceId ||
-        !wakeControlsEqual(hostStatus.wakeControl, get().wakeControl) ||
+        !wakeControlsEqual(resolvedHostStatus.wakeControl, get().wakeControl) ||
         resolvedFreedomVoicePresetId !== get().selectedFreedomVoicePresetId
       ) {
         await persistSettings(get, {
           baseUrl,
           currentDeviceId,
           freedomVoicePresetId: resolvedFreedomVoicePresetId,
-          wakeControl: hostStatus.wakeControl
+          wakeControl: resolvedHostStatus.wakeControl
         });
       }
 
       set({
-        hostStatus,
+        hostStatus: resolvedHostStatus,
         buildLaneSummary,
         operatorRunLedger,
         operatorRunActioningId: null,
         operatorRunReviewDraft: null,
         cachedMemoryDigest: memoryDigest ?? null,
-        wakeControl: hostStatus.wakeControl,
+        wakeControl: resolvedHostStatus.wakeControl,
         devices,
         outboundRecipients,
         currentDeviceId,
         selectedFreedomVoicePresetId: resolvedFreedomVoicePresetId,
         sessions: mergedSessions,
         selectedSessionId: nextSelected,
-        newSessionRootPath: get().newSessionRootPath || hostStatus.host.approvedRoots[0] || "",
+        newSessionRootPath: get().newSessionRootPath || resolvedHostStatus.host.approvedRoots[0] || "",
         renameDraftBySession: mergedSessions.reduce<Record<string, string>>((accumulator, session) => {
           accumulator[session.id] = get().renameDraftBySession[session.id] ?? session.title;
           return accumulator;
         }, {}),
-        offlineMode: shouldUseOfflineSafeMode({ token, hostStatus }),
-        notice: hostStatus.connectionState === "stand_alone" ? getDisconnectedModeNotice() : null,
+        offlineMode: shouldUseOfflineSafeMode({ token, hostStatus: resolvedHostStatus }),
+        notice: resolvedHostStatus.connectionState === "stand_alone" ? getDisconnectedModeNotice() : null,
         error: null
       });
 
@@ -2421,7 +2581,8 @@ export const useAppStore = create<AppState>((set, get) => {
         text: starterPrompt,
         inputMode: "text",
         responseStyle: get().responseStyle,
-        transcriptPolished: true
+        transcriptPolished: true,
+        runtimeContext: buildConnectedRuntimeContext(get())
       });
 
       set((state) => ({
@@ -2606,7 +2767,8 @@ export const useAppStore = create<AppState>((set, get) => {
         text,
         inputMode: get().composerInputMode,
         responseStyle: get().responseStyle,
-        transcriptPolished: get().composerInputMode === "voice_polished"
+        transcriptPolished: get().composerInputMode === "voice_polished",
+        runtimeContext: buildConnectedRuntimeContext(get())
       });
       voiceInterruptRequested = false;
       set((state) => ({
@@ -3716,6 +3878,11 @@ export const useAppStore = create<AppState>((set, get) => {
     const entry = getAssistantVoiceCatalogEntry(targetVoice);
     try {
       if (get().token && !get().offlineMode) {
+        const shouldRestartRealtimeVoice =
+          get().voiceSessionActive &&
+          get().voiceRuntimeMode === "realtime_primary" &&
+          Boolean(get().voiceTargetSessionId ?? get().selectedSessionId);
+        const restartSessionId = get().voiceTargetSessionId ?? get().selectedSessionId;
         const token = requireValue(get().token, "Pair this phone with the desktop first.");
         const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
         const updated = await api.updateVoiceProfile(token, baseUrl, {
@@ -3729,12 +3896,27 @@ export const useAppStore = create<AppState>((set, get) => {
           hostStatus: state.hostStatus
             ? {
                 ...state.hostStatus,
-                voiceProfile: updated
+                voiceProfile: pickNewerVoiceProfile(updated, state.hostStatus.voiceProfile) ?? updated
               }
             : state.hostStatus,
           notice: `${updatedEntry.label} is set as Freedom's live and fallback voice. Start a fresh Talk session to hear it clearly.`,
           error: null
         }));
+        if (shouldRestartRealtimeVoice && restartSessionId) {
+          try {
+            await restartActiveRealtimeVoiceSession(
+              get,
+              set,
+              restartSessionId,
+              `${updatedEntry.label} is selected. Restarting the live voice session so Freedom uses the new voice now.`
+            );
+          } catch (error) {
+            await handleStoreError(error, set, get, `Changed to ${updatedEntry.label}, but could not restart the live voice session.`);
+            return;
+          }
+        } else {
+          void get().refresh().catch(() => undefined);
+        }
         return;
       }
 
@@ -3963,6 +4145,7 @@ async function fallbackFromRealtimeToDeviceVoice(
   clearRealtimeInitialTurnStallTimer();
   clearPendingVoiceTranscript();
   assistantSpeech.stop();
+  await realtimeVoice.stopSession().catch(() => undefined);
 
   set((state) => ({
     listening: true,
@@ -4191,7 +4374,7 @@ async function startRealtimeVoiceSession(
   targetSessionId: string
 ): Promise<void> {
   clearRealtimeInitialTurnStallTimer();
-  const runtimeContext = get().cachedMemoryDigest?.context?.trim() || undefined;
+  const runtimeContext = buildConnectedRuntimeContext(get());
   const recentMessages = buildRecentVoiceBootstrapMessages(
     get().messagesBySession[targetSessionId] ?? []
   );
@@ -4212,6 +4395,37 @@ async function startRealtimeVoiceSession(
       );
 
   await realtimeVoice.startSession(runtime as Parameters<RealtimeVoiceService["startSession"]>[0], buildRealtimeVoiceCallbacks(get, set));
+}
+
+async function restartActiveRealtimeVoiceSession(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  targetSessionId: string,
+  notice: string
+): Promise<void> {
+  clearRealtimeInitialTurnStallTimer();
+  clearPendingVoiceTranscript();
+  voice.stopStreamingSession();
+  assistantSpeech.stop();
+  await realtimeVoice.stopSession().catch(() => undefined);
+
+  set({
+    view: "chat",
+    notice,
+    error: null,
+    voiceSessionActive: true,
+    voiceTargetSessionId: targetSessionId,
+    voiceMuted: false,
+    listening: true,
+    voiceRuntimeMode: "realtime_primary",
+    voiceRuntimeBinding: null,
+    voiceSessionPhase: "connecting",
+    liveTranscript: "",
+    voiceAudioLevel: -2,
+    voiceAssistantDraft: null
+  });
+
+  await startRealtimeVoiceSession(get, set, targetSessionId);
 }
 
 async function startVoiceLoopRecognition(
@@ -4691,17 +4905,18 @@ function applyStreamEvent(
   get: () => AppState
 ): void {
   if (payload.type === "host_status") {
-    const resolvedFreedomVoicePresetId = resolveSelectedFreedomVoicePresetId(get().selectedFreedomVoicePresetId, payload.hostStatus);
+    const mergedHostStatus = mergeHostStatusVoiceProfile(payload.hostStatus, get().hostStatus);
+    const resolvedFreedomVoicePresetId = resolveSelectedFreedomVoicePresetId(get().selectedFreedomVoicePresetId, mergedHostStatus);
     set({
-      hostStatus: payload.hostStatus,
+      hostStatus: mergedHostStatus,
       selectedFreedomVoicePresetId: resolvedFreedomVoicePresetId,
-      wakeControl: payload.hostStatus.wakeControl,
-      newSessionRootPath: get().newSessionRootPath || payload.hostStatus.host.approvedRoots[0] || "",
-      offlineMode: shouldUseOfflineSafeMode({ token: get().token, hostStatus: payload.hostStatus })
+      wakeControl: mergedHostStatus.wakeControl,
+      newSessionRootPath: get().newSessionRootPath || mergedHostStatus.host.approvedRoots[0] || "",
+      offlineMode: shouldUseOfflineSafeMode({ token: get().token, hostStatus: mergedHostStatus })
     });
     void persistSettings(get, {
       freedomVoicePresetId: resolvedFreedomVoicePresetId,
-      wakeControl: payload.hostStatus.wakeControl
+      wakeControl: mergedHostStatus.wakeControl
     }).catch(() => undefined);
     return;
   }
