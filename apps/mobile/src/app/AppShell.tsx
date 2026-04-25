@@ -4,7 +4,6 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import {
   assistantVoiceCatalog,
   FREEDOM_PHONE_PRODUCT_NAME,
-  FREEDOM_PRODUCT_NAME,
   FREEDOM_RUNTIME_NAME,
   describeDeferredExecutionState,
   describeMobileConnectionState,

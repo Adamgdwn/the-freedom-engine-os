@@ -22,7 +22,7 @@ import { findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSes
 import { Banner, LabeledInput, MessageBubble, StatusChip, WorkingBubble } from "./components";
 import { styles } from "./mobileStyles";
 import { DISCONNECTED_ASSISTANT_MODE } from "../generated/runtimeConfig";
-import { humanizeSurfaceConnectivity, standaloneSurfaceHint } from "../services/mobile/standalone";
+import { standaloneSurfaceHint } from "../services/mobile/standalone";
 
 const keyboardDismissMode: "interactive" | "on-drag" = Platform.OS === "ios" ? "interactive" : "on-drag";
 export const refreshScrollInteractionProps = {
@@ -1113,7 +1113,10 @@ export function ChatScreen(props: {
       : null;
   const deferredOperatorRuns = store.selectedSessionId ? store.deferredOperatorRunsBySession?.[store.selectedSessionId] ?? [] : [];
   const pendingDeferredOperatorRuns = deferredOperatorRuns.filter((run) => !run.importedAt);
-  const showOfflineImportReview = Boolean(store.selectedSessionId && (store.offlineMode || deferredOperatorRuns.length || storedOfflineDraft));
+  const hasPendingOfflineDraft = Boolean(
+    storedOfflineDraft && !storedOfflineDraft.importedAt && storedOfflineDraft.draftTurns.some((turn) => turn.trim().length > 0)
+  );
+  const showOfflineImportReview = Boolean(store.selectedSessionId && (store.offlineMode || pendingDeferredOperatorRuns.length || hasPendingOfflineDraft));
   const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
   const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
   const transcriptPanelHeight = Math.max(250, Math.min(460, Math.round(windowHeight * 0.46)));
@@ -1681,25 +1684,6 @@ function humanizeCodexState(status: "logged_in" | "logged_out" | "error"): strin
     return "Freedom needs attention";
   }
   return "Freedom login required";
-}
-
-function humanizeAvailability(value: "ready" | "offline" | "reconnecting" | "repair_needed" | "codex_unavailable" | "tailscale_unavailable" | "needs_attention"): string {
-  switch (value) {
-    case "codex_unavailable":
-      return "Freedom unavailable";
-    case "offline":
-      return "Desktop offline";
-    case "ready":
-      return "Ready";
-    case "reconnecting":
-      return "Reconnecting";
-    case "repair_needed":
-      return "Repair needed";
-    case "tailscale_unavailable":
-      return "Tailscale unavailable";
-    default:
-      return "Needs attention";
-  }
 }
 
 function canContinueOperatorRun(status: string, hasConsequenceReview: boolean, approvalClass: string): boolean {

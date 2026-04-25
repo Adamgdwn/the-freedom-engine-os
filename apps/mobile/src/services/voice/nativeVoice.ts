@@ -188,4 +188,6 @@ class NativeVoice {
   }
 }
 
-export default new NativeVoice();
+const nativeVoice = new NativeVoice();
+
+export default nativeVoice;

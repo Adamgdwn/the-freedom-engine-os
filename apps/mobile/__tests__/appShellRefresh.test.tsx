@@ -707,7 +707,7 @@ describe("refresh affordances", () => {
       tree = ReactTestRenderer.create(<AppShell />);
     });
 
-    let labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
     expect(labels).toContain("Offline Import Review");
     expect(labels).toContain("Deferred Operator Runs");
     expect(labels).toContain("Import Notes + Runs");
@@ -724,6 +724,65 @@ describe("refresh affordances", () => {
     });
 
     expect(mockStore.removeDeferredOperatorRunDraft).toHaveBeenCalledWith("moboprun-1");
+  });
+
+  test("connected talk does not surface offline import review after notes were already imported", async () => {
+    mockStore.view = "chat";
+    mockStore.token = "token-1";
+    mockStore.offlineMode = false;
+    mockStore.sessions = [
+      {
+        id: "session-imported",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Connected Thread",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "/tmp/workspace",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-imported",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-imported-1"
+        },
+        threadId: null,
+        status: "idle",
+        activeTurnId: null,
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Back on the connected desktop lane.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "session-imported";
+    mockStore.offlineImportDrafts = {
+      "session-imported": {
+        sessionId: "session-imported",
+        summary: "Imported notes from a temporary offline period.",
+        draftTurns: ["Please carry these notes back into the desktop thread."],
+        importedAt: "2026-04-12T10:05:00.000Z",
+        continueDraft: "I imported mobile offline ideation notes into this chat.",
+        updatedAt: "2026-04-12T10:05:00.000Z"
+      }
+    };
+    mockStore.deferredOperatorRunsBySession = {
+      "session-imported": []
+    };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    const labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).not.toContain("Offline Import Review");
+    expect(labels).toContain("Recent thread");
   });
 
   test("actions sheet exposes capabilities and mute while the live voice loop is active", async () => {

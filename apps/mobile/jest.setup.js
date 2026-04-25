@@ -111,7 +111,7 @@ jest.mock('expo-speech', () => ({
 }));
 
 jest.mock('expo-audio', () => ({
-  createAudioPlayer: jest.fn((_source, _options) => ({
+  createAudioPlayer: jest.fn(() => ({
     addListener: jest.fn(() => ({
       remove: jest.fn(),
     })),

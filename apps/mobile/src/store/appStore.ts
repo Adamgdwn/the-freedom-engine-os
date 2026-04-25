@@ -166,7 +166,7 @@ interface OperatorRunReviewDraftState {
   stopTriggers: string;
 }
 
-interface OfflineImportState extends OfflineImportDraft {}
+type OfflineImportState = OfflineImportDraft;
 
 interface CachedMemoryDigest {
   configured: boolean;
@@ -174,8 +174,8 @@ interface CachedMemoryDigest {
   context: string;
 }
 
-interface PendingLearningSignalState extends PendingLearningSignalSync {}
-interface PendingConversationMemoryState extends PendingConversationMemorySync {}
+type PendingLearningSignalState = PendingLearningSignalSync;
+type PendingConversationMemoryState = PendingConversationMemorySync;
 
 export interface AppState {
   booting: boolean;
@@ -337,6 +337,34 @@ function usesDeviceVoicePath(state: Pick<AppState, "voiceRuntimeMode" | "voiceSe
   return state.voiceSessionActive && (state.voiceRuntimeMode === "device_fallback" || state.voiceRuntimeMode === "on_device_offline");
 }
 
+function shouldSpeakAssistantMessage(
+  state: Pick<AppState, "autoSpeak" | "voiceRuntimeMode" | "voiceSessionActive" | "voiceRuntimeBinding">,
+  options: {
+    isSelectedSession: boolean;
+    isVoiceTargetSession: boolean;
+  }
+): boolean {
+  const voiceSessionUsesDeviceSpeech = usesDeviceVoicePath(state) && options.isVoiceTargetSession;
+  const realtimeTransportActive =
+    options.isVoiceTargetSession &&
+    state.voiceSessionActive &&
+    (state.voiceRuntimeMode === "realtime_primary" || state.voiceRuntimeBinding?.transport === "livekit_webrtc");
+
+  if (realtimeTransportActive) {
+    return false;
+  }
+
+  if (voiceSessionUsesDeviceSpeech) {
+    return true;
+  }
+
+  if (state.voiceSessionActive) {
+    return false;
+  }
+
+  return state.autoSpeak && options.isSelectedSession;
+}
+
 function getDisconnectedAssistantMode(): DisconnectedAssistantMode {
   const mode = getStandaloneAssistantMode();
   if (mode === "bundled_model" || mode === "cloud") {
@@ -405,9 +433,54 @@ function getDisconnectedVoiceStartNotice(): string {
 
 function hasStructuredOfflineWork(state: Pick<AppState, "offlineImportDrafts" | "deferredOperatorRunsBySession">): boolean {
   return (
-    Object.values(state.offlineImportDrafts).some((draft) => Boolean(draft.summary.trim() || draft.draftTurns.length)) ||
+    Object.values(state.offlineImportDrafts).some((draft) => hasPendingOfflineImportDraft(draft)) ||
     Object.values(state.deferredOperatorRunsBySession).some((runs) => runs.some((run) => !run.importedAt))
   );
+}
+
+function hasPendingOfflineImportDraft(draft: OfflineImportDraft | null | undefined): boolean {
+  if (!draft || draft.importedAt) {
+    return false;
+  }
+  return draft.draftTurns.some((turn) => turn.trim().length > 0);
+}
+
+type ConnectedOfflineSyncSummary = {
+  importedDraftSessions: number;
+  importedDraftTurns: number;
+  importedDeferredRuns: number;
+  failedSessions: number;
+};
+
+function buildConnectedOfflineSyncNotice(summary: ConnectedOfflineSyncSummary): string | null {
+  const clauses: string[] = [];
+  if (summary.importedDraftSessions > 0) {
+    clauses.push(
+      `${summary.importedDraftSessions} offline note set${summary.importedDraftSessions === 1 ? "" : "s"}`
+        + (summary.importedDraftTurns > 0 ? ` with ${summary.importedDraftTurns} draft turn${summary.importedDraftTurns === 1 ? "" : "s"}` : "")
+    );
+  }
+  if (summary.importedDeferredRuns > 0) {
+    clauses.push(`${summary.importedDeferredRuns} deferred operator run${summary.importedDeferredRuns === 1 ? "" : "s"}`);
+  }
+
+  if (!clauses.length && summary.failedSessions === 0) {
+    return null;
+  }
+
+  const importedSummary = clauses.length
+    ? `Freedom synced ${clauses.join(" and ")} into the connected desktop lane. Nothing started automatically.`
+    : "Freedom tried to sync saved offline work into the connected desktop lane, but nothing finished cleanly yet.";
+
+  if (summary.failedSessions > 0) {
+    return `${importedSummary} ${summary.failedSessions} sync ${summary.failedSessions === 1 ? "still needs" : "still need"} attention.`;
+  }
+
+  return importedSummary;
+}
+
+function shouldAnnounceConnectedOfflineSync(state: Pick<AppState, "voiceMuted" | "voiceSessionActive" | "voiceRuntimeMode">): boolean {
+  return !state.voiceMuted && usesDeviceVoicePath(state);
 }
 
 function hasCapturedOfflineWork(state: Pick<AppState, "sessions" | "messagesBySession">): boolean {
@@ -839,6 +912,122 @@ async function persistOfflineSnapshot(get: () => AppState): Promise<void> {
     selectedSessionId: get().selectedSessionId,
     memoryDigest: get().cachedMemoryDigest
   });
+}
+
+async function autoSyncConnectedOfflineWork(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  const token = get().token;
+  const baseUrl = get().baseUrl;
+  const hostStatus = get().hostStatus;
+  if (!token || !baseUrl || !hostStatus || shouldUseOfflineSafeMode({ token, hostStatus })) {
+    return;
+  }
+
+  const summary: ConnectedOfflineSyncSummary = {
+    importedDraftSessions: 0,
+    importedDraftTurns: 0,
+    importedDeferredRuns: 0,
+    failedSessions: 0
+  };
+
+  for (const session of get().sessions) {
+    if (isLocalOnlySession(session)) {
+      continue;
+    }
+
+    const draft = get().offlineImportDrafts[session.id] ?? null;
+    const pendingDeferredRuns = (get().deferredOperatorRunsBySession[session.id] ?? []).filter((run) => !run.importedAt);
+    const hasPendingDraft = hasPendingOfflineImportDraft(draft);
+
+    if (!hasPendingDraft && !pendingDeferredRuns.length) {
+      continue;
+    }
+
+    try {
+      const response = hasPendingDraft
+        ? await api.importOfflineSession(token, baseUrl, session.id, {
+            clientImportId: `mobile-offline-auto-${session.id}-${draft?.updatedAt ?? "draft"}`,
+            summary: draft?.summary.trim() || "Offline mobile ideation captured while the desktop was unreachable.",
+            draftTurns: draft?.draftTurns.map((turn) => turn.trim()).filter(Boolean) ?? [],
+            createdAt: draft?.updatedAt ?? new Date().toISOString(),
+            source: "mobile_offline"
+          })
+        : null;
+      const importedOperatorRuns = await Promise.all(
+        pendingDeferredRuns.map((run) =>
+          api.createOperatorRun(token, baseUrl, buildImportedOperatorRun({
+            run,
+            sessionId: session.id,
+            hostId: hostStatus.host.id ?? null
+          }))
+        )
+      );
+      const importedAt = new Date().toISOString();
+      const continueDraft = response
+        ? "I imported mobile offline ideation notes into this chat. Please review those imported notes and continue from them."
+        : draft?.continueDraft ?? null;
+
+      if (hasPendingDraft) {
+        summary.importedDraftSessions += 1;
+        summary.importedDraftTurns += draft?.draftTurns.map((turn) => turn.trim()).filter(Boolean).length ?? 0;
+      }
+      summary.importedDeferredRuns += importedOperatorRuns.length;
+
+      set((state) => ({
+        sessions: response?.session
+          ? mergeRemoteAndLocalSessions(
+              [response.session, ...state.sessions.filter((item) => !isLocalOnlySession(item) && item.id !== response.session.id)],
+              state.sessions
+            )
+          : state.sessions,
+        messagesBySession: response
+          ? {
+              ...state.messagesBySession,
+              [session.id]: [
+                ...(state.messagesBySession[session.id] ?? []),
+                ...response.messages.filter(
+                  (message: ChatMessage) =>
+                    !(state.messagesBySession[session.id] ?? []).some((existingMessage) => existingMessage.id === message.id)
+                )
+              ].sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+            }
+          : state.messagesBySession,
+        offlineImportDrafts: draft
+          ? {
+              ...state.offlineImportDrafts,
+              [session.id]: {
+                ...state.offlineImportDrafts[session.id],
+                importedAt,
+                continueDraft,
+                updatedAt: importedAt
+              }
+            }
+          : state.offlineImportDrafts,
+        deferredOperatorRunsBySession: importedOperatorRuns.length
+          ? markDeferredOperatorRunsImported(state.deferredOperatorRunsBySession, session.id, session.id, importedOperatorRuns)
+          : state.deferredOperatorRunsBySession,
+        operatorRunLedger: importedOperatorRuns.reduce(
+          (ledger, run) => upsertOperatorRunInLedger(ledger, run),
+          state.operatorRunLedger
+        )
+      }));
+    } catch (error) {
+      summary.failedSessions += 1;
+      console.warn(error);
+    }
+  }
+
+  const syncNotice = buildConnectedOfflineSyncNotice(summary);
+  if (!syncNotice) {
+    return;
+  }
+
+  set({ notice: syncNotice, error: null });
+  if (shouldAnnounceConnectedOfflineSync(get())) {
+    assistantSpeech.queuePrompt(syncNotice);
+  }
 }
 
 function pushLocalMessage(
@@ -1973,6 +2162,7 @@ export const useAppStore = create<AppState>((set, get) => {
         if (get().pendingConversationMemories.length) {
           await syncPendingConversationMemories(get, set).catch(() => undefined);
         }
+        await autoSyncConnectedOfflineWork(get, set).catch(() => undefined);
       }
 
       await persistOfflineSnapshot(get);
@@ -4343,7 +4533,7 @@ function connectSocket(
 
       nextSocket.onerror = handleDrop;
       nextSocket.onclose = handleDrop;
-    } catch (error) {
+    } catch {
       set((state) => ({
         realtimeConnected: false,
         voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
@@ -4478,6 +4668,13 @@ function applyStreamEvent(
           payload.message.content
         )
       : null;
+  const shouldQueueExternalDraftPrompt = Boolean(
+    preparedExternalDraft &&
+      pendingExternalRequest &&
+      currentState.voiceSessionActive &&
+      isVoiceTargetSession &&
+      usesDeviceVoicePath(currentState)
+  );
   let shouldDirectFallbackSpeak = false;
 
   set((state) => {
@@ -4492,15 +4689,17 @@ function applyStreamEvent(
         ? preparedExternalDraft
         : state.externalDraft;
     const voiceSessionUsesDeviceSpeech = usesDeviceVoicePath(state) && isVoiceTargetSession;
-    const voiceSessionUsesRealtimeSpeech = usesRealtimeVoicePath(state) && isVoiceTargetSession;
     const shouldVoiceSpeak =
       payload.message.role === "assistant" &&
       tts.isAvailable() &&
-      (voiceSessionUsesDeviceSpeech || (state.autoSpeak && isSelectedSession && !voiceSessionUsesRealtimeSpeech));
+      shouldSpeakAssistantMessage(state, {
+        isSelectedSession,
+        isVoiceTargetSession
+      });
     const speechQueued =
       shouldVoiceSpeak &&
       assistantSpeech.ingest(payload.message.id, payload.message.content, payload.message.status, VOICE_TTS_MIN_CHARS);
-    shouldDirectFallbackSpeak = shouldDirectlyFallbackSpeech(payload.message, voiceSessionUsesDeviceSpeech, Boolean(speechQueued));
+    shouldDirectFallbackSpeak = shouldDirectlyFallbackSpeech(payload.message, shouldVoiceSpeak, Boolean(speechQueued));
     const voiceTelemetry =
       payload.message.role === "assistant" &&
       payload.message.status === "completed" &&
@@ -4554,7 +4753,7 @@ function applyStreamEvent(
     tts.speak(payload.message.content);
   }
 
-  if (preparedExternalDraft && pendingExternalRequest && get().voiceSessionActive && get().voiceTargetSessionId === payload.sessionId) {
+  if (shouldQueueExternalDraftPrompt && preparedExternalDraft && pendingExternalRequest) {
     assistantSpeech.queuePrompt(buildExternalDraftConfirmationPrompt(pendingExternalRequest, preparedExternalDraft));
   }
 }
@@ -4820,9 +5019,9 @@ async function resolveVoiceTargetSessionId(
   return requireValue(sessionId, "Open or start a chat before starting the voice loop.");
 }
 
-function shouldDirectlyFallbackSpeech(payload: ChatMessage, voiceSessionUsesDeviceSpeech: boolean, speechQueued: boolean): boolean {
+function shouldDirectlyFallbackSpeech(payload: ChatMessage, shouldVoiceSpeak: boolean, speechQueued: boolean): boolean {
   return (
-    voiceSessionUsesDeviceSpeech &&
+    shouldVoiceSpeak &&
     payload.role === "assistant" &&
     payload.status === "completed" &&
     !speechQueued &&

@@ -40,10 +40,6 @@ function getDeviceLocaleTag(): string | null {
   }
 }
 
-function formatLocaleLabel(localeTag: string | null): string {
-  return localeTag ?? "your phone's current language";
-}
-
 async function ensureMicrophonePermission(): Promise<void> {
   if (Platform.OS !== "android") {
     return;
