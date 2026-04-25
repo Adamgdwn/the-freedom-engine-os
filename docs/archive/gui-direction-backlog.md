@@ -1,5 +1,17 @@
 # GUI Direction Backlog
 
+Archived: 2026-04-25
+Status: deferred design backlog kept for historical context, not current execution guidance.
+
+Use [Roadmap](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/roadmap.md:1)
+for active directional work and
+[Known Deficiencies (2026-04-25)](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/known-deficiencies-2026-04-25.md:1)
+for current missing capabilities and unfinished areas.
+
+The original content is preserved below.
+
+# GUI Direction Backlog
+
 Status: deferred until the app/runtime is functional and stable.
 
 This file captures the bigger GUI/product direction so it does not get lost while current work stays focused on getting the desktop/mobile system working reliably.

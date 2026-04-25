@@ -1,6 +1,16 @@
 # Freedom Engine OS — Cleanup & Integration Plan v1
 
-> Recovery status: this plan is now a follow-on cleanup track. Finish the Freedom Anywhere recovery in [docs/adr/0003-freedom-anywhere-recovery.md](./adr/0003-freedom-anywhere-recovery.md) before resuming Phase 0 here as the primary sequence.
+Archived: 2026-04-25
+Status: historical planning document, superseded by
+[Current Capabilities](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/current-capabilities.md:1),
+[Known Deficiencies (2026-04-25)](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/known-deficiencies-2026-04-25.md:1),
+and [Roadmap](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/roadmap.md:1).
+
+The original content is preserved below for historical context.
+
+# Freedom Engine OS — Cleanup & Integration Plan v1
+
+> Recovery status: this plan is now a follow-on cleanup track. Finish the Freedom Anywhere recovery in [docs/adr/0003-freedom-anywhere-recovery.md](../adr/0003-freedom-anywhere-recovery.md) before resuming Phase 0 here as the primary sequence.
 
 Coding-team handoff. Work top-to-bottom. Each phase is self-contained; do not skip ahead. Open one PR per phase (or per numbered step in Phase 4). Update docs in the same PR as the change.
 

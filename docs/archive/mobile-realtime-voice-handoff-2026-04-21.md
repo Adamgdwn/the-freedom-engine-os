@@ -1,5 +1,20 @@
 # Mobile Realtime Voice Handoff
 
+Archived: 2026-04-25
+Last active update before archive: 2026-04-21
+Status: historical migration handoff, superseded by the normal runtime docs and runbooks.
+
+Use [Current Capabilities](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/current-capabilities.md:1)
+for live behavior,
+[Known Deficiencies (2026-04-25)](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/known-deficiencies-2026-04-25.md:1)
+for remaining gaps, and
+[runbooks/operations.md](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/runbooks/operations.md:1)
+for current operational checks.
+
+The original content is preserved below for migration history.
+
+# Mobile Realtime Voice Handoff
+
 Last updated: 2026-04-21
 
 ## Purpose
@@ -205,138 +220,3 @@ If you get:
 ```
 
 the env is still missing or not loaded.
-
-## Android Build And Release Flow
-
-Any user-visible Android change must complete this full path:
-
-```bash
-bash scripts/governance-preflight.sh
-npm run build:packages
-npm run typecheck:workspace
-npm test --workspace @freedom/mobile -- --runInBand
-npm run release:android-live
-```
-
-Then verify:
-
-- local artifact:
-  [app-release.apk](/home/adamgoodwin/code/agents/the-freedom-engine-os/apps/mobile/android/app/build/outputs/apk/release/app-release.apk)
-- install page:
-  `http://pop-os.taildcb5c5.ts.net:43111/install`
-- build-specific APK link shown on the install page
-
-Current released build at handoff:
-
-- `0.2.34`
-- `versionCode 41`
-
-## Suggested Test Sequence After Credentials Are Added
-
-### Phase 1: Backend only
-
-1. Start gateway and desktop from this repo.
-2. Confirm `/voice/runtime/session` returns `200`.
-3. Confirm the Python LiveKit agent is running against the same `LIVEKIT_*` and `OPENAI_API_KEY`.
-
-### Phase 2: Phone install
-
-1. Install the latest APK from the install surface.
-2. Open the menu.
-3. Confirm:
-   - `App version = 0.2.34`
-   - `Voice runtime = LiveKit + OpenAI Realtime`
-
-If the UI shows the fallback lane after credentials are configured, inspect the mobile
- startup logs and the gateway response before changing code.
-
-### Phase 3: Realtime smoke
-
-Use one short test:
-
-- “Freedom, say hello in one sentence.”
-
-Expected:
-
-- response starts noticeably faster than the old chained mobile path
-- spoken response comes from the realtime lane, not device TTS fallback
-- menu/runtime state remains on the premium lane
-
-### Phase 4: Interrupt
-
-Use:
-
-- ask a short question
-- while Freedom is speaking, say `wait`
-
-Expected:
-
-- interrupt should stop the reply
-- the next user speech should be treated as a new turn, not a stale interrupt loop
-- the phone should not keep reading stale local transcript audio beside the live reply
-
-### Phase 5: Recovery
-
-Test:
-
-- lock/unlock
-- app background/foreground
-- temporary network drop
-
-Expected:
-
-- the app either reconnects clearly or degrades clearly
-- it should not silently hang in fake processing
-- if the desktop is unreachable but cached chats exist, the app should stay usable in
-  `Offline / On-device` rather than forcing repair before ideation can continue
-
-### Phase 6: Offline import safety
-
-1. Stop the desktop host or disconnect the phone from the paired desktop.
-2. Open a cached chat and create one or two offline turns.
-3. Reconnect the desktop.
-4. Review the offline import screen and import the notes.
-
-Expected:
-
-- the imported items arrive as `system` notes, not live user turns
-- the import itself does not queue a desktop task
-- the app offers one drafted `Continue with Freedom` turn, but does not auto-send it
-
-## Known Remaining Risks
-
-### 1. Credentials are still the gating item
-
-This is the biggest remaining blocker.
-
-### 2. Mobile still carries multiple voice/runtime branches
-
-The realtime path is now primary-capable, while device fallback and offline on-device
-ideation still exist in parallel. That is intentional for this release, but it means
-more state branching than the end-state architecture should keep.
-
-### 3. Desktop and mobile voice are still not one unified session controller
-
-This slice moves mobile onto the same transport/runtime family, but it is not yet the
- full cleanup promised in the target architecture. There is still legacy speech queue
- logic around the fallback path.
-
-## What Not To Do Next
-
-- Do not clone another repo copy just to keep experimenting with LiveKit.
-- Do not keep tuning the old device STT/TTS heuristics as the main strategy.
-- Do not pair the phone against a different checkout than the one you are editing.
-- Do not judge the new realtime path before the `LIVEKIT_*` and `OPENAI_API_KEY`
-  credentials are actually loaded into this checkout.
-
-## Best Next Step
-
-The next highest-value step is:
-
-1. add the missing realtime credentials
-2. verify `POST /voice/runtime/session` returns `200`
-3. reinstall the current APK
-4. do a single controlled premium-lane voice test
-
-If that works, then the next phase should be removing more of the legacy fallback-driven
- UI/state assumptions from mobile rather than adding more thresholds.

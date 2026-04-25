@@ -117,10 +117,20 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 - The older mobile and gateway email-recipient store still needs to be unified
   with the newer control-plane email store if the goal is one recipient
   registry.
+- The tool surface is still split between built-in voice-agent tools and the
+  dispatcher manifest system rather than one fully unified discovery and
+  execution path.
 - Learning-registry seed data still needs to be promoted into fuller live
   Supabase-backed capability tracking.
 - Knowledge governance, outcome scoring, and workforce orchestration still need
   tighter integration so they do not remain partially parallel planning systems.
+- Several load-bearing files remain unusually large and should still be treated
+  as maintainability risks:
+  `apps/gateway/src/store.ts`,
+  `agents/freedom_agent/tools.py`,
+  `apps/mobile/src/store/appStore.ts`,
+  `apps/mobile/src/app/screens.tsx`,
+  and `apps/gateway/src/installPage.ts`.
 
 ### Security And Deployment Follow-Up
 
@@ -148,3 +158,4 @@ gaps:
 - [Roadmap](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/roadmap.md:1)
 - [Freedom Anywhere Relay Session Log](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/session-log-freedom-anywhere-relay-2026-04-24.md:1)
 - [Relay README](/home/adamgoodwin/code/agents/the-freedom-engine-os/apps/relay/README.md:1)
+- [Archived Docs Index](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/archive/README.md:1)

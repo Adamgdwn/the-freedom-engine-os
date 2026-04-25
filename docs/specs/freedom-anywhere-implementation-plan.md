@@ -4,7 +4,8 @@ Status: in progress
 Depends on: [freedom-anywhere-first-principles-spec.md](./freedom-anywhere-first-principles-spec.md)
 
 This plan replaces ad hoc mobile recovery work as the primary phone cleanup sequence.
-Do this before resuming broader cleanup work in `docs/cleanup-plan-v1.md`.
+Do this before revisiting the archived broader cleanup plan in
+`docs/archive/cleanup-plan-v1.md`.
 
 ## Goal
 
@@ -280,5 +281,6 @@ After the above is clean:
 Only after the above is stable:
 
 1. Remove compatibility-only state vocabulary where no longer needed.
-2. Resume `docs/cleanup-plan-v1.md`.
+2. Revisit `docs/archive/cleanup-plan-v1.md` only if the remaining cleanup gaps
+   still apply after checking `docs/known-deficiencies-2026-04-25.md`.
 3. Keep monolith splits deferred until the simplified model is actually stable.
