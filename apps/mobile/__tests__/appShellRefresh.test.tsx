@@ -39,7 +39,6 @@ const mockStore = {
   refreshing: false,
   sendingMessage: false,
   realtimeConnected: true,
-  offlineMode: false,
   view: "start" as AppState["view"],
   baseUrl: "http://127.0.0.1:43111",
   deviceName: "Freedom Phone",
@@ -111,6 +110,9 @@ const mockStore = {
     pairedDeviceCount: 1
   },
   buildLaneSummary: null as AppState["buildLaneSummary"],
+  operatorRunLedger: null as AppState["operatorRunLedger"],
+  operatorRunActioningId: null as AppState["operatorRunActioningId"],
+  operatorRunReviewDraft: null as AppState["operatorRunReviewDraft"],
   devices: [],
   sessions: [] as AppState["sessions"],
   selectedSessionId: null as string | null,
@@ -126,6 +128,17 @@ const mockStore = {
   responseStyle: "natural",
   assistantVoices: [],
   selectedAssistantVoiceId: null,
+  selectedFreedomVoicePresetId: "marin",
+  cachedMemoryDigest: null,
+  offlineMode: false,
+  offlineModelState: "ready",
+  offlineModelDetail: null,
+  offlineImportDrafts: {},
+  deferredOperatorRunsBySession: {},
+  pendingLearningSignals: [],
+  pendingConversationMemories: [],
+  offlineSummarizing: false,
+  offlineImporting: false,
   wakeControl: null,
   wakeRequesting: false,
   outboundRecipients: [],
@@ -173,8 +186,24 @@ const mockStore = {
   renameSession: jest.fn(async () => undefined),
   deleteSession: jest.fn(async () => undefined),
   sendMessage: jest.fn(async () => undefined),
+  generateOfflineImportSummary: jest.fn(async () => undefined),
+  updateOfflineImportSummary: jest.fn(),
+  updateOfflineImportDraftTurn: jest.fn(),
+  removeOfflineImportDraftTurn: jest.fn(),
+  addDeferredOperatorRunDraft: jest.fn(),
+  updateDeferredOperatorRunDraft: jest.fn(),
+  removeDeferredOperatorRunDraft: jest.fn(),
+  importOfflineSession: jest.fn(async () => undefined),
+  continueWithFreedom: jest.fn(),
   enterStandaloneMode: jest.fn(async () => undefined),
   stopSession: jest.fn(async () => undefined),
+  approveOperatorRun: jest.fn(async () => undefined),
+  holdOperatorRun: jest.fn(async () => undefined),
+  interruptOperatorRun: jest.fn(async () => undefined),
+  startOperatorRunReview: jest.fn(),
+  updateOperatorRunReviewDraft: jest.fn(),
+  cancelOperatorRunReview: jest.fn(),
+  submitOperatorRunReview: jest.fn(async () => undefined),
   renameCurrentDevice: jest.fn(async () => undefined),
   enablePushNotifications: jest.fn(async () => undefined),
   toggleNotificationPreference: jest.fn(async () => undefined),
@@ -221,12 +250,34 @@ describe("refresh affordances", () => {
     mockStore.selectedSessionId = null;
     mockStore.composer = "";
     mockStore.buildLaneSummary = null;
+    mockStore.operatorRunLedger = null;
+    mockStore.operatorRunActioningId = null;
+    mockStore.operatorRunReviewDraft = null;
+    mockStore.offlineMode = false;
+    mockStore.offlineImportDrafts = {};
+    mockStore.deferredOperatorRunsBySession = {};
     mockStore.hostStatus.auth.status = "logged_in";
     mockStore.refresh.mockClear();
     mockStore.bootstrap.mockClear();
     mockStore.selectSession.mockClear();
     mockStore.toggleListening.mockClear();
     mockStore.enterStandaloneMode.mockClear();
+    mockStore.approveOperatorRun.mockClear();
+    mockStore.holdOperatorRun.mockClear();
+    mockStore.interruptOperatorRun.mockClear();
+    mockStore.startOperatorRunReview.mockClear();
+    mockStore.updateOperatorRunReviewDraft.mockClear();
+    mockStore.cancelOperatorRunReview.mockClear();
+    mockStore.submitOperatorRunReview.mockClear();
+    mockStore.generateOfflineImportSummary.mockClear();
+    mockStore.updateOfflineImportSummary.mockClear();
+    mockStore.updateOfflineImportDraftTurn.mockClear();
+    mockStore.removeOfflineImportDraftTurn.mockClear();
+    mockStore.addDeferredOperatorRunDraft.mockClear();
+    mockStore.updateDeferredOperatorRunDraft.mockClear();
+    mockStore.removeDeferredOperatorRunDraft.mockClear();
+    mockStore.importOfflineSession.mockClear();
+    mockStore.continueWithFreedom.mockClear();
     mockStore.setField.mockClear();
     mockStore.setView.mockClear();
   });
@@ -311,6 +362,48 @@ describe("refresh affordances", () => {
 
   test("host view stays secondary and keeps operational controls available", async () => {
     mockStore.view = "host";
+    mockStore.operatorRunLedger = {
+      configured: true,
+      activeCount: 1,
+      awaitingApprovalCount: 1,
+      completedCount: 0,
+      updatedAt: "2026-04-12T10:00:00.000Z",
+      runs: [
+        {
+          id: "oprun-1",
+          autonomyLevel: "A3",
+          hostId: "host-1",
+          sessionId: "session-1",
+          taskId: null,
+          userMessageId: null,
+          turnId: null,
+          requestedFrom: "mobile_companion",
+          title: "Refine autonomy gating",
+          summary: "Tighten approval handling before further autonomous execution.",
+          status: "awaiting-approval",
+          approvalClass: "operator-review",
+          selectedOutcome: "build",
+          outcomeAssessments: [],
+          nextCheckpoint: "Review second- and third-order consequences before approving.",
+          consequenceReview: {
+            summary: "Risk stays bounded if the gate remains in place before repo execution.",
+            secondOrderEffects: [],
+            thirdOrderEffects: [],
+            blastRadius: "Desktop programming lane only.",
+            reversibility: "Changes stay reversible until explicit repo edits are approved and validated.",
+            dependencyImpact: "No new external dependencies in this step.",
+            operatorBurdenImpact: "Adds one review checkpoint before execution.",
+            securityPrivacyImpact: "No new exposure if the gate is respected.",
+            stopTriggers: ["Missing consequence review context", "Scope expands beyond governed repo work"],
+            reviewedAt: "2026-04-12T10:00:00.000Z"
+          },
+          evidence: [],
+          learningOutcome: null,
+          createdAt: "2026-04-12T10:00:00.000Z",
+          updatedAt: "2026-04-12T10:00:00.000Z"
+        }
+      ]
+    };
 
     let tree: ReactTestRenderer.ReactTestRenderer;
 
@@ -322,9 +415,89 @@ describe("refresh affordances", () => {
 
     expect(labels).toContain("Homebase");
     expect(labels).toContain("Mission summary");
+    expect(labels).toContain("Operator Runs");
+    expect(labels).toContain("Refine autonomy gating");
     expect(labels).toContain("Secondary detail stays here.");
     expect(labels).toContain("Wake Homebase");
     expect(labels).toContain("Trusted Devices");
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "operator-run-continue-oprun-1" }).props.onPress();
+    });
+
+    expect(mockStore.approveOperatorRun).toHaveBeenCalledWith("oprun-1");
+  });
+
+  test("host view can open and submit a consequence review draft for a review-gap run", async () => {
+    mockStore.view = "host";
+    mockStore.operatorRunLedger = {
+      configured: true,
+      activeCount: 0,
+      awaitingApprovalCount: 1,
+      completedCount: 0,
+      updatedAt: "2026-04-12T10:00:00.000Z",
+      runs: [
+        {
+          id: "oprun-gap",
+          autonomyLevel: "A3",
+          hostId: "host-1",
+          sessionId: null,
+          taskId: null,
+          userMessageId: null,
+          turnId: null,
+          requestedFrom: "mobile_companion",
+          title: "Review missing run",
+          summary: "A governed run still needs its structured consequence review.",
+          status: "awaiting-approval",
+          approvalClass: "operator-approval",
+          selectedOutcome: "build",
+          outcomeAssessments: [],
+          nextCheckpoint: "Record the consequence review before execution continues.",
+          consequenceReview: null,
+          evidence: [],
+          learningOutcome: null,
+          createdAt: "2026-04-12T10:00:00.000Z",
+          updatedAt: "2026-04-12T10:00:00.000Z"
+        }
+      ]
+    };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    expect(tree!.root.findAllByProps({ testID: "operator-run-continue-oprun-gap" })).toHaveLength(0);
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "operator-run-review-open-oprun-gap" }).props.onPress();
+    });
+
+    expect(mockStore.startOperatorRunReview).toHaveBeenCalledWith("oprun-gap");
+
+    mockStore.operatorRunReviewDraft = {
+      runId: "oprun-gap",
+      summary: "Keep the blast radius contained before desktop execution resumes.",
+      blastRadius: "Desktop lane only.",
+      reversibility: "Reversible before repo edits ship.",
+      dependencyImpact: "No new dependencies in this step.",
+      operatorBurdenImpact: "Requires one explicit approval checkpoint.",
+      securityPrivacyImpact: "No new sensitive exposure if the gate holds.",
+      secondOrderEffects: "medium | Approval flow becomes more explicit",
+      thirdOrderEffects: "low | Better auditability across devices",
+      stopTriggers: "Scope expands\nReview context goes stale"
+    };
+
+    await ReactTestRenderer.act(async () => {
+      tree!.update(<AppShell />);
+    });
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "operator-run-review-save-oprun-gap" }).props.onPress();
+    });
+
+    expect(mockStore.submitOperatorRunReview).toHaveBeenCalledTimes(1);
   });
 
   test("sessions view presents the build surface with resume and launch sections", async () => {
@@ -467,6 +640,90 @@ describe("refresh affordances", () => {
     labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
     expect(labels).toContain("Recent thread");
     expect(labels).toContain("Open");
+  });
+
+  test("stand-alone chat can stage deferred operator runs for later import", async () => {
+    mockStore.view = "chat";
+    mockStore.token = null;
+    mockStore.offlineMode = true;
+    mockStore.sessions = [
+      {
+        id: "local-session-1",
+        hostId: "host-1",
+        deviceId: "device-1",
+        title: "Phone-only planning",
+        kind: "operator",
+        pinned: false,
+        archived: false,
+        rootPath: "mobile://offline/local-session-1",
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "offline-freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "standalone",
+          auditCorrelationId: "offline-audit-1"
+        },
+        threadId: null,
+        status: "idle",
+        activeTurnId: null,
+        stopRequested: false,
+        lastError: null,
+        lastPreview: "Stage follow-up operator work.",
+        lastActivityAt: "2026-04-12T10:00:00.000Z",
+        createdAt: "2026-04-12T10:00:00.000Z",
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    ];
+    mockStore.selectedSessionId = "local-session-1";
+    mockStore.offlineImportDrafts = {
+      "local-session-1": {
+        sessionId: "local-session-1",
+        summary: "Offline notes ready for later import.",
+        draftTurns: ["Capture the next operator task."],
+        importedAt: null,
+        continueDraft: null,
+        updatedAt: "2026-04-12T10:00:00.000Z"
+      }
+    };
+    mockStore.deferredOperatorRunsBySession = {
+      "local-session-1": [
+        {
+          id: "moboprun-1",
+          title: "Queue autonomy follow-up",
+          summary: "Prepare the next governed desktop slice after reconnect.",
+          sourceSessionId: "local-session-1",
+          requestedAt: "2026-04-12T10:00:00.000Z",
+          consequenceReview: null,
+          importedAt: null,
+          importedOperatorRunId: null
+        }
+      ]
+    };
+
+    let tree: ReactTestRenderer.ReactTestRenderer;
+
+    await ReactTestRenderer.act(async () => {
+      tree = ReactTestRenderer.create(<AppShell />);
+    });
+
+    let labels = tree!.root.findAll((node) => typeof node.props.children !== "undefined").flatMap((node) => flattenText(node.props.children));
+    expect(labels).toContain("Offline Import Review");
+    expect(labels).toContain("Deferred Operator Runs");
+    expect(labels).toContain("Import Notes + Runs");
+    expect(tree!.root.findByProps({ testID: "offline-operator-run-remove-moboprun-1" })).toBeTruthy();
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "offline-operator-run-add" }).props.onPress();
+    });
+
+    expect(mockStore.addDeferredOperatorRunDraft).toHaveBeenCalledTimes(1);
+
+    await ReactTestRenderer.act(async () => {
+      tree!.root.findByProps({ testID: "offline-operator-run-remove-moboprun-1" }).props.onPress();
+    });
+
+    expect(mockStore.removeDeferredOperatorRunDraft).toHaveBeenCalledWith("moboprun-1");
   });
 
   test("actions sheet exposes capabilities and mute while the live voice loop is active", async () => {

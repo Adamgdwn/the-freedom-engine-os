@@ -95,6 +95,9 @@ export function AppShell(): React.JSX.Element {
     }
   );
   const showPairing = !store.token && store.view === "pairing";
+  const connectedOperatorRunLedger = store.token && !store.offlineMode ? store.operatorRunLedger : null;
+  const operatorRunReviewGapCount =
+    connectedOperatorRunLedger?.runs.filter((item) => !item.consequenceReview && item.status !== "completed" && item.status !== "cancelled").length ?? 0;
 
   if (store.booting) {
     return (
@@ -355,6 +358,45 @@ export function AppShell(): React.JSX.Element {
                         <View style={styles.mobileSheetInfoCard}>
                           <Text style={styles.mobileSheetHelper}>
                             No conversation-originated Pop!_OS build items are queued yet. When an idea matures into governed implementation work, Freedom can route it here.
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ) : null}
+
+                  {connectedOperatorRunLedger?.configured ? (
+                    <View style={styles.mobileSheetSection}>
+                      <Text style={styles.mobileSheetSectionTitle}>Operator Runs</Text>
+                      <Text style={styles.mobileSheetHelper}>
+                        Desktop-backed operator runs stay visible here so the phone can see approval holds and missing consequence reviews without pretending to execute them.
+                      </Text>
+                      <View style={styles.statusRow}>
+                        <StatusChip label={`${connectedOperatorRunLedger.activeCount} active`} tone={connectedOperatorRunLedger.activeCount ? "orange" : "teal"} />
+                        <StatusChip label={`${connectedOperatorRunLedger.awaitingApprovalCount} approval`} tone={connectedOperatorRunLedger.awaitingApprovalCount ? "orange" : "teal"} />
+                        <StatusChip
+                          label={`${operatorRunReviewGapCount} review gaps`}
+                          tone={operatorRunReviewGapCount ? "orange" : "teal"}
+                        />
+                      </View>
+                      {connectedOperatorRunLedger.runs.length ? (
+                        connectedOperatorRunLedger.runs.slice(0, 3).map((item) => (
+                          <View key={item.id} style={styles.mobileSheetTaskCard}>
+                            <View style={styles.rowBetween}>
+                              <Text style={styles.mobileSheetTaskTitle}>{item.title}</Text>
+                              <Text style={styles.mobileSheetHelper}>{item.status}</Text>
+                            </View>
+                            <Text style={styles.mobileSheetHelper}>{item.summary}</Text>
+                            <Text style={styles.metric}>Approval: {item.approvalClass}</Text>
+                            <Text style={styles.metric}>Next checkpoint: {item.nextCheckpoint}</Text>
+                            {!item.consequenceReview ? (
+                              <Text style={styles.mobileSheetHelper}>Consequence review still missing.</Text>
+                            ) : null}
+                          </View>
+                        ))
+                      ) : (
+                        <View style={styles.mobileSheetInfoCard}>
+                          <Text style={styles.mobileSheetHelper}>
+                            No operator runs are active yet. Once Freedom routes governed work, the phone will show the live approval and review posture here.
                           </Text>
                         </View>
                       )}

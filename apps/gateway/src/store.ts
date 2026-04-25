@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createId, generatePairingCode, nowIso } from "@freedom/shared";
 import { AccessToken } from "livekit-server-sdk";
 import type {
+  AutonomousOperatorRun,
   AuditEvent,
   AssistantVoiceProfile,
   ChatMessage,
@@ -59,11 +60,15 @@ import type {
   UpdateNotificationPrefsRequest,
   UpdateSessionRequest,
   VoiceRuntimeSessionResponse,
-  WakeControl
+  WakeControl,
+  OperatorRunLedger,
+  OperatorRunPatch
 } from "@freedom/shared";
 import {
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
+  autonomousOperatorRunSchema,
+  operatorRunPatchSchema,
   getAssistantVoiceCatalogEntry,
   getModelRouterConfig,
   hasRunnableLocalDayToDay,
@@ -75,6 +80,13 @@ import {
 } from "@freedom/shared";
 import { createEmailProvider, renderOutboundEmail, resolveOutboundEmailStatus } from "./outboundEmail.js";
 import { triageMemoryWithChatGPT, type MemoryFollowUpCandidate } from "./memoryTriage.js";
+import {
+  canTransitionOperatorRunStatus,
+  describeConsequenceReviewRequirement,
+  describeOperatorRunTransitionError,
+  requiresConsequenceReviewForExecution,
+} from "./operatorRuns.js";
+import { buildDurableLearningSignalsFromOutcome, deriveOperatorLearningOutcome } from "./operatorLearning.js";
 import { resolveWakeControl } from "./wakeControl.js";
 
 interface HostRecord extends RegisteredHost {
@@ -111,6 +123,7 @@ interface VoiceRuntimeSessionRecord {
 }
 
 type MemoryFollowUpRecord = MemoryFollowUpCandidate;
+type OperatorRunRecord = AutonomousOperatorRun;
 
 interface GatewayState {
   hosts: HostRecord[];
@@ -120,6 +133,7 @@ interface GatewayState {
   messages: ChatMessage[];
   voiceRuntimeSessions: VoiceRuntimeSessionRecord[];
   memoryFollowUps: MemoryFollowUpRecord[];
+  operatorRuns: OperatorRunRecord[];
   outboundRecipients: OutboundRecipientRecord[];
   auditEvents: AuditEvent[];
 }
@@ -238,6 +252,7 @@ const defaultState = (): GatewayState => ({
   messages: [],
   voiceRuntimeSessions: [],
   memoryFollowUps: [],
+  operatorRuns: [],
   outboundRecipients: [],
   auditEvents: []
 });
@@ -398,6 +413,51 @@ export class GatewayStore {
   async getBuildLaneSummary(token: string): Promise<ConversationBuildLaneSummary> {
     const principal = await this.requirePrincipal(token);
     return loadConversationBuildLaneSummary(principal.host.id);
+  }
+
+  async getHostOperatorRunLedger(token: string): Promise<OperatorRunLedger> {
+    const principal = await this.requirePrincipal(token);
+    return this.buildOperatorRunLedger(principal.host.id);
+  }
+
+  async upsertHostOperatorRun(token: string, input: AutonomousOperatorRun): Promise<AutonomousOperatorRun> {
+    const principal = await this.requirePrincipal(token);
+    const state = await this.readState();
+    if (input.sessionId) {
+      const session = state.sessions.find((item) => item.id === input.sessionId);
+      if (!session) {
+        throw new Error("Operator run session not found.");
+      }
+      if (session.hostId !== principal.host.id) {
+        throw new Error("Operator run session does not belong to this host.");
+      }
+    }
+
+    return this.upsertOperatorRun({
+      ...input,
+      hostId: principal.host.id
+    });
+  }
+
+  async updateHostOperatorRun(
+    token: string,
+    runId: string,
+    input: OperatorRunPatch
+  ): Promise<AutonomousOperatorRun> {
+    const principal = await this.requirePrincipal(token);
+    const state = await this.readState();
+    const run = state.operatorRuns.find((item) => item.id === runId);
+    if (!run) {
+      throw new Error("Operator run not found.");
+    }
+    if (run.hostId && run.hostId !== principal.host.id) {
+      throw new Error("Operator run does not belong to this host.");
+    }
+
+    return this.updateOperatorRun(runId, {
+      ...input,
+      hostId: input.hostId ?? run.hostId ?? principal.host.id
+    });
   }
 
   async getMemoryDigest(token: string): Promise<MemoryDigest> {
@@ -1543,6 +1603,19 @@ export class GatewayStore {
     session.lastPreview = truncatePreview(userMessage.content);
     state.messages.push(assistantMessage);
     syncSessionFromTasks(state, session);
+    this.syncOperatorRunLifecycle(state, {
+      hostId: principal.host.id,
+      sessionId: session.id,
+      taskId: task.id,
+      userMessageId: input.userMessageId,
+      turnId: input.turnId,
+      status: "running",
+      nextCheckpoint:
+        "Explicitly review second- and third-order consequences, blast radius, reversibility, dependency impact, operator burden, and stop triggers before substantial implementation or release decisions.",
+      evidenceKind: "audit",
+      evidenceSummary: `Desktop run started for task ${task.id} under turn ${input.turnId}.`,
+      evidenceSource: "gateway:start_turn"
+    });
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -1608,6 +1681,18 @@ export class GatewayStore {
     task.updatedAt = nowIso();
     session.lastPreview = truncatePreview(assistantMessage.content);
     syncSessionFromTasks(state, session);
+    this.syncOperatorRunLifecycle(state, {
+      hostId: principal.host.id,
+      sessionId: session.id,
+      taskId: task.id,
+      userMessageId: input.userMessageId,
+      turnId: input.turnId,
+      status: "completed",
+      nextCheckpoint: "Review execution evidence, capture durable learning, and confirm no hidden second-order regressions remain.",
+      evidenceKind: "validation",
+      evidenceSummary: `Desktop run completed under turn ${input.turnId}: ${truncatePreview(assistantMessage.content, 220)}`,
+      evidenceSource: "gateway:complete_turn"
+    });
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -1617,6 +1702,13 @@ export class GatewayStore {
       detail: input.turnId
     });
     await this.sendSessionNotification(state, principal.host.id, session.id, "run_complete", truncatePreview(assistantMessage.content));
+    await this.promoteOperatorRunLearning(state, {
+      hostId: principal.host.id,
+      sessionId: session.id,
+      taskId: task.id,
+      userMessageId: input.userMessageId,
+      turnId: input.turnId,
+    });
     await promoteSessionMemoryInsights(
       state,
       principal.host.id,
@@ -1683,6 +1775,18 @@ export class GatewayStore {
     session.threadId = input.threadId ?? session.threadId;
     session.lastPreview = truncatePreview(input.errorMessage);
     syncSessionFromTasks(state, session);
+    this.syncOperatorRunLifecycle(state, {
+      hostId: principal.host.id,
+      sessionId: session.id,
+      taskId: task?.id ?? null,
+      userMessageId: input.userMessageId,
+      turnId: input.turnId ?? task?.turnId ?? null,
+      status: "failed",
+      nextCheckpoint: "Review the failure, check second- and third-order consequences, and decide whether the run should be revised, re-approved, or stopped.",
+      evidenceKind: "audit",
+      evidenceSummary: `Desktop run failed: ${truncatePreview(input.errorMessage, 220)}`,
+      evidenceSource: "gateway:fail_turn"
+    });
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -1735,6 +1839,18 @@ export class GatewayStore {
     task.lastError = "Run stopped from Freedom.";
     task.updatedAt = nowIso();
     syncSessionFromTasks(state, session);
+    this.syncOperatorRunLifecycle(state, {
+      hostId: principal.host.id,
+      sessionId: session.id,
+      taskId: task.id,
+      userMessageId: null,
+      turnId: input.turnId,
+      status: "cancelled",
+      nextCheckpoint: "Review whether the interruption changed blast radius, left partial work behind, or requires a fresh consequence review before resuming.",
+      evidenceKind: "audit",
+      evidenceSummary: `Desktop run was interrupted for turn ${input.turnId}.`,
+      evidenceSource: "gateway:interrupt_turn"
+    });
 
     this.addAuditEvent(state, {
       hostId: principal.host.id,
@@ -1827,6 +1943,246 @@ export class GatewayStore {
             .filter((item) => item.sessionId === session.id)
             .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
         : []
+    };
+  }
+
+  async getOperatorRunLedger(): Promise<OperatorRunLedger> {
+    const state = await this.readState();
+    const host = getLatestHostRecord(state);
+    if (!host) {
+      return {
+        configured: false,
+        runs: [],
+        activeCount: 0,
+        awaitingApprovalCount: 0,
+        completedCount: 0,
+        updatedAt: null
+      };
+    }
+
+    return this.buildOperatorRunLedger(host.id, state);
+  }
+
+  async upsertOperatorRun(input: AutonomousOperatorRun): Promise<AutonomousOperatorRun> {
+    const state = await this.readState();
+    const run = autonomousOperatorRunSchema.parse(input);
+    const existingIndex = state.operatorRuns.findIndex((item) => item.id === run.id);
+    if (existingIndex >= 0) {
+      state.operatorRuns[existingIndex] = run;
+    } else {
+      state.operatorRuns.unshift(run);
+    }
+    state.operatorRuns.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+    const auditHostId = run.hostId ?? getLatestHostRecord(state)?.id ?? null;
+    if (auditHostId) {
+      this.addAuditEvent(state, {
+        hostId: auditHostId,
+        deviceId: null,
+        sessionId: run.sessionId,
+        type: existingIndex >= 0 ? "operator_run_updated" : "operator_run_created",
+        originSurface:
+          run.requestedFrom === "desktop_shell" || run.requestedFrom === "mobile_companion"
+            ? run.requestedFrom
+            : null,
+        auditCorrelationId: run.id,
+        detail: `${run.title} • ${run.status} • ${run.approvalClass}`
+      });
+    }
+
+    await this.writeState(state);
+    return run;
+  }
+
+  async updateOperatorRun(runId: string, input: OperatorRunPatch): Promise<AutonomousOperatorRun> {
+    const state = await this.readState();
+    const patch = operatorRunPatchSchema.parse(input);
+    const run = state.operatorRuns.find((item) => item.id === runId);
+    if (!run) {
+      throw new Error("Operator run not found.");
+    }
+
+    if (
+      patch.status !== undefined &&
+      !canTransitionOperatorRunStatus(run.status, patch.status)
+    ) {
+      throw new Error(describeOperatorRunTransitionError(run.status, patch.status));
+    }
+
+    if (
+      patch.status !== undefined &&
+      requiresConsequenceReviewForExecution(
+        patch.approvalClass ?? run.approvalClass,
+        patch.status,
+        Boolean(patch.consequenceReview === undefined ? run.consequenceReview : patch.consequenceReview)
+      )
+    ) {
+      throw new Error(describeConsequenceReviewRequirement(patch.status));
+    }
+
+    if (patch.approvalClass !== undefined) {
+      run.approvalClass = patch.approvalClass;
+    }
+    if (patch.status !== undefined) {
+      run.status = patch.status;
+    }
+    if (patch.selectedOutcome !== undefined) {
+      run.selectedOutcome = patch.selectedOutcome;
+    }
+    if (patch.sessionId !== undefined) {
+      run.sessionId = patch.sessionId;
+    }
+    if (patch.hostId !== undefined) {
+      run.hostId = patch.hostId;
+    }
+    if (patch.taskId !== undefined) {
+      run.taskId = patch.taskId;
+    }
+    if (patch.userMessageId !== undefined) {
+      run.userMessageId = patch.userMessageId;
+    }
+    if (patch.turnId !== undefined) {
+      run.turnId = patch.turnId;
+    }
+    if (patch.nextCheckpoint !== undefined) {
+      run.nextCheckpoint = patch.nextCheckpoint;
+    }
+    if (patch.consequenceReview !== undefined) {
+      run.consequenceReview = patch.consequenceReview;
+    }
+    if (patch.learningOutcome !== undefined) {
+      run.learningOutcome = patch.learningOutcome;
+    }
+    if (patch.appendEvidence) {
+      appendOperatorRunEvidence(run, patch.appendEvidence);
+    }
+
+    run.updatedAt = nowIso();
+
+    const auditHostId = run.hostId ?? getLatestHostRecord(state)?.id ?? null;
+    if (auditHostId) {
+      this.addAuditEvent(state, {
+        hostId: auditHostId,
+        deviceId: null,
+        sessionId: run.sessionId,
+        type: patch.consequenceReview ? "operator_run_reviewed" : "operator_run_updated",
+        originSurface:
+          run.requestedFrom === "desktop_shell" || run.requestedFrom === "mobile_companion"
+            ? run.requestedFrom
+            : null,
+        auditCorrelationId: run.id,
+        detail: `${run.title} • ${run.status} • ${run.approvalClass}`
+      });
+    }
+
+    await this.writeState(state);
+    return run;
+  }
+
+  private syncOperatorRunLifecycle(
+    state: GatewayState,
+    input: {
+      hostId: string;
+      sessionId: string;
+      taskId?: string | null;
+      userMessageId?: string | null;
+      turnId?: string | null;
+      status: OperatorRunRecord["status"];
+      nextCheckpoint: string;
+      evidenceKind: OperatorRunRecord["evidence"][number]["kind"];
+      evidenceSummary: string;
+      evidenceSource: string;
+    }
+  ): void {
+    const run = findLinkedOperatorRun(state, input);
+    if (!run) {
+      return;
+    }
+
+    run.hostId = run.hostId ?? input.hostId;
+    run.sessionId = run.sessionId ?? input.sessionId;
+    run.taskId = input.taskId ?? run.taskId ?? null;
+    run.userMessageId = input.userMessageId ?? run.userMessageId ?? null;
+    run.turnId = input.turnId ?? run.turnId ?? null;
+    run.status = input.status;
+    run.nextCheckpoint = input.nextCheckpoint;
+    run.updatedAt = nowIso();
+    appendOperatorRunEvidence(run, {
+      kind: input.evidenceKind,
+      summary: input.evidenceSummary,
+      source: input.evidenceSource,
+    });
+  }
+
+  private async promoteOperatorRunLearning(
+    state: GatewayState,
+    input: {
+      hostId: string;
+      sessionId: string;
+      taskId?: string | null;
+      userMessageId?: string | null;
+      turnId?: string | null;
+    }
+  ): Promise<void> {
+    const run = findLinkedOperatorRun(state, input);
+    if (!run || run.status !== "completed") {
+      return;
+    }
+
+    const relatedRuns = state.operatorRuns.filter((item) => item.hostId === input.hostId);
+    const outcome = deriveOperatorLearningOutcome(run, relatedRuns);
+    if (!outcome) {
+      return;
+    }
+
+    run.learningOutcome = outcome;
+    run.updatedAt = nowIso();
+    appendOperatorRunEvidence(run, {
+      kind: "memory",
+      summary: `Learning outcome recorded: ${truncatePreview(outcome.summary, 220)}`,
+      source: "gateway:operator_learning",
+    });
+    this.addAuditEvent(state, {
+      hostId: input.hostId,
+      deviceId: null,
+      sessionId: run.sessionId,
+      type: "operator_run_learned",
+      auditCorrelationId: run.id,
+      detail: outcome.capabilityRecommendations[0]
+        ? `${outcome.capabilityRecommendations[0].title} • ${outcome.capabilityRecommendations[0].recommendation}`
+        : outcome.summary,
+    });
+
+    const durableSignals = buildDurableLearningSignalsFromOutcome(run, outcome);
+    if (isProgrammingMemoryConfigured() && durableSignals.length) {
+      await upsertLearningSignals(dedupeLearningSignalsForSync(durableSignals));
+    }
+  }
+
+  private buildOperatorRunLedger(hostId: string, existingState?: GatewayState): OperatorRunLedger {
+    const state = existingState ?? this.state;
+    if (!state) {
+      return {
+        configured: false,
+        runs: [],
+        activeCount: 0,
+        awaitingApprovalCount: 0,
+        completedCount: 0,
+        updatedAt: null
+      };
+    }
+
+    const runs = [...state.operatorRuns]
+      .filter((item) => item.hostId === hostId || item.hostId === null)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+    return {
+      configured: true,
+      runs,
+      activeCount: runs.filter((item) => item.status === "queued" || item.status === "running" || item.status === "paused").length,
+      awaitingApprovalCount: runs.filter((item) => item.status === "awaiting-approval").length,
+      completedCount: runs.filter((item) => item.status === "completed").length,
+      updatedAt: runs[0]?.updatedAt ?? null
     };
   }
 
@@ -3664,6 +4020,9 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
         updatedAt: record.updatedAt ?? record.createdAt ?? now,
       } as MemoryFollowUpRecord;
     }),
+    operatorRuns: ((input as Partial<GatewayState>).operatorRuns ?? [])
+      .map((record) => normalizeStoredOperatorRun(record))
+      .filter((record): record is OperatorRunRecord => record !== null),
     outboundRecipients: (input.outboundRecipients ?? []).map((recipient) => {
       const record = recipient as Partial<OutboundRecipientRecord>;
       return {
@@ -3694,6 +4053,74 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
   };
   backfillLegacyTasks(state);
   return state;
+}
+
+function normalizeStoredOperatorRun(input: unknown): OperatorRunRecord | null {
+  const normalizedInput =
+    input && typeof input === "object"
+      ? {
+          taskId: null,
+          userMessageId: null,
+          turnId: null,
+          learningOutcome: null,
+          ...input
+        }
+      : input;
+  const parsed = autonomousOperatorRunSchema.safeParse(normalizedInput);
+  return parsed.success ? parsed.data : null;
+}
+
+function findLinkedOperatorRun(
+  state: GatewayState,
+  input: {
+    hostId: string;
+    sessionId: string;
+    taskId?: string | null;
+    userMessageId?: string | null;
+    turnId?: string | null;
+  }
+): OperatorRunRecord | null {
+  const candidates = state.operatorRuns
+    .filter((run) => run.hostId === input.hostId || run.hostId === null)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+  return (
+    candidates.find((run) => Boolean(input.taskId) && run.taskId === input.taskId) ??
+    candidates.find((run) => Boolean(input.userMessageId) && run.userMessageId === input.userMessageId) ??
+    candidates.find((run) => Boolean(input.turnId) && run.turnId === input.turnId) ??
+    candidates.find(
+      (run) =>
+        run.sessionId === input.sessionId &&
+        run.selectedOutcome === "build" &&
+        (run.status === "queued" || run.status === "running")
+    ) ??
+    null
+  );
+}
+
+function appendOperatorRunEvidence(
+  run: OperatorRunRecord,
+  input: {
+    kind: OperatorRunRecord["evidence"][number]["kind"];
+    summary: string;
+    source: string;
+  }
+): void {
+  const normalizedSummary = input.summary.trim();
+  if (!normalizedSummary) {
+    return;
+  }
+
+  run.evidence = [
+    ...run.evidence,
+    {
+      id: createId("oprevidence"),
+      kind: input.kind,
+      summary: normalizedSummary,
+      source: input.source,
+      createdAt: nowIso()
+    }
+  ].slice(-20);
 }
 
 function buildSessionIdentity(input: {

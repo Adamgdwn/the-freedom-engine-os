@@ -20,6 +20,10 @@ using the same operating rules.
 - Review `project-control.yaml` for risk tier and required controls.
 - Note any open exceptions relevant to the work before proceeding.
 - Record deviations as exceptions rather than ignoring them.
+- For autonomy, governance, memory, connector, or trust-boundary work, explicitly review
+  second-order and third-order consequences before implementation and again before final
+  handoff. Call out blast radius, reversibility, dependency shifts, operator burden, and
+  what should make the agent stop and ask for approval.
 
 ## Commands
 

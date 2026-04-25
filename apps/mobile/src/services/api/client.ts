@@ -1,5 +1,6 @@
 import type {
   AssistantVoiceProfile,
+  AutonomousOperatorRun,
   ChatMessage,
   ChatSession,
   CreateOutboundRecipientRequest,
@@ -11,6 +12,7 @@ import type {
   OfflineImportRequest,
   OfflineImportResponse,
   OutboundRecipient,
+  OperatorRunPatch,
   PairingCompleteResponse,
   PairedDevice,
   PostMessageRequest,
@@ -23,6 +25,7 @@ import type {
   SyncMobileLearningSignalsResponse,
   SyncMobileConversationMemoriesRequest,
   SyncMobileConversationMemoriesResponse,
+  OperatorRunLedger,
   VoiceRuntimeSessionResponse,
   UpdateNotificationPrefsRequest,
   UpdateHostVoiceProfileRequest,
@@ -50,6 +53,27 @@ export class ApiClient {
 
   getBuildLaneSummary(token: string, baseUrl: string): Promise<HostBuildLaneResponse> {
     return this.request("GET", `${baseUrl}/host/build-lane`, token);
+  }
+
+  getOperatorRunLedger(token: string, baseUrl: string): Promise<OperatorRunLedger> {
+    return this.request("GET", `${baseUrl}/host/operator-runs`, token);
+  }
+
+  createOperatorRun(
+    token: string,
+    baseUrl: string,
+    input: AutonomousOperatorRun
+  ): Promise<AutonomousOperatorRun> {
+    return this.request("POST", `${baseUrl}/host/operator-runs`, token, input);
+  }
+
+  updateOperatorRun(
+    token: string,
+    baseUrl: string,
+    runId: string,
+    input: OperatorRunPatch
+  ): Promise<AutonomousOperatorRun> {
+    return this.request("POST", `${baseUrl}/host/operator-runs/${encodeURIComponent(runId)}/update`, token, input);
   }
 
   updateVoiceProfile(
@@ -184,11 +208,14 @@ export class ApiClient {
   }
 
   private async request<T>(method: string, url: string, token?: string, body?: unknown): Promise<T> {
+    const bypassCache = shouldBypassCache(method, url);
+    const requestUrl = bypassCache ? appendFreshQuery(url) : url;
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await fetch(requestUrl, {
         method,
         headers: {
+          ...(bypassCache ? { "cache-control": "no-cache, no-store", pragma: "no-cache" } : {}),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
           ...(body ? { "content-type": "application/json" } : {})
         },
@@ -196,7 +223,7 @@ export class ApiClient {
       });
     } catch (error) {
       const detail = error instanceof Error && error.message ? error.message : "network request failed";
-      throw new Error(`Could not reach the desktop host at ${url}. ${detail}`);
+      throw new Error(`Could not reach the desktop host at ${requestUrl}. ${detail}`);
     }
 
     const text = await response.text();
@@ -215,4 +242,13 @@ export class ApiClient {
 
     return parsed as T;
   }
+}
+
+function shouldBypassCache(method: string, url: string): boolean {
+  return method.toUpperCase() === "GET" && /\/host\/operator-runs(?:[/?]|$)/.test(url);
+}
+
+function appendFreshQuery(url: string): string {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}freedom_no_cache=${Date.now()}`;
 }

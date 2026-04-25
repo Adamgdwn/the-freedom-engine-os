@@ -94,7 +94,7 @@ export type AgentProfile = {
   id: string;
   role: string;
   model: string;
-  autonomy: 'A0' | 'A1' | 'A2';
+  autonomy: 'A0' | 'A1' | 'A2' | 'A3';
   defaultMode: 'ai-run' | 'human-led' | 'hybrid';
   allowedActions: string[];
   blockedActions: string[];

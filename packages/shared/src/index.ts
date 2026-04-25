@@ -7,6 +7,7 @@ export * from "./projectPrompts.js";
 export * from "./freedom.js";
 export * from "./mobileExperience.js";
 export * from "./modelRouter.js";
+export * from "./autonomousOperator.js";
 export * from "./voiceProfile.js";
 export * from "./controlPlaneRuntime.js";
 export {

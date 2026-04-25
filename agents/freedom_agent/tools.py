@@ -330,6 +330,205 @@ def _loopback_gateway_request(
     return parsed if isinstance(parsed, dict) else None
 
 
+def _default_operator_consequence_checkpoint() -> str:
+    return (
+        "Before substantial implementation, explicitly review second- and third-order consequences, "
+        "blast radius, reversibility, dependency impact, operator burden, security/privacy impact, "
+        "and stop triggers."
+    )
+
+
+def _queue_desktop_task_text(task: str) -> str:
+    return (
+        f"{task.strip()}\n\n"
+        "Governance requirement:\n"
+        f"{_default_operator_consequence_checkpoint()}\n"
+        "Record that review in the operator run before substantial implementation or release decisions."
+    )
+
+
+def _build_operator_run_payload(
+    run_id: str,
+    title: str,
+    summary: str,
+    session_id: str | None,
+    user_message_id: str | None,
+    host_id: str | None,
+    requested_from: str = "voice_runtime",
+    approval_class: str = "operator-approval",
+    status: str = "queued",
+    selected_outcome: str = "build",
+    next_checkpoint: str | None = None,
+    rationale: str | None = None,
+    evidence_summary: str | None = None,
+) -> dict[str, object]:
+    created_at = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    resolved_checkpoint = next_checkpoint or _default_operator_consequence_checkpoint()
+    resolved_rationale = rationale or "Governed operator work was recorded and now needs explicit consequence review and approval handling."
+    resolved_evidence_summary = evidence_summary or "Governed operator work was recorded."
+    return {
+        "id": run_id,
+        "title": title,
+        "summary": summary,
+        "autonomyLevel": "A3",
+        "approvalClass": approval_class,
+        "status": status,
+        "requestedFrom": requested_from,
+        "sessionId": session_id,
+        "hostId": host_id,
+        "taskId": None,
+        "userMessageId": user_message_id,
+        "turnId": None,
+        "selectedOutcome": selected_outcome,
+        "outcomeAssessments": [
+            {
+                "option": selected_outcome,
+                "rationale": resolved_rationale,
+                "expectedFreedomGain": "medium",
+                "expectedOrganizationalGain": "medium",
+                "confidence": "medium",
+                "checkpoint": resolved_checkpoint,
+                "selected": True,
+            }
+        ],
+        "consequenceReview": None,
+        "evidence": [
+            {
+                "id": f"{run_id}-queued",
+                "kind": "audit",
+                "summary": resolved_evidence_summary,
+                "source": "voice:queue_desktop_programming_task",
+                "createdAt": created_at,
+            }
+        ],
+        "learningOutcome": None,
+        "nextCheckpoint": resolved_checkpoint,
+        "createdAt": created_at,
+        "updatedAt": created_at,
+    }
+
+
+def _upsert_operator_run(payload: dict[str, object]) -> dict[str, object] | None:
+    response = _loopback_gateway_request("POST", "/api/operator-runs", payload)
+    return response if isinstance(response, dict) else None
+
+
+def _update_operator_run(run_id: str, payload: dict[str, object]) -> dict[str, object] | None:
+    response = _loopback_gateway_request(
+        "POST",
+        f"/api/operator-runs/{parse.quote(run_id, safe='')}/update",
+        payload,
+    )
+    return response if isinstance(response, dict) else None
+
+
+def _get_operator_run(run_id: str) -> dict[str, object] | None:
+    response = _loopback_gateway_request("GET", "/api/operator-runs")
+    if not response:
+        return None
+
+    runs = response.get("runs")
+    if not isinstance(runs, list):
+        return None
+
+    for item in runs:
+        if isinstance(item, dict) and str(item.get("id") or "") == run_id:
+            return item
+    return None
+
+
+def _parse_effect_entries(raw_value: str) -> list[dict[str, object]]:
+    trimmed = raw_value.strip()
+    if not trimmed:
+        return []
+
+    try:
+        parsed = json.loads(trimmed)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, list):
+        normalized_entries: list[dict[str, object]] = []
+        for item in parsed:
+            if isinstance(item, str) and item.strip():
+                normalized_entries.append({
+                    "summary": item.strip(),
+                    "severity": "medium",
+                    "mitigated": False,
+                    "mitigation": None,
+                })
+                continue
+            if isinstance(item, dict):
+                summary = str(item.get("summary") or "").strip()
+                if not summary:
+                    continue
+                severity = str(item.get("severity") or "medium").strip().lower()
+                if severity not in {"low", "medium", "high"}:
+                    severity = "medium"
+                mitigated = bool(item.get("mitigated", False))
+                mitigation = str(item.get("mitigation") or "").strip() or None
+                normalized_entries.append({
+                    "summary": summary,
+                    "severity": severity,
+                    "mitigated": mitigated,
+                    "mitigation": mitigation,
+                })
+        return normalized_entries[:8]
+
+    return [
+        {
+            "summary": part.strip(),
+            "severity": "medium",
+            "mitigated": False,
+            "mitigation": None,
+        }
+        for part in re.split(r"\n+|\|", trimmed)
+        if part.strip()
+    ][:8]
+
+
+def _parse_stop_triggers(raw_value: str) -> list[str]:
+    trimmed = raw_value.strip()
+    if not trimmed:
+        return []
+
+    try:
+        parsed = json.loads(trimmed)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, list):
+        return [str(item).strip() for item in parsed if str(item).strip()][:8]
+
+    return [part.strip() for part in re.split(r"\n+|\|", trimmed) if part.strip()][:8]
+
+
+def _build_lane_operator_state(approval_state: str) -> tuple[str, str, str]:
+    if approval_state == "blocked":
+        return (
+            "blocked",
+            "paused",
+            "This build-lane item is blocked. Reassess scope, risk, or business case before continuing."
+        )
+    if approval_state == "approved-for-release":
+        return (
+            "release-approval",
+            "awaiting-approval",
+            "Record the consequence review, then complete release approval before substantial release actions continue."
+        )
+    if approval_state == "approved-for-build":
+        return (
+            "operator-approval",
+            "awaiting-approval",
+            "Record the consequence review, then delegate this run into the desktop programming lane using the same operator run id."
+        )
+    return (
+        "operator-review",
+        "awaiting-approval",
+        "Review the business case, record the consequence review, and decide whether this should advance into governed build work."
+    )
+
+
 def _control_plane_runtime_summary() -> dict[str, object] | None:
     response = _loopback_gateway_request("GET", "/control-plane/runtime-summary")
     return response if isinstance(response, dict) else None
@@ -1649,7 +1848,32 @@ async def request_self_programming(request_id: str, capability: str, reason: str
     })
     if not stored:
         return "I raised the self-programming request in-session, but I could not persist it to the governed memory store right now."
-    return "Self-programming request recorded for approval."
+
+    host_id, _host_name = _host_runtime_identity()
+    operator_run = _upsert_operator_run(
+        _build_operator_run_payload(
+            request_id.strip(),
+            title=capability.strip()[:200],
+            summary=(
+                "Freedom proposed a self-programming improvement. "
+                "This remains approval-gated and requires consequence review before any implementation work."
+            ),
+            session_id=None,
+            user_message_id=None,
+            host_id=host_id,
+            requested_from="voice_runtime",
+            approval_class="operator-review",
+            status="awaiting-approval",
+            selected_outcome="build",
+            next_checkpoint="Review the request, record second- and third-order consequences, and decide whether this should enter governed build work.",
+            rationale="Freedom identified a possible self-programming improvement that should stay approval-gated until its consequences are reviewed.",
+            evidence_summary="Self-programming request was recorded and mirrored into the operator ledger."
+        )
+    )
+
+    if not operator_run or not isinstance(operator_run.get("id"), str):
+        return "Self-programming request recorded for approval, but I could not mirror it into the operator ledger right now."
+    return f"Self-programming request recorded for approval under operator run {operator_run['id']}."
 
 
 @function_tool
@@ -1746,9 +1970,37 @@ async def route_conversation_to_build_lane(
             f"I framed '{title.strip()}' as a Pop!_OS build-lane item in-session, "
             "but I could not persist it to the governed memory store right now."
         )
+
+    operator_approval_class, operator_status, operator_checkpoint = _build_lane_operator_state(normalized_approval)
+    operator_run = _upsert_operator_run(
+        _build_operator_run_payload(
+            request_id.strip(),
+            title=title.strip()[:200],
+            summary=(
+                "Conversation-born build work was routed into the governed build lane. "
+                "Consequence review should be recorded before substantial implementation or release decisions."
+            ),
+            session_id=None,
+            user_message_id=None,
+            host_id=host_id,
+            requested_from=normalized_requested_from,
+            approval_class=operator_approval_class,
+            status=operator_status,
+            selected_outcome="build",
+            next_checkpoint=operator_checkpoint,
+            rationale="Freedom determined that this conversation should become governed build work rather than staying an informal request.",
+            evidence_summary="Build-lane request was recorded and mirrored into the operator ledger."
+        )
+    )
+
+    if not operator_run or not isinstance(operator_run.get("id"), str):
+        return (
+            f"Routed '{title.strip()}' into the Pop!_OS build lane with status "
+            f"{normalized_approval}, but I could not mirror it into the operator ledger right now."
+        )
     return (
         f"Routed '{title.strip()}' into the Pop!_OS build lane with status "
-        f"{normalized_approval}. It will now stay visible for approval and reporting."
+        f"{normalized_approval} under operator run {operator_run['id']}. It will now stay visible for approval and reporting."
     )
 
 
@@ -1951,8 +2203,8 @@ async def update_dispatcher_tool_autonomy(
     normalized_reason = reason.strip()
     if not normalized_tool_id:
         return "Tell me which dispatcher tool id should change autonomy."
-    if normalized_level not in {"A0", "A1", "A2"}:
-        return "Autonomy level must be A0, A1, or A2."
+    if normalized_level not in {"A0", "A1", "A2", "A3"}:
+        return "Autonomy level must be A0, A1, A2, or A3."
     if len(normalized_reason) < 4:
         return "Give a short reason so the autonomy change is auditable."
 
@@ -2006,7 +2258,8 @@ async def scaffold_new_project(
     Call after a build-lane record has been drafted for this capability.
     Autonomy A1 (default): call first without confirmed=True to present the
     plan to the operator, then call again with confirmed=True after they say
-    yes. Autonomy A2: executes immediately and narrates.
+    yes. Autonomy A2 and A3: execute immediately and narrate in the current
+    runtime.
     Never claim success without receiving status 'created' in the response.
     """
     params: dict[str, str] = {"project_name": project_name, "build_type": build_type}
@@ -2035,7 +2288,7 @@ async def scaffold_new_project(
     tools_list = tool_info.get("tools", [])
     autonomy = tools_list[0].get("autonomy_level", "A1") if tools_list else "A1"
 
-    if autonomy == "A2":
+    if autonomy in {"A2", "A3"}:
         result = _dispatcher_request("POST", "/invoke", payload={"tool_id": "new-build-agent", "params": params})
         return _scaffold_result_message(project_name, result)
 
@@ -2078,6 +2331,7 @@ def _scaffold_result_message(project_name: str, result: dict | None) -> str:
 async def delegate_approved_programming_task(
     task: str,
     confirmed: bool = False,
+    operator_run_id: str = "",
 ) -> str:
     """
     Hand an approved programming task into the desktop shell/Codex lane.
@@ -2096,6 +2350,60 @@ async def delegate_approved_programming_task(
             f"{normalized_task} Say yes to confirm."
         )
 
+    host_id, _host_name = _host_runtime_identity()
+    normalized_run_id = operator_run_id.strip()
+    existing_run = _get_operator_run(normalized_run_id) if normalized_run_id else None
+    has_consequence_review = bool(existing_run and existing_run.get("consequenceReview"))
+
+    if not has_consequence_review:
+        checkpoint = (
+            "Record the structured consequence review for this run, then delegate it into the desktop programming lane using the same operator run id."
+        )
+        if normalized_run_id:
+            operator_run = _update_operator_run(
+                normalized_run_id,
+                {
+                    "status": "awaiting-approval",
+                    "nextCheckpoint": checkpoint,
+                    "appendEvidence": {
+                        "kind": "audit",
+                        "summary": "Desktop delegation was blocked until the consequence review is recorded.",
+                        "source": "voice:delegate_approved_programming_task",
+                    },
+                },
+            )
+        else:
+            normalized_run_id = f"operator-run-{int(time.time() * 1000)}"
+            operator_run = _upsert_operator_run(
+                _build_operator_run_payload(
+                    normalized_run_id,
+                    title=normalized_task[:200],
+                    summary=(
+                        "Approved desktop programming task is staged, but a structured consequence review must be recorded before it can enter the governed desktop lane."
+                    ),
+                    session_id=None,
+                    user_message_id=None,
+                    host_id=host_id,
+                    requested_from="voice_runtime",
+                    approval_class="operator-approval",
+                    status="awaiting-approval",
+                    selected_outcome="build",
+                    next_checkpoint=checkpoint,
+                    rationale="Operator-approved desktop programming task was captured, but the execution gate requires consequence review before queueing repo work.",
+                    evidence_summary="Desktop delegation was blocked until the consequence review is recorded."
+                )
+            )
+
+        if not operator_run or not isinstance(operator_run.get("id"), str):
+            return (
+                "I staged the governed programming task, but I could not persist the operator run that needs consequence review before execution."
+            )
+
+        return (
+            f"Operator run {operator_run['id']} is now waiting on a structured consequence review. "
+            "Record that review first, then I can send the task into the desktop programming lane."
+        )
+
     session_response = _loopback_gateway_request("POST", "/api/desktop-shell/session")
     if not session_response or not isinstance(session_response.get("id"), str):
         return "I could not open the desktop programming session on this machine."
@@ -2105,7 +2413,7 @@ async def delegate_approved_programming_task(
         "POST",
         f"/api/desktop-shell/sessions/{parse.quote(session_id, safe='')}/messages",
         body={
-            "text": normalized_task,
+            "text": _queue_desktop_task_text(normalized_task),
             "inputMode": "text",
             "responseStyle": "executive",
         },
@@ -2113,7 +2421,126 @@ async def delegate_approved_programming_task(
     if not message_response or not isinstance(message_response.get("id"), str):
         return "I opened the desktop programming session, but I could not queue the programming turn."
 
+    if normalized_run_id:
+        operator_run = _update_operator_run(
+            normalized_run_id,
+            {
+                "approvalClass": "operator-approval",
+                "status": "queued",
+                "selectedOutcome": "build",
+                "sessionId": session_id,
+                "hostId": host_id,
+                "userMessageId": message_response["id"],
+                "nextCheckpoint": _default_operator_consequence_checkpoint(),
+                "appendEvidence": {
+                    "kind": "audit",
+                    "summary": "Approved work was delegated into the desktop programming lane.",
+                    "source": "voice:delegate_approved_programming_task",
+                },
+            },
+        )
+    else:
+        normalized_run_id = f"operator-run-{int(time.time() * 1000)}"
+        operator_run = _upsert_operator_run(
+            _build_operator_run_payload(
+                normalized_run_id,
+                title=normalized_task[:200],
+                summary=(
+                    "Approved desktop programming task queued from Freedom voice. "
+                    "Consequence review is still required before substantial implementation or release decisions."
+                ),
+                session_id=session_id,
+                user_message_id=message_response["id"],
+                host_id=host_id,
+                requested_from="voice_runtime",
+                approval_class="operator-approval",
+                status="queued",
+                selected_outcome="build",
+                next_checkpoint=_default_operator_consequence_checkpoint(),
+                rationale="Operator-approved desktop programming task routed into the governed build lane.",
+                evidence_summary="Approved work was queued into the desktop programming lane."
+            )
+        )
+
+    if not operator_run or not isinstance(operator_run.get("id"), str):
+        return (
+            f"Queued the approved programming task into the desktop lane under session {session_id}. "
+            "Freedom can now work on it through the governed repo execution path, but I could not persist the linked operator run yet."
+        )
+
     return (
-        f"Queued the approved programming task into the desktop lane under session {session_id}. "
-        "Freedom can now work on it through the governed repo execution path."
+        f"Queued the approved programming task into the desktop lane under session {session_id} "
+        f"with operator run {operator_run['id']}. Freedom can now work on it through the governed repo execution path."
+    )
+
+
+@function_tool
+async def record_operator_consequence_review(
+    run_id: str,
+    summary: str,
+    blast_radius: str,
+    reversibility: str,
+    dependency_impact: str,
+    operator_burden_impact: str,
+    security_privacy_impact: str,
+    second_order_effects: str = "",
+    third_order_effects: str = "",
+    stop_triggers: str = "",
+    approval_class: str = "operator-approval",
+    status: str = "awaiting-approval",
+    next_checkpoint: str = "Wait for operator approval or revision before substantial implementation continues.",
+) -> str:
+    """
+    Record a structured consequence review against an existing operator run.
+
+    Use this after Freedom has explicitly considered second- and third-order
+    effects, blast radius, reversibility, burden, security/privacy, and stop
+    triggers for a governed run.
+    """
+    normalized_run_id = run_id.strip()
+    if not normalized_run_id:
+        return "Tell me which operator run should receive the consequence review."
+
+    normalized_summary = summary.strip()
+    if not normalized_summary:
+        return "Add a short summary of the consequence review."
+
+    normalized_approval = approval_class.strip().lower()
+    if normalized_approval not in {"none", "operator-review", "operator-approval", "release-approval", "blocked"}:
+        return "Approval class must be none, operator-review, operator-approval, release-approval, or blocked."
+
+    normalized_status = status.strip().lower()
+    if normalized_status not in {"draft", "queued", "running", "awaiting-approval", "paused", "completed", "failed", "cancelled"}:
+        return "Status must be draft, queued, running, awaiting-approval, paused, completed, failed, or cancelled."
+
+    reviewed_at = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+    payload = {
+        "approvalClass": normalized_approval,
+        "status": normalized_status,
+        "nextCheckpoint": next_checkpoint.strip() or "Wait for operator approval or revision before substantial implementation continues.",
+        "consequenceReview": {
+            "summary": normalized_summary,
+            "secondOrderEffects": _parse_effect_entries(second_order_effects),
+            "thirdOrderEffects": _parse_effect_entries(third_order_effects),
+            "blastRadius": blast_radius.strip(),
+            "reversibility": reversibility.strip(),
+            "dependencyImpact": dependency_impact.strip(),
+            "operatorBurdenImpact": operator_burden_impact.strip(),
+            "securityPrivacyImpact": security_privacy_impact.strip(),
+            "stopTriggers": _parse_stop_triggers(stop_triggers),
+            "reviewedAt": reviewed_at,
+        },
+        "appendEvidence": {
+            "kind": "analysis",
+            "summary": "Structured consequence review recorded for this operator run.",
+            "source": "voice:record_operator_consequence_review",
+        },
+    }
+    updated = _update_operator_run(normalized_run_id, payload)
+    if not updated or not isinstance(updated.get("id"), str):
+        return "I could not persist the consequence review to the operator run right now."
+
+    return (
+        f"Recorded the consequence review for operator run {updated['id']} "
+        f"with status {updated.get('status', normalized_status)} and approval class {updated.get('approvalClass', normalized_approval)}."
     )

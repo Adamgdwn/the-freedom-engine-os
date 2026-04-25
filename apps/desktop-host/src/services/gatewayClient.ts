@@ -1,4 +1,5 @@
 import type {
+  AutonomousOperatorRun,
   ChatMessage,
   ChatSession,
   HostApi,
@@ -9,6 +10,8 @@ import type {
   HostHeartbeatRequest,
   HostInterruptTurnRequest,
   HostMemoryDigestResponse,
+  OperatorRunLedger,
+  OperatorRunPatch,
   HostVoiceProfileResponse,
   HostStartTurnRequest,
   HostStatus,
@@ -75,6 +78,18 @@ export class HttpGatewayClient implements HostApi {
 
   getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse> {
     return this.request("GET", "/host/build-lane", token);
+  }
+
+  getOperatorRunLedger(token: string): Promise<OperatorRunLedger> {
+    return this.request("GET", "/host/operator-runs", token);
+  }
+
+  createOperatorRun(token: string, input: AutonomousOperatorRun): Promise<AutonomousOperatorRun> {
+    return this.request("POST", "/host/operator-runs", token, input);
+  }
+
+  updateOperatorRun(token: string, runId: string, input: OperatorRunPatch): Promise<AutonomousOperatorRun> {
+    return this.request("POST", `/host/operator-runs/${encodeURIComponent(runId)}/update`, token, input);
   }
 
   updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse> {

@@ -157,8 +157,8 @@ def admin_tools(id: Optional[str] = None):
 
 @app.post("/admin/autonomy")
 def admin_update_autonomy(req: AutonomyUpdateRequest):
-    if req.new_level not in ("A0", "A1", "A2"):
-        raise HTTPException(400, detail={"ok": False, "error": "new_level must be A0, A1, or A2"})
+    if req.new_level not in ("A0", "A1", "A2", "A3"):
+        raise HTTPException(400, detail={"ok": False, "error": "new_level must be A0, A1, A2, or A3"})
 
     manifest = registry.get_tool(req.tool_id)
     if not manifest:

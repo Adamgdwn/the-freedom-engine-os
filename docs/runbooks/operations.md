@@ -66,6 +66,9 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
   review `docs/roadmap.md` under `From Conversations To Be Done On Pop!_OS`, make sure
   each serious item has an approval state and next checkpoint, and move vague ideas back
   into business framing before opening a build session.
+- You are preparing a real phone sanity pass for governed operator behavior:
+  use `docs/runbooks/freedom-anywhere-operator-validation.md` so connected and
+  stand-alone checks follow the same acceptance path and do not drift into ad hoc testing.
 
 ## Dependencies
 

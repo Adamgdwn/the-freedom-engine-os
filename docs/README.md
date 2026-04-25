@@ -32,6 +32,7 @@ Status legend:
 | `docs/exception-record-template.md` | Exception record template |
 | `docs/adr-template.md` | ADR template for new architectural decisions |
 | `docs/runbooks/operations.md` | Current operational checks and failure handling |
+| `docs/runbooks/freedom-anywhere-operator-validation.md` | Real-device validation path for the governed desktop-plus-phone operator loop |
 | `docs/wake-relay-deployment.md` | Wake relay deployment runbook |
 | `docs/risks/risk-register.md` | Current risk ledger |
 | `docs/CHANGELOG.md` | Chronological record of completed changes |

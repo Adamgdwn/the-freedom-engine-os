@@ -305,6 +305,10 @@ export function HostScreen(props: {
   const wakeConfigured = Boolean(store.wakeControl?.enabled);
   const connectionState = getEffectiveConnectionState(store);
   const hostOnline = connectionState === "desktop_linked";
+  const connectedOperatorRunLedger = store.token && !store.offlineMode ? store.operatorRunLedger : null;
+  const operatorRunReviewDraft = store.operatorRunReviewDraft;
+  const operatorRunReviewGapCount =
+    connectedOperatorRunLedger?.runs.filter((item) => !item.consequenceReview && item.status !== "completed" && item.status !== "cancelled").length ?? 0;
 
   return (
     <ScrollView
@@ -365,6 +369,188 @@ export function HostScreen(props: {
           </Pressable>
         </View>
       </View>
+
+      {connectedOperatorRunLedger?.configured ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Operator Runs</Text>
+          <Text style={styles.supportingText}>
+            Connected mode can watch desktop-backed operator runs here so approvals and missing consequence reviews stay visible without pretending the phone executed them.
+          </Text>
+          <View style={styles.statusRow}>
+            <StatusChip label={`${connectedOperatorRunLedger.activeCount} active`} tone={connectedOperatorRunLedger.activeCount ? "orange" : "teal"} />
+            <StatusChip
+              label={`${connectedOperatorRunLedger.awaitingApprovalCount} approval`}
+              tone={connectedOperatorRunLedger.awaitingApprovalCount ? "orange" : "teal"}
+            />
+            <StatusChip label={`${operatorRunReviewGapCount} review gaps`} tone={operatorRunReviewGapCount ? "orange" : "teal"} />
+          </View>
+          {connectedOperatorRunLedger.runs.length ? (
+            connectedOperatorRunLedger.runs.slice(0, 2).map((item) => (
+              <View key={item.id} style={styles.insetCard}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.metric}>{item.title}</Text>
+                  <Text style={styles.metric}>{item.status}</Text>
+                </View>
+                <Text style={styles.supportingText}>{item.summary}</Text>
+                <Text style={styles.metric}>Approval: {item.approvalClass}</Text>
+                <Text style={styles.supportingText}>Next checkpoint: {item.nextCheckpoint}</Text>
+                {!item.consequenceReview ? <Text style={styles.helperText}>Consequence review still missing.</Text> : null}
+                {operatorRunReviewDraft?.runId === item.id ? (
+                  <View style={styles.insetCard}>
+                    <Text style={styles.inputLabel}>Consequence Review</Text>
+                    <Text style={styles.helperText}>
+                      Capture the blast radius, reversibility, dependencies, operator burden, security/privacy, plus second- and third-order effects before execution continues.
+                    </Text>
+                    <LabeledInput
+                      label="Review Summary"
+                      value={operatorRunReviewDraft.summary}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("summary", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="What is the core risk/reward posture of this run?"
+                    />
+                    <LabeledInput
+                      label="Blast Radius"
+                      value={operatorRunReviewDraft.blastRadius}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("blastRadius", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="Which systems, users, or workflows could this affect?"
+                    />
+                    <LabeledInput
+                      label="Reversibility"
+                      value={operatorRunReviewDraft.reversibility}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("reversibility", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="How easily can we undo this if it goes sideways?"
+                    />
+                    <LabeledInput
+                      label="Dependency Impact"
+                      value={operatorRunReviewDraft.dependencyImpact}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("dependencyImpact", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="What dependencies or contracts could shift?"
+                    />
+                    <LabeledInput
+                      label="Operator Burden"
+                      value={operatorRunReviewDraft.operatorBurdenImpact}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("operatorBurdenImpact", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="What review, follow-up, or monitoring burden does this create?"
+                    />
+                    <LabeledInput
+                      label="Security & Privacy"
+                      value={operatorRunReviewDraft.securityPrivacyImpact}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("securityPrivacyImpact", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="Any sensitive data, permissions, or exposure changes?"
+                    />
+                    <LabeledInput
+                      label="Second-Order Effects"
+                      value={operatorRunReviewDraft.secondOrderEffects}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("secondOrderEffects", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="One per line, or use: high | effect summary | mitigation"
+                    />
+                    <LabeledInput
+                      label="Third-Order Effects"
+                      value={operatorRunReviewDraft.thirdOrderEffects}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("thirdOrderEffects", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="One per line, or use: medium | effect summary | mitigation"
+                    />
+                    <LabeledInput
+                      label="Stop Triggers"
+                      value={operatorRunReviewDraft.stopTriggers}
+                      onChange={(value) => store.updateOperatorRunReviewDraft("stopTriggers", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="One per line: what should make Freedom pause or stop?"
+                    />
+                    <View style={styles.actions}>
+                      <Pressable
+                        testID={`operator-run-review-save-${item.id}`}
+                        style={[styles.secondaryButton, store.operatorRunActioningId === item.id ? styles.disabledButton : null]}
+                        disabled={store.operatorRunActioningId === item.id}
+                        onPress={() => store.submitOperatorRunReview().catch((error) => console.warn(error))}
+                      >
+                        <Text style={styles.secondaryLabel}>Save Review</Text>
+                      </Pressable>
+                      <Pressable
+                        testID={`operator-run-review-cancel-${item.id}`}
+                        style={styles.secondaryButton}
+                        onPress={() => store.cancelOperatorRunReview()}
+                      >
+                        <Text style={styles.secondaryLabel}>Cancel</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.actions}>
+                    <Pressable
+                      testID={`operator-run-review-open-${item.id}`}
+                      style={styles.secondaryButton}
+                      onPress={() => store.startOperatorRunReview(item.id)}
+                    >
+                      <Text style={styles.secondaryLabel}>{item.consequenceReview ? "Edit Review" : "Add Consequence Review"}</Text>
+                    </Pressable>
+                  </View>
+                )}
+                <View style={styles.actions}>
+                  {canContinueOperatorRun(item.status, item.consequenceReview !== null, item.approvalClass) ? (
+                    <Pressable
+                      testID={`operator-run-continue-${item.id}`}
+                      style={[styles.secondaryButton, store.operatorRunActioningId === item.id ? styles.disabledButton : null]}
+                      disabled={store.operatorRunActioningId === item.id}
+                      onPress={() => store.approveOperatorRun(item.id).catch((error) => console.warn(error))}
+                    >
+                      <Text style={styles.secondaryLabel}>{item.status === "paused" ? "Resume Run" : "Continue Run"}</Text>
+                    </Pressable>
+                  ) : null}
+                  {canHoldOperatorRun(item.status) ? (
+                    <Pressable
+                      testID={`operator-run-hold-${item.id}`}
+                      style={[
+                        styles.secondaryButton,
+                        styles.warningButton,
+                        store.operatorRunActioningId === item.id ? styles.disabledButton : null
+                      ]}
+                      disabled={store.operatorRunActioningId === item.id}
+                      onPress={() => store.holdOperatorRun(item.id).catch((error) => console.warn(error))}
+                    >
+                      <Text style={[styles.secondaryLabel, styles.warningButtonLabel]}>Hold For Review</Text>
+                    </Pressable>
+                  ) : null}
+                  {canInterruptOperatorRun(item.status, item.sessionId) ? (
+                    <Pressable
+                      testID={`operator-run-interrupt-${item.id}`}
+                      style={[
+                        styles.secondaryButton,
+                        styles.dangerButton,
+                        store.operatorRunActioningId === item.id ? styles.disabledButton : null
+                      ]}
+                      disabled={store.operatorRunActioningId === item.id}
+                      onPress={() => store.interruptOperatorRun(item.id).catch((error) => console.warn(error))}
+                    >
+                      <Text style={[styles.secondaryLabel, styles.dangerButtonLabel]}>Interrupt Run</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.helperText}>
+              No operator runs are active yet. When Freedom routes governed work, this screen will reflect the live approval and review posture from Homebase.
+            </Text>
+          )}
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Connect</Text>
@@ -913,8 +1099,21 @@ export function ChatScreen(props: {
   const transcriptScrollRef = useRef<ScrollView | null>(null);
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const showExternalDraftCard = Boolean(store.externalDraft);
-  const offlineDraft = store.selectedSessionId ? store.offlineImportDrafts?.[store.selectedSessionId] ?? null : null;
-  const showOfflineImportReview = false;
+  const storedOfflineDraft = store.selectedSessionId ? store.offlineImportDrafts?.[store.selectedSessionId] ?? null : null;
+  const offlineDraft =
+    store.selectedSessionId
+      ? storedOfflineDraft ?? {
+          sessionId: store.selectedSessionId,
+          summary: "",
+          draftTurns: [],
+          importedAt: null,
+          continueDraft: null,
+          updatedAt: ""
+        }
+      : null;
+  const deferredOperatorRuns = store.selectedSessionId ? store.deferredOperatorRunsBySession?.[store.selectedSessionId] ?? [] : [];
+  const pendingDeferredOperatorRuns = deferredOperatorRuns.filter((run) => !run.importedAt);
+  const showOfflineImportReview = Boolean(store.selectedSessionId && (store.offlineMode || deferredOperatorRuns.length || storedOfflineDraft));
   const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
   const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
   const transcriptPanelHeight = Math.max(250, Math.min(460, Math.round(windowHeight * 0.46)));
@@ -1236,10 +1435,13 @@ export function ChatScreen(props: {
             <View style={styles.insetCard}>
               <View style={styles.rowBetween}>
                 <Text style={styles.sectionTitle}>Offline Import Review</Text>
-                <StatusChip label={offlineDraft.importedAt ? "Imported" : "Pending import"} tone={offlineDraft.importedAt ? "teal" : "orange"} />
+                <StatusChip
+                  label={offlineDraft.importedAt && !pendingDeferredOperatorRuns.length ? "Imported" : "Pending import"}
+                  tone={offlineDraft.importedAt && !pendingDeferredOperatorRuns.length ? "teal" : "orange"}
+                />
               </View>
               <Text style={styles.supportingText}>
-                Import writes non-executing system notes only. Freedom will not start desktop work until you later send an explicit follow-up turn.
+                Import writes non-executing system notes and awaiting-approval operator requests only. Freedom will not start desktop work until you later send an explicit follow-up turn or approve a governed run.
               </Text>
               <LabeledInput
                 label="Summary"
@@ -1263,10 +1465,62 @@ export function ChatScreen(props: {
                     style={[styles.secondaryButton, styles.dangerButton]}
                     onPress={() => store.removeOfflineImportDraftTurn(offlineDraft.sessionId, index)}
                   >
-                    <Text style={[styles.secondaryLabel, styles.dangerButtonLabel]}>Remove Draft Turn</Text>
-                  </Pressable>
-                </View>
+                  <Text style={[styles.secondaryLabel, styles.dangerButtonLabel]}>Remove Draft Turn</Text>
+                </Pressable>
+              </View>
               ))}
+              <View style={styles.rowBetween}>
+                <Text style={styles.sectionTitle}>Deferred Operator Runs</Text>
+                <Pressable
+                  testID="offline-operator-run-add"
+                  style={styles.secondaryButton}
+                  onPress={() => store.addDeferredOperatorRunDraft()}
+                >
+                  <Text style={styles.secondaryLabel}>Add Deferred Run</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.helperText}>
+                Draft operator work locally here. Importing these items creates governed `A3` runs in `awaiting-approval`; it does not execute them from the phone.
+              </Text>
+              {deferredOperatorRuns.length ? (
+                deferredOperatorRuns.map((run, index) => (
+                  <View key={run.id} style={styles.insetCard}>
+                    <View style={styles.rowBetween}>
+                      <Text style={styles.inputLabel}>Deferred Run {index + 1}</Text>
+                      <StatusChip label={run.importedAt ? "Imported" : "Deferred"} tone={run.importedAt ? "teal" : "orange"} />
+                    </View>
+                    <LabeledInput
+                      label="Title"
+                      value={run.title}
+                      onChange={(value) => store.updateDeferredOperatorRunDraft(run.id, "title", value)}
+                      autoCapitalize="sentences"
+                    />
+                    <LabeledInput
+                      label="Summary"
+                      value={run.summary}
+                      onChange={(value) => store.updateDeferredOperatorRunDraft(run.id, "summary", value)}
+                      autoCapitalize="sentences"
+                      multiline
+                      placeholder="What should Freedom review or prepare once the desktop-backed lane is available?"
+                    />
+                    {run.importedAt ? (
+                      <Text style={styles.helperText}>
+                        Imported into the governed operator ledger as {run.importedOperatorRunId ?? run.id}. Review it from connected Homebase before continuing.
+                      </Text>
+                    ) : (
+                      <Pressable
+                        testID={`offline-operator-run-remove-${run.id}`}
+                        style={[styles.secondaryButton, styles.dangerButton]}
+                        onPress={() => store.removeDeferredOperatorRunDraft(run.id)}
+                      >
+                        <Text style={[styles.secondaryLabel, styles.dangerButtonLabel]}>Remove Deferred Run</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ))
+              ) : (
+                <Text style={styles.helperText}>No deferred operator drafts yet. Add one when you want the phone to stage governed work for later desktop review.</Text>
+              )}
               <View style={styles.actions}>
                 <Pressable
                   style={styles.secondaryButton}
@@ -1279,7 +1533,15 @@ export function ChatScreen(props: {
                   disabled={!store.token || store.offlineImporting}
                   onPress={() => store.importOfflineSession().catch((error) => console.warn(error))}
                 >
-                  <Text style={styles.primaryLabel}>{store.offlineImporting ? "Importing..." : "Import Notes"}</Text>
+                  <Text style={styles.primaryLabel}>
+                    {store.offlineImporting
+                      ? "Importing..."
+                      : pendingDeferredOperatorRuns.length && offlineDraft.draftTurns.length
+                        ? "Import Notes + Runs"
+                        : pendingDeferredOperatorRuns.length
+                          ? "Import Deferred Runs"
+                          : "Import Notes"}
+                  </Text>
                 </Pressable>
               </View>
               <View style={styles.actions}>
@@ -1293,8 +1555,8 @@ export function ChatScreen(props: {
               </View>
               <Text style={styles.helperText}>
                 {store.token
-                  ? "Import when you want these notes added to canonical history. Continue with Freedom only drafts the next live turn."
-                  : "Repair the desktop link before importing these notes back into canonical history."}
+                  ? "Import when you want these notes and deferred runs added to canonical desktop state. Continue with Freedom only drafts the next live turn."
+                  : "Repair the desktop link before importing these notes and deferred runs back into canonical desktop state."}
               </Text>
             </View>
           ) : null}
@@ -1438,6 +1700,21 @@ function humanizeAvailability(value: "ready" | "offline" | "reconnecting" | "rep
     default:
       return "Needs attention";
   }
+}
+
+function canContinueOperatorRun(status: string, hasConsequenceReview: boolean, approvalClass: string): boolean {
+  if (approvalClass !== "none" && !hasConsequenceReview) {
+    return false;
+  }
+  return status === "awaiting-approval" || status === "paused";
+}
+
+function canHoldOperatorRun(status: string): boolean {
+  return status === "queued" || status === "paused";
+}
+
+function canInterruptOperatorRun(status: string, sessionId: string | null): boolean {
+  return status === "running" && Boolean(sessionId);
 }
 
 function humanizeVoiceCenterState(phase: AppState["voiceSessionPhase"]): string {

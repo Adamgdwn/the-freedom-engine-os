@@ -88,6 +88,15 @@ surface than a one-shot relay:
 - the governed `From Conversations To Build` queue now lives in the pull-down utility
   sheet instead of the main start surface, so Freedom can surface it intentionally when
   a conversation should graduate into real build work
+- connected Homebase now exposes the live `A3` operator ledger itself:
+  the phone can see approval posture, review gaps, next checkpoints, and recent
+  governed runs without pretending to be a second execution engine
+- connected Homebase can now open a structured consequence-review editor, and reviewed
+  runs can then expose governed `Continue Run` controls that push the same run id into
+  the desktop lane instead of spawning parallel work
+- stand-alone phone review/import now supports deferred operator-run drafts in addition
+  to offline notes and conservative learning candidates; importing those drafts creates
+  canonical `awaiting-approval` operator runs later rather than replaying them directly
 
 ## What To Configure
 
@@ -203,10 +212,11 @@ network routing is unavailable.
 This gives you phone access to Freedom in two postures:
 
 - desktop-linked, where premium realtime voice and shared canonical history stay aligned
-  with the workstation runtime
+  with the workstation runtime, including the governed operator-run ledger
 - stand-alone on the phone, where voice capture and saved notes stay available even
-  without any desktop link, and hosted lookup or hosted spoken replies come online only
-  when an explicit offline support host is configured
+  without any desktop link, hosted lookup or hosted spoken replies come online only
+  when an explicit offline support host is configured, and deferred operator work stays
+  explicitly local until a later import into the desktop-backed governed lane
 
 Independent hosted lookup now uses the dedicated offline support endpoint only when
 `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured. Without that explicit

@@ -3,6 +3,8 @@ import { createReadStream } from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 import {
+  autonomousOperatorRunSchema,
+  operatorRunPatchSchema,
   loadControlPlaneRuntimeSummary,
   createOutboundRecipientRequestSchema,
   createSessionRequestSchema,
@@ -238,6 +240,27 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === "GET" && url.pathname === "/api/operator-runs") {
+      assertLoopbackRequest(req);
+      sendJson(res, 200, await store.getOperatorRunLedger());
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/api/operator-runs") {
+      assertLoopbackRequest(req);
+      const parsed = autonomousOperatorRunSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.upsertOperatorRun(parsed));
+      return;
+    }
+
+    if (method === "POST" && /^\/api\/operator-runs\/[^/]+\/update$/.test(url.pathname)) {
+      assertLoopbackRequest(req);
+      const runId = decodeURIComponent(url.pathname.split("/")[3] ?? "");
+      const parsed = operatorRunPatchSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.updateOperatorRun(runId, parsed));
+      return;
+    }
+
     if (method === "POST" && url.pathname === "/api/desktop-shell/session") {
       assertLoopbackRequest(req);
       sendJson(res, 200, await store.ensureDesktopShellSession());
@@ -331,6 +354,24 @@ const server = createServer(async (req, res) => {
 
     if (method === "GET" && url.pathname === "/host/build-lane") {
       sendJson(res, 200, await store.getBuildLaneSummary(readBearer(req)));
+      return;
+    }
+
+    if (method === "GET" && url.pathname === "/host/operator-runs") {
+      sendJson(res, 200, await store.getHostOperatorRunLedger(readBearer(req)));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/host/operator-runs") {
+      const parsed = autonomousOperatorRunSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.upsertHostOperatorRun(readBearer(req), parsed));
+      return;
+    }
+
+    if (method === "POST" && /^\/host\/operator-runs\/[^/]+\/update$/.test(url.pathname)) {
+      const runId = decodeURIComponent(url.pathname.split("/")[3] ?? "");
+      const parsed = operatorRunPatchSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.updateHostOperatorRun(readBearer(req), runId, parsed));
       return;
     }
 

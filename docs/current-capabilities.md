@@ -169,6 +169,10 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - During stand-alone review/import flow, Freedom Anywhere can now queue conservative
   durable `learning` candidates locally and sync them back into Freedom's canonical
   learning store once the paired desktop path is available again.
+- During stand-alone review/import flow, Freedom Anywhere can also draft deferred
+  governed `A3` operator runs locally and import them later into the canonical
+  desktop-backed ledger as `awaiting-approval` work instead of pretending the phone
+  already executed them.
 - The current live slim build still compiles the offline-safe fallback as `notes_only` because no
   explicit `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is configured in the active repo env.
 - Freedom Anywhere now emphasizes:
@@ -180,6 +184,10 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - The conversation-originated build lane now lives in that utility sheet rather than on
   the main start surface, so Freedom can surface governed build promotion when needed
   without competing with the core talk-first interface.
+- The Homebase surface now exposes a real connected operator-run lane:
+  review gaps, approval posture, live run counts, consequence-review authoring,
+  and governed continue/hold/interrupt controls all operate on the same canonical
+  desktop-backed run identity instead of a second mobile-only queue.
 - The mobile header now separates action access from settings:
   the hamburger pull-down is for actions/capabilities and the three dots hold genuine
   settings such as voice choices, reply behavior, build/runtime info, and system adjustments.
@@ -282,17 +290,31 @@ For the consolidated dated list of known gaps and unfinished areas, see
 ### Self-Programming
 
 - Freedom can record and surface self-programming requests.
+- Freedom now has a first governed `A3` operator-run ledger that captures run identity,
+  approval class, consequence review, evidence, next checkpoint, and structured
+  learning outcome from request through execution.
 - Freedom voice can now hand explicitly approved programming work into the governed
   desktop shell/Codex lane instead of stopping only at a request-for-later surface.
 - Freedom can now route substantial conversation-born work into a governed Pop!_OS
   build lane with objective, business case, approval state, autonomy envelope,
   reporting path, and next checkpoint captured in live memory.
+- Consequence review is now a real execution gate for governed `A3` work:
+  approval-held or paused runs cannot continue into queued/running execution
+  without a recorded blast radius, reversibility, dependency impact, operator burden,
+  security/privacy impact, second-order effects, third-order effects, and stop triggers.
+- Connected Freedom Anywhere can now see the same canonical operator runs, author
+  the consequence review, and continue a reviewed run through the governed desktop lane
+  without forking a second mobile identity.
+- Completed operator runs now retain structured evidence and can produce a bounded
+  `learningOutcome` with workflow or capability signals plus internalization
+  recommendations such as `observe`, `invest`, or `internalize`.
 - That live build lane is now surfaced in Freedom Anywhere and in the desktop
   agent-control page rather than existing only as roadmap documentation.
 - Approval still gates actual code execution, release, external spend, and connector
   expansion; this is a real runtime routing loop, not approval-free self-modification.
-- Stand-alone mobile sync is currently limited to durable `learning` signals; it does
-  not yet auto-sync self-programming requests or persona changes, by design.
+- Stand-alone mobile can now import deferred operator-run drafts into the canonical
+  governed ledger, but it still does not auto-sync self-programming requests or persona
+  changes, by design.
 
 ### Autonomous Research
 
@@ -344,7 +366,9 @@ For the consolidated dated list of known gaps and unfinished areas, see
 
 - Replace stub venture/approval/weekly-metric tools with real Supabase-backed retrieval.
 - Connect modeled model-routing policy to real runtime decisions.
-- Turn approved self-programming requests into a governed execution pipeline.
+- Extend the first governed operator-run pipeline beyond desktop/code work so the
+  broader outcome model, workforce routing, and self-programming decisions can
+  reuse the same canonical run/evidence path.
 - Extend the new stand-alone learning-sync foundation into reviewed/offline-safe
   self-programming and persona-improvement proposals only after their governance and
   provenance posture is explicit.

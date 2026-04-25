@@ -32,6 +32,7 @@ import type {
   SendExternalMessageResponse,
   VoiceRuntimeSessionResponse
 } from "../schemas/platform.js";
+import type { AutonomousOperatorRun, OperatorRunLedger, OperatorRunPatch } from "../autonomousOperator.js";
 import type {
   NotificationEvent,
   RenameDeviceRequest,
@@ -55,6 +56,9 @@ export interface MobileApi {
   completePairing(baseUrl: string, pairingCode: string, deviceName: string): Promise<PairingCompleteResponse>;
   getHostStatus(token: string): Promise<HostStatus>;
   getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
+  getOperatorRunLedger(token: string): Promise<OperatorRunLedger>;
+  createOperatorRun(token: string, input: AutonomousOperatorRun): Promise<AutonomousOperatorRun>;
+  updateOperatorRun(token: string, runId: string, input: OperatorRunPatch): Promise<AutonomousOperatorRun>;
   listSessions(token: string): Promise<ChatSession[]>;
   listDevices(token: string): Promise<PairedDevice[]>;
   createSession(token: string, input: CreateSessionRequest): Promise<ChatSession>;
@@ -92,5 +96,8 @@ export interface HostApi {
   getMemoryDigest(token: string): Promise<HostMemoryDigestResponse>;
   getVoiceProfile(token: string): Promise<HostVoiceProfileResponse>;
   getBuildLaneSummary(token: string): Promise<HostBuildLaneResponse>;
+  getOperatorRunLedger(token: string): Promise<OperatorRunLedger>;
+  createOperatorRun(token: string, input: AutonomousOperatorRun): Promise<AutonomousOperatorRun>;
+  updateOperatorRun(token: string, runId: string, input: OperatorRunPatch): Promise<AutonomousOperatorRun>;
   updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<HostVoiceProfileResponse>;
 }

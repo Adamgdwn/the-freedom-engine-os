@@ -43,6 +43,10 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 - Freedom is moving toward a co-founder or trusted-advisor posture, but that
   higher-order operating behavior is not yet fully operational end to end in the
   live runtime.
+- The first governed `A3` operator-run loop is now live across desktop, gateway,
+  and connected mobile, but it is still narrower than the full self-evolving
+  co-founder target: the broader outcome model, workforce orchestration, and
+  self-programming pipeline do not yet all reuse that same loop end to end.
 - Multi-agent workforce definitions, skills, and self-evolving functions exist
   in the model layer, but they are not yet a live continuously running governed
   orchestration system.
@@ -70,8 +74,9 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 
 ### Stand-Alone Mobile And Relay
 
-- Stand-alone mobile sync currently covers durable `learning` signals only. It
-  does not yet auto-sync self-programming requests or persona changes.
+- Stand-alone mobile sync now covers durable `learning` signals, conversation
+  memories, and deferred governed operator-run drafts, but it still does not
+  auto-sync self-programming requests or persona changes.
 - Stand-alone voice with the full Freedom Python voice agent running directly on
   the relay host is not started yet.
 - The current relay `/chat` path is still a bounded OpenAI-backed fallback and
@@ -96,9 +101,10 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 
 ### Validation, Evals, And Reliability
 
-- Real-device Android acceptance still needs broader validation across voice
-  start, playback, interrupt, mute, resume, voice switching, and safe task
-  handling.
+- Real-device Android acceptance is now stronger for connected operator-run
+  visibility, consequence-review gating, review authoring, and post-review
+  unblocking, but broader validation is still needed across voice start,
+  playback, interrupt, mute, resume, voice switching, and safe task handling.
 - Control-plane web voice still needs deeper validation for interrupts, state
   transitions, parked-task updates, and resumed-review behavior.
 - Conversation-learning behavior still needs deeper validation so durable
@@ -114,6 +120,9 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
   and live validation for over-learning, under-learning, follow-up-question
   quality, and consistent behavior across connected text, connected voice, and
   Freedom Anywhere import paths.
+- The new operator-run learning loop still needs transcript-based and completion-
+  based evals so learning outcomes and internalization recommendations are
+  conservative, evidence-backed, and not over-eager.
 - The approval-gated autonomy loop still needs broader validation for open-task
   review, side-question handling, topic-shift parking, and duplicate
   self-programming suppression.

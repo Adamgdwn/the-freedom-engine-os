@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { operatorRunLedgerSchema, type OperatorRunLedger } from '@freedom/shared';
 import {
   agents,
   agentBuildRequests,
@@ -118,6 +119,44 @@ type WorkflowStepRow = {
   governance_risk: WorkflowStep['governanceRisk'];
 };
 
+function emptyOperatorRunLedger(configured = false): OperatorRunLedger {
+  return {
+    configured,
+    runs: [],
+    activeCount: 0,
+    awaitingApprovalCount: 0,
+    completedCount: 0,
+    updatedAt: null,
+  };
+}
+
+function resolveLocalGatewayBaseUrl(): string {
+  const explicit = process.env.DESKTOP_GATEWAY_URL?.trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, '');
+  }
+
+  const port = process.env.GATEWAY_PORT ?? '43111';
+  return `http://127.0.0.1:${port}`;
+}
+
+async function loadOperatorRunLedger(): Promise<OperatorRunLedger> {
+  try {
+    const response = await fetch(`${resolveLocalGatewayBaseUrl()}/api/operator-runs`, {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return emptyOperatorRunLedger(false);
+    }
+
+    const parsed = operatorRunLedgerSchema.safeParse(await response.json());
+    return parsed.success ? parsed.data : emptyOperatorRunLedger(false);
+  } catch {
+    return emptyOperatorRunLedger(false);
+  }
+}
+
 function cloneSeedSnapshot() {
   const [activeWeights] = weightSets;
   const rankedVentures = rankVentures(ventures, activeWeights);
@@ -158,6 +197,7 @@ function cloneSeedSnapshot() {
     canonicalSourceLinks,
     skillAcquisitionDecisions,
     knowledgeRetentionPolicies,
+    operatorRunLedger: emptyOperatorRunLedger(false),
     modelRouterStatus,
     recommendations: buildRecommendations(),
     weeklyReview: buildWeeklyReview(),
@@ -286,8 +326,12 @@ function mergeExecution(seed: Execution | undefined, row: ExecutionRow): Executi
 
 export async function loadControlPlaneSnapshot(): Promise<ControlPlaneSnapshot> {
   const seedSnapshot = cloneSeedSnapshot();
+  const operatorRunLedger = await loadOperatorRunLedger();
   if (!isSupabaseAdminConfigured()) {
-    return seedSnapshot;
+    return {
+      ...seedSnapshot,
+      operatorRunLedger,
+    };
   }
 
   const client = createSupabaseAdminClient();
@@ -308,7 +352,10 @@ export async function loadControlPlaneSnapshot(): Promise<ControlPlaneSnapshot> 
   ]);
 
   if (venturesResult.error || workflowsResult.error || workflowStepsResult.error || experimentsResult.error || approvalsResult.error || executionsResult.error) {
-    return seedSnapshot;
+    return {
+      ...seedSnapshot,
+      operatorRunLedger,
+    };
   }
 
   const liveVenturesRows = (venturesResult.data ?? []) as VentureRow[];
@@ -347,6 +394,7 @@ export async function loadControlPlaneSnapshot(): Promise<ControlPlaneSnapshot> 
 
   return {
     ...seedSnapshot,
+    operatorRunLedger,
     rankedVentures,
     ventures: mergedVentures,
     workflows: mergedWorkflows,

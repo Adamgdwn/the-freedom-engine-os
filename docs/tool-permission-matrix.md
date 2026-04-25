@@ -14,3 +14,7 @@ Document status: live reference
 | Local shell | Build, test, and automate repo tasks | Run validation, inspect code, bootstrap local state | Destructive resets, unauthorized secret access | Yes for destructive or spending-related commands | Used during implementation |
 | Web research | External evidence collection | Run current public lookups and weather checks through the default Perplexity lane, benchmark public tools, and gather supporting context | Present unsourced claims as facts, bluff that search exists when it is unconfigured | Yes for outbound commitments or publishing | Default provider should be Perplexity when configured; use primary sources where possible |
 | Email / outbound messaging | Customer or partner communication | Prepare drafts, summarize updates, route through trusted recipients | Silent sends, legal or sales commitments without review | Yes for sends and external commitments | Draft-first only |
+
+For autonomy-affecting, trust-boundary, or operator-loop changes, review likely second
+and third order consequences before implementation and again before handoff. Treat that
+review as required evidence, not as optional commentary.

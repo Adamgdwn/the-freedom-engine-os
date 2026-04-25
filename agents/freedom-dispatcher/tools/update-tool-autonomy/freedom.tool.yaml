@@ -56,7 +56,7 @@ parameters:
     new_level:
       type: string
       description: "New autonomy level to set."
-      enum: [A0, A1, A2]
+      enum: [A0, A1, A2, A3]
     reason:
       type: string
       description: "Operator's exact words or paraphrase explaining why the level is changing."

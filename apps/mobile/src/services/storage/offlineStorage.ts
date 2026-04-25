@@ -1,5 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { ChatMessage, ChatSession, MobileConversationMemory, MobileLearningSignal } from "@freedom/shared";
+import type {
+  ChatMessage,
+  ChatSession,
+  MobileConversationMemory,
+  MobileDeferredOperatorRun,
+  MobileLearningSignal
+} from "@freedom/shared";
 import { sanitizeSessionsForFreedom } from "../mobile/sessionSanitizer";
 
 const OFFLINE_STATE_KEY = "freedom-mobile.offline-state";
@@ -37,6 +43,7 @@ export interface StoredOfflineState {
   sessions: ChatSession[];
   messagesBySession: Record<string, ChatMessage[]>;
   importsBySession: Record<string, OfflineImportDraft>;
+  deferredOperatorRunsBySession?: Record<string, MobileDeferredOperatorRun[]>;
   pendingLearningSignals?: PendingLearningSignalSync[];
   pendingConversationMemories?: PendingConversationMemorySync[];
   selectedSessionId: string | null;
@@ -66,11 +73,17 @@ function trimState(state: StoredOfflineState): StoredOfflineState {
   const importsBySession = Object.fromEntries(
     Object.entries(state.importsBySession).filter(([sessionId]) => allowedSessionIds.has(sessionId))
   );
+  const deferredOperatorRunsBySession = Object.fromEntries(
+    Object.entries(state.deferredOperatorRunsBySession ?? {})
+      .filter(([sessionId]) => allowedSessionIds.has(sessionId))
+      .map(([sessionId, runs]) => [sessionId, runs.slice(-10)])
+  );
 
   return {
     sessions,
     messagesBySession,
     importsBySession,
+    deferredOperatorRunsBySession,
     pendingLearningSignals: (state.pendingLearningSignals ?? []).slice(-50),
     pendingConversationMemories: (state.pendingConversationMemories ?? []).slice(-50),
     selectedSessionId: state.selectedSessionId && allowedSessionIds.has(state.selectedSessionId) ? state.selectedSessionId : sessions[0]?.id ?? null,

@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-04-25 (governed A3 operator-loop foundation)
+
+- added a first canonical `A3` operator-run contract and ledger so Freedom can
+  carry one governed run identity from request through consequence review,
+  approval, desktop execution, evidence, and learning outcome instead of
+  spreading that state across parallel queues
+- wired the desktop gateway to persist and guard operator runs with allowed
+  status transitions plus a real consequence-review gate before reviewed work
+  can move into queued or running execution
+- taught Freedom voice and governed build/self-programming entry points to
+  create or continue operator runs early, preserve the same run id through the
+  desktop lane, and stop at the review gate instead of silently bypassing it
+- surfaced the live operator ledger in Agent Control and in connected Freedom
+  Anywhere so the phone can see review gaps, approval posture, and recent runs
+  from the same canonical source of truth
+- added connected mobile consequence-review authoring plus governed continue,
+  hold, and interrupt controls against the same desktop-backed run identity
+- added stand-alone deferred operator-run drafts on the phone so offline capture
+  can later import into the canonical ledger as `awaiting-approval` work rather
+  than pretending to execute locally
+- added structured operator-run learning outcomes and internalization
+  recommendations so completed runs can retain evidence-backed lessons without
+  claiming autonomous self-rewrite
+- added gateway/mobile tests and a real-device validation runbook for the new
+  desktop-plus-phone governed operator loop
+
 ## 2026-04-25 (ChatGPT memory triage loop)
 
 - added a first-class ChatGPT memory-triage layer in the gateway so Freedom can

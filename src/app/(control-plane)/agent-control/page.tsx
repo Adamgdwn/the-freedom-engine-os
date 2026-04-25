@@ -59,6 +59,9 @@ export default async function AgentControlPage() {
   const liveBuildRequests = await mapLiveBuildRequests();
   const visibleBuildRequests = liveBuildRequests.length ? liveBuildRequests : snapshot.agentBuildRequests;
   const leadAgent = snapshot.agents[0];
+  const reviewGapCount = snapshot.operatorRunLedger.runs.filter(
+    (run) => !run.consequenceReview && run.status !== 'completed' && run.status !== 'cancelled'
+  ).length;
 
   return (
     <AppShell
@@ -69,6 +72,9 @@ export default async function AgentControlPage() {
             <span>AGENTS {snapshot.agents.length}</span>
             <span>TOOLS {snapshot.tools.length}</span>
             <span>RUNS {snapshot.executions.length}</span>
+            <span>A3 RUNS {snapshot.operatorRunLedger.runs.length}</span>
+            <span>APPROVAL HOLDS {snapshot.operatorRunLedger.awaitingApprovalCount}</span>
+            <span>REVIEW GAPS {reviewGapCount}</span>
             <span>PENDING BUILDS {visibleBuildRequests.filter((request) => request.status === 'pending-approval').length}</span>
           </div>
         </div>
@@ -160,6 +166,78 @@ export default async function AgentControlPage() {
             </section>
 
             <div className="space-y-4">
+              <Panel title="Autonomous operator ledger" eyebrow="A3 readiness">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--ink-soft)]">Active</p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">{snapshot.operatorRunLedger.activeCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--ink-soft)]">Approval holds</p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">{snapshot.operatorRunLedger.awaitingApprovalCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4">
+                    <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--ink-soft)]">Completed</p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">{snapshot.operatorRunLedger.completedCount}</p>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4 sm:col-span-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-[color:var(--ink-soft)]">Consequence review gaps</p>
+                    <p className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">{reviewGapCount}</p>
+                    <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
+                      Any non-completed run without a recorded consequence review is still missing second- and third-order analysis.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  {!snapshot.operatorRunLedger.configured ? (
+                    <div className="rounded-lg border border-dashed border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4 text-sm text-[color:var(--ink-soft)]">
+                      Gateway ledger is wired, but no desktop-backed operator run state is available yet.
+                    </div>
+                  ) : null}
+
+                  {snapshot.operatorRunLedger.configured && !snapshot.operatorRunLedger.runs.length ? (
+                    <div className="rounded-lg border border-dashed border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4 text-sm text-[color:var(--ink-soft)]">
+                      No `A3` runs recorded yet. This panel will surface outcome choice, approval class, consequence review coverage, and evidence as the operator loop comes online.
+                    </div>
+                  ) : null}
+
+                  {snapshot.operatorRunLedger.runs.slice(0, 6).map((run) => (
+                    <div
+                      key={run.id}
+                      className={`rounded-lg border p-4 ${run.consequenceReview ? 'border-[color:var(--line)] bg-white/75' : 'border-amber-300 bg-amber-50/70'}`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-lg font-semibold text-[color:var(--ink)]">{run.title}</p>
+                          <p className="mt-2 text-sm leading-6 text-[color:var(--ink-soft)]">{run.summary}</p>
+                        </div>
+                        <span className="rounded-md bg-[color:var(--ink)]/8 px-2 py-1 text-sm text-[color:var(--ink)]">
+                          {run.status}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-[color:var(--ink-soft)]">
+                        <span className="rounded-md bg-[color:var(--primary)]/10 px-2 py-1 text-[color:var(--primary)]">
+                          {run.autonomyLevel}
+                        </span>
+                        <span>Approval: {run.approvalClass}</span>
+                        <span>Outcome: {run.selectedOutcome ?? 'pending selection'}</span>
+                        <span>Evidence: {run.evidence.length}</span>
+                        <span>
+                          Consequence review: {run.consequenceReview ? 'recorded' : 'missing'}
+                        </span>
+                      </div>
+                      {!run.consequenceReview ? (
+                        <p className="mt-3 text-sm text-amber-900">
+                          This run should not move through substantial implementation or release decisions until the consequence review is recorded.
+                        </p>
+                      ) : null}
+                      <p className="mt-3 text-sm text-[color:var(--ink)]">Next checkpoint: {run.nextCheckpoint}</p>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
               <Panel title="Tool registry" eyebrow="Permissions">
                 <div className="space-y-3">
                   {snapshot.tools.map((tool) => (

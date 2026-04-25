@@ -12,3 +12,8 @@ Document status: live reference
 | AG-006 | Workflow Analyst | Decompose workflows and estimate AI/human operating fit | A1 | gpt-5.4 | Adam Goodwin | Active |
 | AG-007 | Governance Reviewer | Run policy checks and require approval when rules are hit | A0 | gpt-5.4 | Adam Goodwin | Guarded |
 | AG-008 | Operator | Manage queues, execute approved tasks, and escalate exceptions | A1 | gpt-5.4-mini | Adam Goodwin | Active |
+
+`A3` now exists as a live governed operator-run posture with approval classes,
+consequence review, evidence, and connected mobile controls. No inventory row should
+claim `A3` until a specific modeled agent is deliberately promoted onto that governed
+loop as its real operating authority.

@@ -1,14 +1,18 @@
 import { create } from "zustand";
 import { Platform } from "react-native";
 import {
+  type AutonomousOperatorRun,
   buildProjectStarterPrompt,
+  createId,
   type DeferredExecutionState,
   FREEDOM_PHONE_PRODUCT_NAME,
   getAssistantVoiceCatalogEntry,
   type MobileConnectionState,
   type MobileConversationMemory,
+  type MobileDeferredOperatorRun,
   type MobileLearningSignal,
   type MobileVoiceState,
+  type OperatorRunLedger,
   normalizeAssistantVoicePresetId,
   type AssistantVoiceProfile,
   type AssistantVoicePresetId,
@@ -149,6 +153,19 @@ interface PendingExternalRequestState {
   requestedBody: string | null;
 }
 
+interface OperatorRunReviewDraftState {
+  runId: string;
+  summary: string;
+  blastRadius: string;
+  reversibility: string;
+  dependencyImpact: string;
+  operatorBurdenImpact: string;
+  securityPrivacyImpact: string;
+  secondOrderEffects: string;
+  thirdOrderEffects: string;
+  stopTriggers: string;
+}
+
 interface OfflineImportState extends OfflineImportDraft {}
 
 interface CachedMemoryDigest {
@@ -173,6 +190,9 @@ export interface AppState {
   currentDeviceId: string | null;
   hostStatus: HostStatus | null;
   buildLaneSummary: ConversationBuildLaneSummary | null;
+  operatorRunLedger: OperatorRunLedger | null;
+  operatorRunActioningId: string | null;
+  operatorRunReviewDraft: OperatorRunReviewDraftState | null;
   cachedMemoryDigest: CachedMemoryDigest | null;
   devices: PairedDevice[];
   sessions: ChatSession[];
@@ -196,6 +216,7 @@ export interface AppState {
   offlineModelState: OfflineModelState;
   offlineModelDetail: string | null;
   offlineImportDrafts: Record<string, OfflineImportState>;
+  deferredOperatorRunsBySession: Record<string, MobileDeferredOperatorRun[]>;
   pendingLearningSignals: PendingLearningSignalState[];
   pendingConversationMemories: PendingConversationMemoryState[];
   offlineSummarizing: boolean;
@@ -241,10 +262,20 @@ export interface AppState {
   updateOfflineImportSummary(sessionId: string, value: string): void;
   updateOfflineImportDraftTurn(sessionId: string, index: number, value: string): void;
   removeOfflineImportDraftTurn(sessionId: string, index: number): void;
+  addDeferredOperatorRunDraft(): void;
+  updateDeferredOperatorRunDraft(runId: string, field: "title" | "summary", value: string): void;
+  removeDeferredOperatorRunDraft(runId: string): void;
   importOfflineSession(): Promise<void>;
   continueWithFreedom(): void;
   enterStandaloneMode(): Promise<void>;
   stopSession(): Promise<void>;
+  approveOperatorRun(runId: string): Promise<void>;
+  holdOperatorRun(runId: string): Promise<void>;
+  interruptOperatorRun(runId: string): Promise<void>;
+  startOperatorRunReview(runId: string): void;
+  updateOperatorRunReviewDraft(field: keyof Omit<OperatorRunReviewDraftState, "runId">, value: string): void;
+  cancelOperatorRunReview(): void;
+  submitOperatorRunReview(): Promise<void>;
   renameCurrentDevice(): Promise<void>;
   enablePushNotifications(): Promise<void>;
   toggleNotificationPreference(event: NotificationEvent): Promise<void>;
@@ -372,8 +403,11 @@ function getDisconnectedVoiceStartNotice(): string {
   }
 }
 
-function hasStructuredOfflineWork(state: Pick<AppState, "offlineImportDrafts">): boolean {
-  return Object.values(state.offlineImportDrafts).some((draft) => Boolean(draft.summary.trim() || draft.draftTurns.length));
+function hasStructuredOfflineWork(state: Pick<AppState, "offlineImportDrafts" | "deferredOperatorRunsBySession">): boolean {
+  return (
+    Object.values(state.offlineImportDrafts).some((draft) => Boolean(draft.summary.trim() || draft.draftTurns.length)) ||
+    Object.values(state.deferredOperatorRunsBySession).some((runs) => runs.some((run) => !run.importedAt))
+  );
 }
 
 function hasCapturedOfflineWork(state: Pick<AppState, "sessions" | "messagesBySession">): boolean {
@@ -436,7 +470,7 @@ export function getEffectiveVoiceState(
 }
 
 export function getEffectiveDeferredExecutionState(
-  state: Pick<AppState, "token" | "hostStatus" | "offlineImportDrafts" | "sessions" | "messagesBySession" | "offlineMode">
+  state: Pick<AppState, "token" | "hostStatus" | "offlineImportDrafts" | "deferredOperatorRunsBySession" | "sessions" | "messagesBySession" | "offlineMode">
 ): DeferredExecutionState {
   if (hasStructuredOfflineWork(state)) {
     return shouldUseOfflineSafeMode(state) ? "awaiting_desktop" : "structured";
@@ -684,6 +718,90 @@ function buildOfflineImportDraft(draft: OfflineImportDraft | undefined, messages
   };
 }
 
+function buildDeferredOperatorRunDraft(sessionId: string): MobileDeferredOperatorRun {
+  return {
+    id: createId("moboprun"),
+    title: "Deferred operator follow-up",
+    summary: "",
+    sourceSessionId: sessionId,
+    requestedAt: new Date().toISOString(),
+    consequenceReview: null,
+    importedAt: null,
+    importedOperatorRunId: null
+  };
+}
+
+function buildImportedOperatorRun(input: {
+  run: MobileDeferredOperatorRun;
+  sessionId: string;
+  hostId: string | null;
+}): AutonomousOperatorRun {
+  const now = new Date().toISOString();
+  return {
+    id: input.run.id,
+    title: input.run.title.trim() || "Deferred operator follow-up",
+    summary: input.run.summary.trim() || "Imported from Freedom Anywhere stand-alone planning for later governed desktop review.",
+    autonomyLevel: "A3",
+    approvalClass: "operator-review",
+    status: "awaiting-approval",
+    requestedFrom: "mobile_companion",
+    sessionId: input.sessionId,
+    hostId: input.hostId,
+    taskId: null,
+    userMessageId: null,
+    turnId: null,
+    selectedOutcome: "build",
+    outcomeAssessments: [],
+    consequenceReview: input.run.consequenceReview,
+    evidence: [
+      {
+        id: createId("oprevidence"),
+        kind: "analysis",
+        summary: "Imported deferred operator draft from Freedom Anywhere stand-alone mode for governed desktop review.",
+        source: "mobile-standalone-import",
+        createdAt: now
+      }
+    ],
+    learningOutcome: null,
+    nextCheckpoint: "Review this imported stand-alone operator draft, check second- and third-order consequences, and decide whether it should enter governed desktop work.",
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function markDeferredOperatorRunsImported(
+  current: Record<string, MobileDeferredOperatorRun[]>,
+  sourceSessionId: string,
+  targetSessionId: string,
+  importedRuns: AutonomousOperatorRun[]
+): Record<string, MobileDeferredOperatorRun[]> {
+  const importedById = new Map(importedRuns.map((run) => [run.id, run]));
+  const mergedEntries = Object.entries(current).reduce<Record<string, MobileDeferredOperatorRun[]>>((acc, [sessionId, runs]) => {
+    const resolvedSessionId = sessionId === sourceSessionId ? targetSessionId : sessionId;
+    const updatedRuns = sessionId === sourceSessionId
+      ? runs.map((run) => {
+          const imported = importedById.get(run.id);
+          if (!imported) {
+            return run;
+          }
+          return {
+            ...run,
+            sourceSessionId: targetSessionId,
+            importedAt: imported.updatedAt,
+            importedOperatorRunId: imported.id
+          };
+        })
+      : runs;
+    const existingRuns = acc[resolvedSessionId] ?? [];
+    acc[resolvedSessionId] = [...existingRuns.filter((item) => !updatedRuns.some((run) => run.id === item.id)), ...updatedRuns].sort((left, right) =>
+      right.requestedAt.localeCompare(left.requestedAt)
+    );
+    return acc;
+  }, {});
+
+  return mergedEntries;
+}
+
 function normalizeLearningSignalKey(signal: MobileLearningSignal): string {
   return [signal.topic.trim().toLowerCase(), signal.kind, signal.summary.trim().toLowerCase()].join("::");
 }
@@ -715,6 +833,7 @@ async function persistOfflineSnapshot(get: () => AppState): Promise<void> {
     sessions: get().sessions,
     messagesBySession: get().messagesBySession,
     importsBySession: get().offlineImportDrafts,
+    deferredOperatorRunsBySession: get().deferredOperatorRunsBySession,
     pendingLearningSignals: get().pendingLearningSignals,
     pendingConversationMemories: get().pendingConversationMemories,
     selectedSessionId: get().selectedSessionId,
@@ -1372,6 +1491,9 @@ export const useAppStore = create<AppState>((set, get) => {
   currentDeviceId: null,
   hostStatus: null,
   buildLaneSummary: null,
+  operatorRunLedger: null,
+  operatorRunActioningId: null,
+  operatorRunReviewDraft: null,
   cachedMemoryDigest: null,
   devices: [],
   sessions: [],
@@ -1395,6 +1517,7 @@ export const useAppStore = create<AppState>((set, get) => {
   offlineModelState: getDisconnectedAssistantReadyState().state,
   offlineModelDetail: getDisconnectedAssistantReadyState().detail,
   offlineImportDrafts: {},
+  deferredOperatorRunsBySession: {},
   pendingLearningSignals: [],
   pendingConversationMemories: [],
   offlineSummarizing: false,
@@ -1552,6 +1675,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selectedSessionId: cachedOfflineState?.selectedSessionId ?? null,
       messagesBySession: cachedOfflineState?.messagesBySession ?? {},
       offlineImportDrafts: cachedOfflineState?.importsBySession ?? {},
+      deferredOperatorRunsBySession: cachedOfflineState?.deferredOperatorRunsBySession ?? {},
       pendingLearningSignals: cachedOfflineState?.pendingLearningSignals ?? [],
       pendingConversationMemories: cachedOfflineState?.pendingConversationMemories ?? [],
       cachedMemoryDigest: cachedOfflineState?.memoryDigest ?? null,
@@ -1625,6 +1749,9 @@ export const useAppStore = create<AppState>((set, get) => {
           pairedDeviceCount: 1
         },
         buildLaneSummary: null,
+        operatorRunLedger: null,
+        operatorRunActioningId: null,
+        operatorRunReviewDraft: null,
         pairingCode: "",
         newSessionRootPath: paired.host.approvedRoots[0] ?? "",
         realtimeConnected: false,
@@ -1660,6 +1787,9 @@ export const useAppStore = create<AppState>((set, get) => {
       currentDeviceId: null,
       hostStatus: null,
       buildLaneSummary: null,
+      operatorRunLedger: null,
+      operatorRunActioningId: null,
+      operatorRunReviewDraft: null,
       devices: [],
       composer: "",
       composerInputMode: "text",
@@ -1739,9 +1869,15 @@ export const useAppStore = create<AppState>((set, get) => {
     set({ refreshing: true });
     try {
       const previousView = get().view;
-      const [hostStatus, buildLaneSummary, sessions, devices, outboundRecipients, memoryDigest] = await Promise.all([
+      const [hostStatus, buildLaneSummary, operatorRunLedger, sessions, devices, outboundRecipients, memoryDigest] = await Promise.all([
         api.getHostStatus(token, baseUrl),
         api.getBuildLaneSummary(token, baseUrl).catch((error) => {
+          if (error instanceof Error && isNotFoundErrorMessage(error.message)) {
+            return null;
+          }
+          throw error;
+        }),
+        api.getOperatorRunLedger(token, baseUrl).catch((error) => {
           if (error instanceof Error && isNotFoundErrorMessage(error.message)) {
             return null;
           }
@@ -1786,6 +1922,9 @@ export const useAppStore = create<AppState>((set, get) => {
       set({
         hostStatus,
         buildLaneSummary,
+        operatorRunLedger,
+        operatorRunActioningId: null,
+        operatorRunReviewDraft: null,
         cachedMemoryDigest: memoryDigest ?? null,
         wakeControl: hostStatus.wakeControl,
         devices,
@@ -2326,18 +2465,21 @@ export const useAppStore = create<AppState>((set, get) => {
     }
   },
   updateOfflineImportSummary(sessionId, value) {
-    set((state) => ({
-      offlineImportDrafts: state.offlineImportDrafts[sessionId]
-        ? {
-            ...state.offlineImportDrafts,
-            [sessionId]: {
-              ...state.offlineImportDrafts[sessionId],
-              summary: value,
-              updatedAt: new Date().toISOString()
-            }
+    set((state) => {
+      const messages = state.messagesBySession[sessionId] ?? [];
+      const draft = state.offlineImportDrafts[sessionId] ?? buildOfflineImportDraft(undefined, messages, []);
+      return {
+        offlineImportDrafts: {
+          ...state.offlineImportDrafts,
+          [sessionId]: {
+            ...draft,
+            sessionId,
+            summary: value,
+            updatedAt: new Date().toISOString()
           }
-        : state.offlineImportDrafts
-    }));
+        }
+      };
+    });
     void persistOfflineSnapshot(get);
   },
   updateOfflineImportDraftTurn(sessionId, index, value) {
@@ -2380,14 +2522,56 @@ export const useAppStore = create<AppState>((set, get) => {
     });
     void persistOfflineSnapshot(get);
   },
+  addDeferredOperatorRunDraft() {
+    const sessionId = get().selectedSessionId;
+    if (!sessionId) {
+      set({
+        notice: null,
+        error: "Open a cached chat before drafting deferred operator work."
+      });
+      return;
+    }
+    set((state) => ({
+      deferredOperatorRunsBySession: {
+        ...state.deferredOperatorRunsBySession,
+        [sessionId]: [buildDeferredOperatorRunDraft(sessionId), ...(state.deferredOperatorRunsBySession[sessionId] ?? [])]
+      },
+      notice: "Deferred operator draft added. It will stay local until you explicitly import it into the desktop-backed operator ledger.",
+      error: null
+    }));
+    void persistOfflineSnapshot(get);
+  },
+  updateDeferredOperatorRunDraft(runId, field, value) {
+    set((state) => ({
+      deferredOperatorRunsBySession: Object.fromEntries(
+        Object.entries(state.deferredOperatorRunsBySession).map(([sessionId, runs]) => [
+          sessionId,
+          runs.map((run) => (run.id === runId ? { ...run, [field]: value } : run))
+        ])
+      ) as typeof state.deferredOperatorRunsBySession
+    }));
+    void persistOfflineSnapshot(get);
+  },
+  removeDeferredOperatorRunDraft(runId) {
+    set((state) => ({
+      deferredOperatorRunsBySession: Object.fromEntries(
+        Object.entries(state.deferredOperatorRunsBySession)
+          .map(([sessionId, runs]) => [sessionId, runs.filter((run) => run.id !== runId)] as const)
+          .filter(([, runs]) => runs.length > 0)
+      ) as typeof state.deferredOperatorRunsBySession
+    }));
+    void persistOfflineSnapshot(get);
+  },
   async importOfflineSession() {
     const sessionId = requireValue(get().selectedSessionId, "Open the chat you want to import first.");
     const selectedSession = get().sessions.find((item) => item.id === sessionId) ?? null;
     const draft = get().offlineImportDrafts[sessionId];
-    if (!draft || !draft.draftTurns.length) {
+    const pendingDeferredRuns = (get().deferredOperatorRunsBySession[sessionId] ?? []).filter((run) => !run.importedAt);
+    const hasOfflineNotes = Boolean(draft?.draftTurns.length);
+    if (!hasOfflineNotes && !pendingDeferredRuns.length) {
       set({
         notice: null,
-        error: "No offline ideation notes are ready to import from this chat."
+        error: "No offline ideation notes or deferred operator drafts are ready to import from this chat."
       });
       return;
     }
@@ -2396,7 +2580,9 @@ export const useAppStore = create<AppState>((set, get) => {
     const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
     set({
       offlineImporting: true,
-      notice: "Importing offline notes into canonical history without starting desktop work.",
+      notice: pendingDeferredRuns.length
+        ? "Importing offline notes and deferred operator drafts without starting desktop work."
+        : "Importing offline notes into canonical history without starting desktop work.",
       error: null
     });
 
@@ -2413,59 +2599,97 @@ export const useAppStore = create<AppState>((set, get) => {
         importTargetSession?.id ?? sessionId,
         "Freedom needs a live desktop chat before it can import phone-only notes."
       );
-      const response = await api.importOfflineSession(token, baseUrl, importTargetSessionId, {
-        clientImportId: `mobile-offline-${importTargetSessionId}-${new Date().toISOString()}`,
-        summary: draft.summary.trim(),
-        draftTurns: draft.draftTurns.map((turn) => turn.trim()).filter(Boolean),
-        createdAt: draft.updatedAt,
-        source: "mobile_offline"
-      });
-      const continueDraft =
-        "I imported mobile offline ideation notes into this chat. Please review those imported notes and continue from them.";
+      const response = hasOfflineNotes
+        ? await api.importOfflineSession(token, baseUrl, importTargetSessionId, {
+            clientImportId: `mobile-offline-${importTargetSessionId}-${new Date().toISOString()}`,
+            summary: draft?.summary.trim() ?? "",
+            draftTurns: draft?.draftTurns.map((turn) => turn.trim()).filter(Boolean) ?? [],
+            createdAt: draft?.updatedAt ?? new Date().toISOString(),
+            source: "mobile_offline"
+          })
+        : null;
+      const targetSession = response?.session ?? importTargetSession;
+      const targetSessionId = requireValue(
+        targetSession?.id ?? importTargetSessionId,
+        "Freedom needs a live desktop chat before it can import stand-alone operator drafts."
+      );
+      const importedOperatorRuns = await Promise.all(
+        pendingDeferredRuns.map((run) =>
+          api.createOperatorRun(token, baseUrl, buildImportedOperatorRun({
+            run,
+            sessionId: targetSessionId,
+            hostId: get().hostStatus?.host.id ?? null
+          }))
+        )
+      );
+      const continueDraft = response
+        ? "I imported mobile offline ideation notes into this chat. Please review those imported notes and continue from them."
+        : null;
+      const importedAt = new Date().toISOString();
       set((state) => ({
         offlineMode: false,
         offlineImporting: false,
-        selectedSessionId: response.session.id,
+        selectedSessionId: targetSessionId,
         sessions: mergeRemoteAndLocalSessions(
-          [response.session, ...state.sessions.filter((item) => !isLocalOnlySession(item) && item.id !== response.session.id)],
+          targetSession
+            ? [targetSession, ...state.sessions.filter((item) => !isLocalOnlySession(item) && item.id !== targetSession.id)]
+            : state.sessions,
           state.sessions
         ),
         messagesBySession: {
           ...state.messagesBySession,
-          [response.session.id]: [
-            ...(state.messagesBySession[response.session.id] ?? []),
-            ...response.messages.filter(
+          [targetSessionId]: [
+            ...(state.messagesBySession[targetSessionId] ?? []),
+            ...(response?.messages ?? []).filter(
               (message: ChatMessage) =>
-                !(state.messagesBySession[response.session.id] ?? []).some((existingMessage) => existingMessage.id === message.id)
+                !(state.messagesBySession[targetSessionId] ?? []).some((existingMessage) => existingMessage.id === message.id)
             )
           ].sort((left, right) => left.createdAt.localeCompare(right.createdAt))
         },
         offlineImportDrafts: Object.fromEntries(
           Object.entries({
             ...state.offlineImportDrafts,
-            [response.session.id]: {
-              ...state.offlineImportDrafts[sessionId],
-              sessionId: response.session.id,
-              importedAt: new Date().toISOString(),
-              continueDraft,
-              updatedAt: new Date().toISOString()
-            }
+            ...(draft
+              ? {
+                  [targetSessionId]: {
+                    ...draft,
+                    sessionId: targetSessionId,
+                    importedAt,
+                    continueDraft,
+                    updatedAt: importedAt
+                  }
+                }
+              : {})
           }).filter(([draftSessionId]) => draftSessionId !== sessionId || !isLocalOnlySession(selectedSession))
         ) as typeof state.offlineImportDrafts,
-        notice: isLocalOnlySession(selectedSession)
-          ? "Phone-only notes imported into desktop history. Review them there before continuing."
-          : "Offline notes imported safely. Review them, then continue only when you are ready.",
+        deferredOperatorRunsBySession: markDeferredOperatorRunsImported(
+          state.deferredOperatorRunsBySession,
+          sessionId,
+          targetSessionId,
+          importedOperatorRuns
+        ),
+        operatorRunLedger: importedOperatorRuns.reduce(
+          (ledger, run) => upsertOperatorRunInLedger(ledger, run),
+          state.operatorRunLedger
+        ),
+        notice: pendingDeferredRuns.length && response
+          ? "Offline notes and deferred operator drafts imported safely. Review them there before continuing."
+          : pendingDeferredRuns.length
+            ? "Deferred operator drafts imported into the governed desktop ledger. Review them there before continuing."
+            : isLocalOnlySession(selectedSession)
+              ? "Phone-only notes imported into desktop history. Review them there before continuing."
+              : "Offline notes imported safely. Review them, then continue only when you are ready.",
         error: null
       }));
-      if (!isLocalOnlySession(selectedSession)) {
+      if (!isLocalOnlySession(selectedSession) && draft) {
         set((state) => ({
           offlineImportDrafts: {
             ...state.offlineImportDrafts,
             [sessionId]: {
               ...state.offlineImportDrafts[sessionId],
-              importedAt: new Date().toISOString(),
+              importedAt,
               continueDraft,
-              updatedAt: new Date().toISOString()
+              updatedAt: importedAt
             }
           }
         }));
@@ -2474,7 +2698,7 @@ export const useAppStore = create<AppState>((set, get) => {
     } catch (error) {
       set({
         offlineImporting: false,
-        error: error instanceof Error ? error.message : "Could not import offline notes."
+        error: error instanceof Error ? error.message : "Could not import offline notes or deferred operator drafts."
       });
     }
   },
@@ -2559,6 +2783,149 @@ export const useAppStore = create<AppState>((set, get) => {
       await get().refresh();
     } catch (error) {
       await handleStoreError(error, set, get, "Could not stop the current run.");
+    }
+  },
+  async approveOperatorRun(runId) {
+    try {
+      const token = requireValue(get().token, "Pair this phone with the desktop first.");
+      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+      const run = requireOperatorRun(get, runId);
+      if (run.status !== "awaiting-approval" && run.status !== "paused") {
+        throw new Error("Only paused or approval-held runs can continue from the phone.");
+      }
+
+      set({ operatorRunActioningId: runId, notice: null, error: null });
+      const updated = await api.updateOperatorRun(token, baseUrl, runId, {
+        status: "queued",
+        nextCheckpoint: nextCheckpointForContinuedOperatorRun(run),
+        appendEvidence: {
+          kind: "audit",
+          summary: "Connected mobile approved the run to continue through the governed desktop lane.",
+          source: "mobile:approve_operator_run"
+        }
+      });
+      set((state) => ({
+        operatorRunLedger: upsertOperatorRunInLedger(state.operatorRunLedger, updated),
+        operatorRunActioningId: null,
+        notice: `Queued '${updated.title}' to continue through the governed operator lane.`,
+        error: null
+      }));
+    } catch (error) {
+      set({ operatorRunActioningId: null });
+      await handleStoreError(error, set, get, "Could not continue that operator run.");
+    }
+  },
+  async holdOperatorRun(runId) {
+    try {
+      const token = requireValue(get().token, "Pair this phone with the desktop first.");
+      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+      const run = requireOperatorRun(get, runId);
+      if (run.status !== "queued" && run.status !== "paused") {
+        throw new Error("Only queued or paused runs can be put back on review hold from the phone.");
+      }
+
+      set({ operatorRunActioningId: runId, notice: null, error: null });
+      const updated = await api.updateOperatorRun(token, baseUrl, runId, {
+        status: "awaiting-approval",
+        nextCheckpoint:
+          "Review the updated plan, revisit second- and third-order consequences, and decide whether the run should continue, pause longer, or stop.",
+        appendEvidence: {
+          kind: "audit",
+          summary: "Connected mobile placed the run back on operator review hold.",
+          source: "mobile:hold_operator_run"
+        }
+      });
+      set((state) => ({
+        operatorRunLedger: upsertOperatorRunInLedger(state.operatorRunLedger, updated),
+        operatorRunActioningId: null,
+        notice: `Placed '${updated.title}' back on operator review hold.`,
+        error: null
+      }));
+    } catch (error) {
+      set({ operatorRunActioningId: null });
+      await handleStoreError(error, set, get, "Could not place that operator run on hold.");
+    }
+  },
+  async interruptOperatorRun(runId) {
+    try {
+      const token = requireValue(get().token, "Pair this phone with the desktop first.");
+      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+      const run = requireOperatorRun(get, runId);
+      if (!run.sessionId) {
+        throw new Error("This operator run is not linked to a live desktop session yet.");
+      }
+
+      set({ operatorRunActioningId: runId, notice: null, error: null });
+      const stoppedSession = await api.stopSession(token, baseUrl, run.sessionId);
+      set((state) => ({
+        sessions: sortSessionsForDisplay([stoppedSession, ...state.sessions.filter((item) => item.id !== stoppedSession.id)]),
+        operatorRunActioningId: null,
+        notice: `Interrupt requested for '${run.title}'. Freedom is stopping the linked desktop run.`,
+        error: null
+      }));
+      await get().refresh();
+    } catch (error) {
+      set({ operatorRunActioningId: null });
+      await handleStoreError(error, set, get, "Could not interrupt that operator run.");
+    }
+  },
+  startOperatorRunReview(runId) {
+    try {
+      const run = requireOperatorRun(get, runId);
+      set({
+        operatorRunReviewDraft: buildOperatorRunReviewDraft(run),
+        notice: null,
+        error: null
+      });
+    } catch (error) {
+      void handleStoreError(error, set, get, "Could not open the consequence review draft.");
+    }
+  },
+  updateOperatorRunReviewDraft(field, value) {
+    set((state) => ({
+      operatorRunReviewDraft: state.operatorRunReviewDraft
+        ? {
+            ...state.operatorRunReviewDraft,
+            [field]: value
+          }
+        : state.operatorRunReviewDraft
+    }));
+  },
+  cancelOperatorRunReview() {
+    set({
+      operatorRunReviewDraft: null,
+      notice: null,
+      error: null
+    });
+  },
+  async submitOperatorRunReview() {
+    try {
+      const token = requireValue(get().token, "Pair this phone with the desktop first.");
+      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+      const draft = requireValue(get().operatorRunReviewDraft, "Open a consequence review draft first.");
+      const run = requireOperatorRun(get, draft.runId);
+      const consequenceReview = buildOperatorRunConsequenceReviewFromDraft(draft);
+
+      set({ operatorRunActioningId: draft.runId, notice: null, error: null });
+      const updated = await api.updateOperatorRun(token, baseUrl, draft.runId, {
+        nextCheckpoint: nextCheckpointAfterRecordedReview(run),
+        consequenceReview,
+        appendEvidence: {
+          kind: "analysis",
+          summary: "Connected mobile recorded a structured consequence review for this run.",
+          source: "mobile:submit_operator_run_review"
+        }
+      });
+      set((state) => ({
+        operatorRunLedger: upsertOperatorRunInLedger(state.operatorRunLedger, updated),
+        operatorRunActioningId: null,
+        operatorRunReviewDraft: null,
+        notice: `Recorded the consequence review for '${updated.title}'.`,
+        error: null
+      }));
+    } catch (error) {
+      set({ operatorRunActioningId: null });
+      await handleStoreError(error, set, get, "Could not record that consequence review.");
     }
   },
   async renameCurrentDevice() {
@@ -4199,6 +4566,152 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   return value;
 }
 
+function requireOperatorRun(get: () => AppState, runId: string): AutonomousOperatorRun {
+  const run = get().operatorRunLedger?.runs.find((item) => item.id === runId) ?? null;
+  return requireValue(run, "Operator run not found on this phone yet. Refresh Homebase and try again.");
+}
+
+function buildOperatorRunReviewDraft(run: AutonomousOperatorRun): OperatorRunReviewDraftState {
+  return {
+    runId: run.id,
+    summary: run.consequenceReview?.summary ?? "",
+    blastRadius: run.consequenceReview?.blastRadius ?? "",
+    reversibility: run.consequenceReview?.reversibility ?? "",
+    dependencyImpact: run.consequenceReview?.dependencyImpact ?? "",
+    operatorBurdenImpact: run.consequenceReview?.operatorBurdenImpact ?? "",
+    securityPrivacyImpact: run.consequenceReview?.securityPrivacyImpact ?? "",
+    secondOrderEffects: serializeConsequenceEffectsDraft(run.consequenceReview?.secondOrderEffects ?? []),
+    thirdOrderEffects: serializeConsequenceEffectsDraft(run.consequenceReview?.thirdOrderEffects ?? []),
+    stopTriggers: (run.consequenceReview?.stopTriggers ?? []).join("\n")
+  };
+}
+
+function nextCheckpointForContinuedOperatorRun(run: AutonomousOperatorRun): string {
+  if (!run.consequenceReview) {
+    return "Record the consequence review, then continue this run through the governed desktop lane.";
+  }
+  if (run.selectedOutcome === "build") {
+    return "Continue this run through the governed desktop lane using the same operator run id and keep evidence attached.";
+  }
+  return "Continue this governed run, keep evidence attached, and pause again if second- or third-order consequences widen.";
+}
+
+function upsertOperatorRunInLedger(
+  ledger: OperatorRunLedger | null,
+  updated: AutonomousOperatorRun
+): OperatorRunLedger {
+  const runs = [updated, ...(ledger?.runs ?? []).filter((item) => item.id !== updated.id)].sort((left, right) =>
+    right.updatedAt.localeCompare(left.updatedAt)
+  );
+  return {
+    configured: true,
+    runs,
+    activeCount: runs.filter((item) => item.status === "queued" || item.status === "running" || item.status === "paused").length,
+    awaitingApprovalCount: runs.filter((item) => item.status === "awaiting-approval").length,
+    completedCount: runs.filter((item) => item.status === "completed").length,
+    updatedAt: runs[0]?.updatedAt ?? ledger?.updatedAt ?? null
+  };
+}
+
+function serializeConsequenceEffectsDraft(
+  effects: Array<{
+    summary: string;
+    severity: "low" | "medium" | "high";
+    mitigated: boolean;
+    mitigation: string | null;
+  }>
+): string {
+  return effects
+    .map((effect) =>
+      [effect.severity, effect.summary, effect.mitigated && effect.mitigation ? effect.mitigation : null]
+        .filter(Boolean)
+        .join(" | ")
+    )
+    .join("\n");
+}
+
+function parseConsequenceEffectsDraft(raw: string): Array<{
+  summary: string;
+  severity: "low" | "medium" | "high";
+  mitigated: boolean;
+  mitigation: string | null;
+}> {
+  return raw
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split("|").map((part) => part.trim()).filter(Boolean);
+      let severity: "low" | "medium" | "high" = "medium";
+      let summary = "";
+      let mitigation: string | null = null;
+
+      if (parts.length > 0 && /^(low|medium|high)$/i.test(parts[0] ?? "")) {
+        severity = parts[0].toLowerCase() as "low" | "medium" | "high";
+        summary = parts[1] ?? "";
+        mitigation = parts[2] ?? null;
+      } else if (/^(low|medium|high)\s*:\s*/i.test(parts[0] ?? "")) {
+        const match = parts[0].match(/^(low|medium|high)\s*:\s*(.+)$/i);
+        severity = (match?.[1]?.toLowerCase() as "low" | "medium" | "high") ?? "medium";
+        summary = match?.[2]?.trim() ?? "";
+        mitigation = parts[1] ?? null;
+      } else {
+        summary = parts[0] ?? "";
+        mitigation = parts[1] ?? null;
+      }
+
+      return {
+        summary,
+        severity,
+        mitigated: Boolean(mitigation),
+        mitigation
+      };
+    })
+    .filter((effect) => effect.summary);
+}
+
+function parseStopTriggersDraft(raw: string): string[] {
+  return raw
+    .split(/\n+|\|/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildOperatorRunConsequenceReviewFromDraft(draft: OperatorRunReviewDraftState) {
+  const summary = requireValue(draft.summary.trim(), "Add a short consequence-review summary.");
+  const blastRadius = requireValue(draft.blastRadius.trim(), "Describe the blast radius.");
+  const reversibility = requireValue(draft.reversibility.trim(), "Describe reversibility.");
+  const dependencyImpact = requireValue(draft.dependencyImpact.trim(), "Describe dependency impact.");
+  const operatorBurdenImpact = requireValue(draft.operatorBurdenImpact.trim(), "Describe operator burden impact.");
+  const securityPrivacyImpact = requireValue(draft.securityPrivacyImpact.trim(), "Describe security and privacy impact.");
+
+  return {
+    summary,
+    secondOrderEffects: parseConsequenceEffectsDraft(draft.secondOrderEffects).slice(0, 8),
+    thirdOrderEffects: parseConsequenceEffectsDraft(draft.thirdOrderEffects).slice(0, 8),
+    blastRadius,
+    reversibility,
+    dependencyImpact,
+    operatorBurdenImpact,
+    securityPrivacyImpact,
+    stopTriggers: parseStopTriggersDraft(draft.stopTriggers).slice(0, 8),
+    reviewedAt: new Date().toISOString()
+  };
+}
+
+function nextCheckpointAfterRecordedReview(run: AutonomousOperatorRun): string {
+  if (run.status === "paused") {
+    return "Consequence review recorded. Decide whether this run should resume, stay paused, or stop.";
+  }
+  if (run.status === "awaiting-approval") {
+    return "Consequence review recorded. Decide whether this run should continue through the governed lane, stay on hold, or stop.";
+  }
+  if (run.status === "queued" || run.status === "running") {
+    return "Consequence review recorded. Re-check blast radius and stop triggers before substantial implementation continues.";
+  }
+  return "Consequence review recorded. Reassess the next governed step before execution continues.";
+}
+
 async function ensureOperatorSession(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
@@ -4436,6 +4949,9 @@ async function enterRepairMode(
     token: null,
     hostStatus: null,
     buildLaneSummary: null,
+    operatorRunLedger: null,
+    operatorRunActioningId: null,
+    operatorRunReviewDraft: null,
     composer: "",
     composerInputMode: "text",
     newSessionRootPath: "",
