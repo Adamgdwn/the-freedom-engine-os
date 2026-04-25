@@ -798,7 +798,8 @@ function buildRelayRuntimeContext(messages: ChatMessage[], prompt: string): stri
 
   return [
     "Phone posture: stand-alone fallback while the desktop is unavailable.",
-    "Desktop-backed governed execution is not available in this lane.",
+    "Immediate desktop-backed governed execution is not available in this lane.",
+    "Freedom's full governed runtime can inspect approved code and repo control files when the desktop lane is active and permissions allow it.",
     `Current user request: ${prompt.trim()}`,
     recentTurns.length ? `Recent cached turn count: ${recentTurns.length}` : null,
     assistantPreview ? `Recent assistant preview:\n${assistantPreview}` : null
