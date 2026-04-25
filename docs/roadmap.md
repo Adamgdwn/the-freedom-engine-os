@@ -1,5 +1,7 @@
 # Roadmap
 
+Document status: active design
+
 For the consolidated dated list of currently known deficiencies, see
 [Known Deficiencies (2026-04-25)](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/known-deficiencies-2026-04-25.md:1).
 

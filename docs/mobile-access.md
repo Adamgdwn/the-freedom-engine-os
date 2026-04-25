@@ -1,5 +1,7 @@
 # Freedom Anywhere Via Freedom Desktop
 
+Document status: live reference
+
 ## Decision
 
 Freedom Engine should present a single `Freedom` identity on desktop and phone while

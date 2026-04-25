@@ -1,4 +1,6 @@
 # Freedom Anywhere — Relay & Stand-Alone Brain Session Log
+Document status: historical
+
 **Date:** 2026-04-24  
 **Scope:** Mobile state machine fix, Freedom relay deployment, stand-alone brain wiring, APK downloads
 

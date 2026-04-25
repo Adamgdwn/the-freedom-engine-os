@@ -1,5 +1,7 @@
 # Freedom Voice Layer v1 — Build Spec
 
+Document status: historical
+
 **For:** any engineer picking this up cold  
 **Goal:** add a seamless, self-interruption-free voice interface to the Freedom Engine OS  
 **Scope:** Phase 1 only — voice plumbing + UI shell. No autonomous agents, no memory loops.

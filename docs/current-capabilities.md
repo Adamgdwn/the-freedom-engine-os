@@ -1,5 +1,7 @@
 # Current Capabilities
 
+Document status: live reference
+
 Last updated: 2026-04-25
 
 This document is the working reference for what Freedom can actually do today.

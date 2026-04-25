@@ -1,5 +1,7 @@
 # Outbound Email Setup
 
+Document status: live reference
+
 ## Recommended Sender Path
 
 Use Resend for outbound delivery and keep Google mailbox credentials out of the Freedom desktop runtime.

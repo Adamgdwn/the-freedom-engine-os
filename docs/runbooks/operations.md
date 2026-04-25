@@ -1,5 +1,7 @@
 # Operations Runbook
 
+Document status: live reference
+
 ## Purpose
 
 Operate the Freedom Engine OS safely as a governed internal decision system.

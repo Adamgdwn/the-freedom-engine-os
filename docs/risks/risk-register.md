@@ -1,5 +1,7 @@
 # Risk Register
 
+Document status: live reference
+
 ## Current Risk Classification
 
 - Tier: high

@@ -1,5 +1,7 @@
 # Wake Relay Deployment
 
+Document status: live reference
+
 ## Purpose
 
 The wake relay is the always-on low-power piece that can wake the main workstation without keeping the full homebase powered constantly.

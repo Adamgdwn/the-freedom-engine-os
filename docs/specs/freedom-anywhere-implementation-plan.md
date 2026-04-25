@@ -1,5 +1,7 @@
 # Freedom Anywhere — Implementation Plan
 
+Document status: active design
+
 Status: in progress  
 Depends on: [freedom-anywhere-first-principles-spec.md](./freedom-anywhere-first-principles-spec.md)
 

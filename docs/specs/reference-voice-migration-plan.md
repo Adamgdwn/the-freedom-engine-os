@@ -1,5 +1,7 @@
 # Reference-Driven Voice Migration Plan
 
+Document status: historical
+
 Last updated: 2026-04-17
 
 This document replaces heuristic voice tuning as the primary strategy.

@@ -1,5 +1,7 @@
 # Known Deficiencies
 
+Document status: live reference
+
 Date: 2026-04-25
 Status: current consolidated list
 

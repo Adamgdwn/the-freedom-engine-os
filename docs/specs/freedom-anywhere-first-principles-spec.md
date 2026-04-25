@@ -1,5 +1,7 @@
 # Freedom Anywhere — First Principles Product Spec
 
+Document status: active design
+
 Status: draft for review  
 Last updated: 2026-04-22
 

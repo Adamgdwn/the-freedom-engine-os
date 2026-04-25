@@ -1,5 +1,7 @@
 # Freedom OS Core + Self-Evolving Platform Plan
 
+Document status: active design
+
 ## Summary
 
 - Build Freedom as an almost-autonomous, lightly governed co-founder for an AI-native

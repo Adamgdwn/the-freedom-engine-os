@@ -1,5 +1,7 @@
 # Prompt Register
 
+Document status: active design
+
 | Prompt ID | Role | Purpose | Review Status |
 | --- | --- | --- | --- |
 | PR-001 | Researcher | Gather evidence and summarize workflow or market signal with citations to internal sources | Draft |

@@ -1,5 +1,7 @@
 # Security Assumptions
 
+Document status: live reference
+
 ## Scope
 
 This document defines assumptions and constraints for v1 of a single-owner remote development control platform.

@@ -1,5 +1,7 @@
 # ADR-0001: Title
 
+Document status: live reference
+
 ## Status
 
 Proposed
@@ -15,4 +17,3 @@ Describe the decision made.
 ## Consequences
 
 Describe expected benefits, tradeoffs, and follow-up work.
-

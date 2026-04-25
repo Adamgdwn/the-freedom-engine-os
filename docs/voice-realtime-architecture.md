@@ -1,5 +1,7 @@
 # Realtime Voice Architecture Note
 
+Document status: historical
+
 ## Current Assessment
 
 Before this upgrade, the earlier mobile companion voice lane behaved like a one-shot transcript helper:

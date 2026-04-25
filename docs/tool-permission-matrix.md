@@ -1,5 +1,7 @@
 # Tool Permission Matrix
 
+Document status: live reference
+
 | Tool | Purpose | Allowed Actions | Prohibited Actions | Approval Required | Notes |
 | --- | --- | --- | --- | --- | --- |
 | GitHub | Branches, issues, reviews, CI visibility | Draft code changes, open branches, inspect reviews | Merge protected branches, admin setting changes | Yes for merges and admin changes | Core code-control surface |

@@ -1,5 +1,7 @@
 # Deployment Guide
 
+Document status: live reference
+
 ## Environments
 
 - `dev`:

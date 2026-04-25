@@ -1,5 +1,7 @@
 # Manual
 
+Document status: live reference
+
 ## What This Project Is
 
 This project is an internal venture operating system. It helps compare ventures

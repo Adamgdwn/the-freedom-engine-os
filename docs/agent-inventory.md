@@ -1,5 +1,7 @@
 # Agent Inventory
 
+Document status: live reference
+
 | Agent ID | Name | Purpose | Autonomy | Model | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | AG-001 | Researcher | Gather and summarize workflow, market, and execution evidence | A1 | gpt-5.4-mini | Adam Goodwin | Active |

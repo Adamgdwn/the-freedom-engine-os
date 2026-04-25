@@ -1,5 +1,7 @@
 # Conversation Build Lane
 
+Document status: live reference
+
 ## Purpose
 
 Define how Freedom turns ideas from live conversation into governed work that is

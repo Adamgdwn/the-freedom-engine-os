@@ -1,5 +1,7 @@
 # Model Registry
 
+Document status: active design
+
 | Model | Intended Role | Boundaries | Status |
 | --- | --- | --- | --- |
 | `gpt-5.4` | Strategist, workflow analyst, governance reviewer | Recommendations and reviews only; no unilateral irreversible actions | Planned and represented in V1 |

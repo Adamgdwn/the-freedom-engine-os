@@ -1,5 +1,7 @@
 # Architecture Overview
 
+Document status: live reference
+
 ## Summary
 
 The Freedom Engine OS is a full-stack monorepo and control plane for an AI-native
