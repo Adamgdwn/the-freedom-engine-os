@@ -6,6 +6,9 @@ This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
 or the boundary between modeled and fully operational capability.
 
+For the consolidated dated list of known gaps and unfinished areas, see
+[Known Deficiencies (2026-04-25)](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/known-deficiencies-2026-04-25.md:1).
+
 ## How To Read This
 
 - `Live` means the capability exists in runnable code and is part of the current system behavior.

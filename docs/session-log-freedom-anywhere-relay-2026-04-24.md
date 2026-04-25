@@ -6,6 +6,11 @@
 
 ## The Problem We Started With
 
+Current note:
+For the consolidated dated list of known system deficiencies after this relay
+session, see
+[Known Deficiencies (2026-04-25)](/home/adamgoodwin/code/agents/the-freedom-engine-os/docs/known-deficiencies-2026-04-25.md:1).
+
 The Freedom Anywhere app was showing a "Reconnecting" screen with a "Backup voice only" chip and the message *"This slim build does not bundle the old on-device model."* This happened whenever the desktop was off.
 
 **Why it was broken:**
