@@ -43,6 +43,9 @@ That means:
 - a new realtime voice session should bootstrap from the same recent thread
   history whether the phone reached Freedom through the desktop gateway or the
   stand-alone relay
+- what is worth durable learning should be judged by the same ChatGPT-led memory
+  triage loop and persisted into the same governed Freedom memory channels,
+  rather than by separate relay-only or mobile-only heuristics
 
 ### 1. Freedom Relay (`apps/relay/`)
 

@@ -42,30 +42,36 @@ For a fast operator-facing view of what is actually live right now, use
    control-plane snapshot.
 6. The web voice lane exchanges short-lived LiveKit tokens, audio, interrupt events, and
    task-state updates between the browser and the Python Realtime worker.
-7. Voice memory updates are persisted through a server-only Next.js API into Supabase,
+7. Freedom now uses a governed memory loop rather than raw transcript carry-forward
+   alone: completed text turns, connected voice turns, and offline-import sessions
+   can be triaged by ChatGPT for durable learning, with only the approved memory
+   channels (`learning signals`, `conversation memory`, open task memory, build-lane
+   items, and persona overlays) written into canonical persistence.
+8. Voice memory updates are persisted through a server-only Next.js API into Supabase,
    and the Python worker hydrates recent open-task, learning, programming, recipient,
-   and approved persona-overlay context into the live session prompt.
-8. The operator reviews persona-adjustment, revision, and retirement requests in the
+   approved persona-overlay, and conversation-memory context into the live session
+   prompt.
+9. The operator reviews persona-adjustment, revision, and retirement requests in the
    Personality page and only approved overlays remain active runtime refinements.
-9. When Freedom prepares an external email, the Python worker publishes a draft event,
+10. When Freedom prepares an external email, the Python worker publishes a draft event,
    the control plane presents it for explicit confirmation, and the server sends it
    only to a trusted recipient recorded in Supabase.
-10. Local backup and restore scripts export the durable memory tables into repo-local
+11. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
-11. Desktop-host routes non-voice work through a shared model-router policy so routine
+12. Desktop-host routes non-voice work through a shared model-router policy so routine
     read-only turns can stay on a configured local command lane while escalated work can
     use an operator-selected external lane such as `OpenAI / ChatGPT`, `Codex`, or
     `Claude Code`.
-12. The desktop host now supervises the LiveKit/OpenAI voice worker, while the mobile
+13. The desktop host now supervises the LiveKit/OpenAI voice worker, while the mobile
     app can also continue in a bounded offline ideation posture with cached chats and a
     bundled on-device model when the desktop is unreachable.
-13. The live voice agent can inspect its own repo-side governance and tool YAML, and
+14. The live voice agent can inspect its own repo-side governance and tool YAML, and
     after explicit confirmation it can bridge approved programming work into the desktop
     execution lane instead of stopping only at a request-for-later posture.
-14. Significant ideas that arise in conversation are meant to be promoted into the
+15. Significant ideas that arise in conversation are meant to be promoted into the
     dedicated Pop!_OS build lane, where business case, approval posture, and execution
     evidence are made explicit before or during implementation.
-15. Future persistence will swap the seed layer for Supabase queries while preserving the
+16. Future persistence will swap the seed layer for Supabase queries while preserving the
     same entity boundaries.
 
 ## Dependencies

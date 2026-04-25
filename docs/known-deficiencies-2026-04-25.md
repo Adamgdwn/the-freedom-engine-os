@@ -110,6 +110,10 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 - The new conversation-memory lane still needs production validation for memory
   quality, duplicate suppression, confidence thresholds, and the balance between
   canonical Supabase memory and gateway-state continuity fallback.
+- The new ChatGPT-backed memory-triage loop still needs transcript-based evals
+  and live validation for over-learning, under-learning, follow-up-question
+  quality, and consistent behavior across connected text, connected voice, and
+  Freedom Anywhere import paths.
 - The approval-gated autonomy loop still needs broader validation for open-task
   review, side-question handling, topic-shift parking, and duplicate
   self-programming suppression.

@@ -102,6 +102,16 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Gateway-side promotion of completed text, voice, and offline-import sessions
   into canonical conversation memory, plus a gateway-state continuity fallback
   when Supabase memory is sparse or still being configured.
+- A ChatGPT-backed memory-triage layer now evaluates completed connected text
+  turns, connected voice turns, and offline-import sessions to decide what is
+  worth durable learning, what should remain transient, and what should stay as
+  an open follow-up question rather than a forced memory write.
+- That triage layer now writes only into the existing governed memory channels
+  (`learning signals` and `conversation memory`) instead of creating a separate
+  mobile or gateway-only memory system.
+- The gateway memory digest can now surface pending `Open memory questions` so
+  Freedom can ask clarifying questions in later sessions when a durable memory
+  candidate is materially useful but still underspecified.
 - Runtime read access for Freedom to inspect open tasks, recent learning signals,
   conversation-memory context, pending self-programming requests, approved
   persona overlays, and trusted email recipients during voice sessions.
@@ -118,6 +128,9 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Stable Freedom core persona loaded from a dedicated prompt artifact.
 - On-task redirection posture.
 - Durable learning capture during voice sessions.
+- ChatGPT-backed learning triage for connected Freedom and Freedom Anywhere,
+  with explicit pressure toward conservative memory writes instead of eager
+  memorization.
 - Approval-gated self-programming requests that stop before execution.
 - Approval-gated persona-adjustment requests that do not rewrite the core persona.
 - Revision-aware persona overlays so Freedom can propose a better version of an active
@@ -180,6 +193,10 @@ For the consolidated dated list of known gaps and unfinished areas, see
   one continuity-first default voice thread for ongoing relationship memory and
   day-to-day work, plus explicit new project kickoff through the `Build` view's
   `Launch build chat` flow for separate governed build sessions.
+- Freedom and Freedom Anywhere now share the same memory-judgment posture in the
+  connected runtime: ChatGPT evaluates what should become durable memory, what
+  should stay transient, and what should become a pending follow-up question for
+  later clarification.
 - The Freedom Anywhere utility menu now includes an `About this build` section that shows the
   installed app version, build code, and current voice runtime directly on-device for
   release verification.

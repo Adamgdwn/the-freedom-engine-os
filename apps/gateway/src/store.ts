@@ -74,6 +74,7 @@ import {
   normalizeAssistantVoicePresetId
 } from "@freedom/shared";
 import { createEmailProvider, renderOutboundEmail, resolveOutboundEmailStatus } from "./outboundEmail.js";
+import { triageMemoryWithChatGPT, type MemoryFollowUpCandidate } from "./memoryTriage.js";
 import { resolveWakeControl } from "./wakeControl.js";
 
 interface HostRecord extends RegisteredHost {
@@ -109,6 +110,8 @@ interface VoiceRuntimeSessionRecord {
   expiresAt: string;
 }
 
+type MemoryFollowUpRecord = MemoryFollowUpCandidate;
+
 interface GatewayState {
   hosts: HostRecord[];
   devices: DeviceRecord[];
@@ -116,6 +119,7 @@ interface GatewayState {
   tasks: TaskRecord[];
   messages: ChatMessage[];
   voiceRuntimeSessions: VoiceRuntimeSessionRecord[];
+  memoryFollowUps: MemoryFollowUpRecord[];
   outboundRecipients: OutboundRecipientRecord[];
   auditEvents: AuditEvent[];
 }
@@ -233,6 +237,7 @@ const defaultState = (): GatewayState => ({
   tasks: [],
   messages: [],
   voiceRuntimeSessions: [],
+  memoryFollowUps: [],
   outboundRecipients: [],
   auditEvents: []
 });
@@ -400,14 +405,21 @@ export class GatewayStore {
     const digest = await loadMemoryDigest(principal.host.id);
     const state = await this.readState();
     const derivedContext = buildStateConversationMemoryContext(state, principal.host.id);
-    if (!derivedContext || digest.context.includes("Relationship memory:") || digest.context.includes("Conversation continuity:")) {
+    const followUpContext = buildStateMemoryFollowUpContext(state, principal.host.id);
+    const hasConversationContext =
+      digest.context.includes("Relationship memory:") || digest.context.includes("Conversation continuity:");
+    if ((!derivedContext || hasConversationContext) && !followUpContext) {
       return digest;
     }
 
     return {
       configured: digest.configured,
       updatedAt: digest.updatedAt,
-      context: [derivedContext, digest.context].filter(Boolean).join("\n\n").trim()
+      context: [
+        !hasConversationContext ? derivedContext : "",
+        followUpContext,
+        digest.context,
+      ].filter(Boolean).join("\n\n").trim()
     };
   }
 
@@ -657,7 +669,8 @@ export class GatewayStore {
       }));
     const digest = await loadMemoryDigest(principal.host.id);
     const derivedContext = buildStateConversationMemoryContext(state, principal.host.id);
-    const runtimeContext = [derivedContext, digest.context].filter(Boolean).join("\n\n").trim();
+    const followUpContext = buildStateMemoryFollowUpContext(state, principal.host.id);
+    const runtimeContext = [derivedContext, followUpContext, digest.context].filter(Boolean).join("\n\n").trim();
 
     return {
       roomName,
@@ -715,7 +728,13 @@ export class GatewayStore {
     session.updatedAt = message.updatedAt;
 
     if (message.role === "assistant") {
-      await promoteConversationMemoriesForSession(session, state.messages.filter((item) => item.sessionId === session.id));
+      await promoteSessionMemoryInsights(
+        state,
+        principal.host.id,
+        session,
+        state.messages.filter((item) => item.sessionId === session.id),
+        "voice_runtime",
+      );
     }
     await this.writeState(state, { defer: true });
     this.emitMessage(principal.host.id, message);
@@ -1194,7 +1213,13 @@ export class GatewayStore {
         type: "message_posted",
         detail: `${input.inputMode ?? "text"}:${input.responseStyle ?? "natural"}:${interruptType}`
       });
-      await promoteConversationMemoriesForSession(targetSession, state.messages.filter((item) => item.sessionId === targetSession.id));
+      await promoteSessionMemoryInsights(
+        state,
+        principal.host.id,
+        targetSession,
+        state.messages.filter((item) => item.sessionId === targetSession.id),
+        "desktop_session",
+      );
       await this.writeState(state);
       this.emitMessage(principal.host.id, message);
       this.emitMessage(principal.host.id, assistantMessage);
@@ -1331,7 +1356,13 @@ export class GatewayStore {
       type: "offline_imported",
       detail: `${input.source}:${input.draftTurns.length}`
     });
-    await promoteConversationMemoriesForSession(targetSession, state.messages.filter((item) => item.sessionId === targetSession.id));
+    await promoteSessionMemoryInsights(
+      state,
+      principal.host.id,
+      targetSession,
+      state.messages.filter((item) => item.sessionId === targetSession.id),
+      "offline_import",
+    );
     await this.writeState(state);
     for (const message of importedMessages) {
       this.emitMessage(principal.host.id, message);
@@ -1586,7 +1617,13 @@ export class GatewayStore {
       detail: input.turnId
     });
     await this.sendSessionNotification(state, principal.host.id, session.id, "run_complete", truncatePreview(assistantMessage.content));
-    await promoteConversationMemoriesForSession(session, state.messages.filter((item) => item.sessionId === session.id));
+    await promoteSessionMemoryInsights(
+      state,
+      principal.host.id,
+      session,
+      state.messages.filter((item) => item.sessionId === session.id),
+      "desktop_session",
+    );
     await this.writeState(state);
     this.emitMessage(principal.host.id, assistantMessage);
     this.emitSession(session);
@@ -3014,17 +3051,93 @@ function deriveConversationMemoriesFromMessages(
   return dedupeConversationMemoriesForSync(results).slice(0, 3);
 }
 
-async function promoteConversationMemoriesForSession(session: ChatSession, messages: ChatMessage[]): Promise<void> {
-  if (!isProgrammingMemoryConfigured()) {
+function mergeMemoryFollowUps(
+  existing: MemoryFollowUpRecord[],
+  incoming: MemoryFollowUpRecord[],
+): MemoryFollowUpRecord[] {
+  const byId = new Map(existing.map((item) => [item.id, item] as const));
+
+  for (const followUp of incoming) {
+    byId.set(followUp.id, {
+      ...byId.get(followUp.id),
+      ...followUp,
+      updatedAt: followUp.updatedAt,
+    });
+  }
+
+  return [...byId.values()]
+    .filter((item) => item.status === "pending")
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, 6);
+}
+
+function buildStateMemoryFollowUpContext(state: GatewayState, hostId: string): string {
+  const sessionIds = new Set(
+    state.sessions
+      .filter((session) => session.hostId === hostId)
+      .map((session) => session.id),
+  );
+
+  const followUps = state.memoryFollowUps
+    .filter((item) => item.status === "pending" && (!item.sourceSessionId || sessionIds.has(item.sourceSessionId)))
+    .slice(0, 4);
+  if (!followUps.length) {
+    return "";
+  }
+
+  return [
+    "Open memory questions:",
+    ...followUps.map((item) => `- ${item.question} (${item.rationale})`),
+  ].join("\n");
+}
+
+async function promoteSessionMemoryInsights(
+  state: GatewayState,
+  hostId: string,
+  session: ChatSession,
+  messages: ChatMessage[],
+  source: "desktop_session" | "voice_runtime" | "offline_import",
+): Promise<void> {
+  const completedConversation = messages.filter(
+    (message) =>
+      (message.role === "user" || message.role === "assistant") &&
+      message.status === "completed" &&
+      message.content.trim(),
+  );
+  if (!completedConversation.length) {
     return;
   }
 
-  const derived = deriveConversationMemoriesFromMessages(session.id, session.title, messages);
-  if (!derived.length) {
-    return;
+  const digest = await loadMemoryDigest(hostId).catch(() => ({
+    configured: isProgrammingMemoryConfigured(),
+    updatedAt: nowIso(),
+    context: "",
+  }));
+  const triage = await triageMemoryWithChatGPT({
+    hostId,
+    sessionId: session.id,
+    sessionTitle: session.title,
+    source,
+    messages: completedConversation,
+    existingContext: digest.context,
+  });
+
+  const derivedConversationMemories = triage.conversationMemories.length
+    ? dedupeConversationMemoriesForSync(triage.conversationMemories)
+    : deriveConversationMemoriesFromMessages(session.id, session.title, messages);
+
+  if (isProgrammingMemoryConfigured()) {
+    if (triage.learningSignals.length) {
+      await upsertLearningSignals(dedupeLearningSignalsForSync(triage.learningSignals));
+    }
+    if (derivedConversationMemories.length) {
+      await upsertConversationMemories(derivedConversationMemories);
+    }
   }
 
-  await upsertConversationMemories(derived);
+  if (triage.followUpQuestions.length) {
+    state.memoryFollowUps = mergeMemoryFollowUps(state.memoryFollowUps, triage.followUpQuestions);
+  }
 }
 
 function buildStateConversationMemoryContext(state: GatewayState, hostId: string): string {
@@ -3538,6 +3651,19 @@ function migrateState(input: Partial<GatewayState>): GatewayState {
       createdAt: record.createdAt ?? now,
       expiresAt: record.expiresAt ?? now,
     })),
+    memoryFollowUps: ((input as Partial<GatewayState>).memoryFollowUps ?? []).map((followUp) => {
+      const record = followUp as Partial<MemoryFollowUpRecord>;
+      return {
+        id: record.id ?? createId("memoryfollowup"),
+        question: record.question ?? "",
+        rationale: record.rationale ?? "",
+        status: record.status ?? "pending",
+        source: record.source ?? "desktop_session",
+        sourceSessionId: record.sourceSessionId ?? null,
+        createdAt: record.createdAt ?? now,
+        updatedAt: record.updatedAt ?? record.createdAt ?? now,
+      } as MemoryFollowUpRecord;
+    }),
     outboundRecipients: (input.outboundRecipients ?? []).map((recipient) => {
       const record = recipient as Partial<OutboundRecipientRecord>;
       return {

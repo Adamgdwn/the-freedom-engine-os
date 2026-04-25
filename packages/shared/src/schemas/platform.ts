@@ -52,6 +52,8 @@ export const voiceRuntimeModeSchema = z.enum(["realtime_primary", "device_fallba
 export const voiceTransportSchema = z.enum(["livekit_webrtc", "device_local"]);
 export const learningSignalKindSchema = z.enum(["preference", "focus", "workflow", "capability"]);
 export const learningSignalStatusSchema = z.enum(["observed", "tracking", "internalized"]);
+export const memoryFollowUpStatusSchema = z.enum(["pending", "answered", "dismissed"]);
+export const memoryTriageSourceSchema = z.enum(["desktop_session", "voice_runtime", "mobile_standalone", "offline_import"]);
 export const assistantVoicePresetSchema = z.enum(assistantVoicePresetIds);
 export const voiceGenderPresentationSchema = z.enum(voiceGenderPresentationIds);
 export const voiceWarmthSchema = z.enum(voiceWarmthIds);
@@ -510,6 +512,26 @@ export const mobileConversationMemorySchema = z.object({
   capturedAt: z.string().datetime().optional()
 });
 
+export const memoryFollowUpSchema = z.object({
+  id: z.string().min(1).max(160),
+  question: z.string().min(1).max(400),
+  rationale: z.string().min(1).max(600),
+  status: memoryFollowUpStatusSchema,
+  source: memoryTriageSourceSchema,
+  sourceSessionId: z.string().min(1).max(160).nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const memoryTriageResultSchema = z.object({
+  configured: z.boolean(),
+  usedModel: z.string().min(1).max(120).nullable(),
+  summary: z.string().min(1).max(800).nullable(),
+  learningSignals: z.array(mobileLearningSignalSchema).max(6),
+  conversationMemories: z.array(mobileConversationMemorySchema).max(6),
+  followUpQuestions: z.array(memoryFollowUpSchema).max(4)
+});
+
 export const syncMobileLearningSignalsRequestSchema = z.object({
   signals: z.array(mobileLearningSignalSchema).max(20)
 });
@@ -643,6 +665,8 @@ export type AssistantVoicePreset = z.infer<typeof assistantVoicePresetSchema>;
 export type VoiceGenderPresentation = z.infer<typeof voiceGenderPresentationSchema>;
 export type VoiceWarmth = z.infer<typeof voiceWarmthSchema>;
 export type VoicePace = z.infer<typeof voicePaceSchema>;
+export type MemoryFollowUpStatus = z.infer<typeof memoryFollowUpStatusSchema>;
+export type MemoryTriageSource = z.infer<typeof memoryTriageSourceSchema>;
 export type HostAuthState = z.infer<typeof hostAuthStateSchema>;
 export type TailscaleStatus = z.infer<typeof tailscaleStatusSchema>;
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;
@@ -685,6 +709,8 @@ export type CreateVoiceRuntimeSessionRequest = z.infer<typeof createVoiceRuntime
 export type VoiceRuntimeSessionResponse = z.infer<typeof voiceRuntimeSessionResponseSchema>;
 export type MobileLearningSignal = z.infer<typeof mobileLearningSignalSchema>;
 export type MobileConversationMemory = z.infer<typeof mobileConversationMemorySchema>;
+export type MemoryFollowUp = z.infer<typeof memoryFollowUpSchema>;
+export type MemoryTriageResult = z.infer<typeof memoryTriageResultSchema>;
 export type SyncMobileLearningSignalsRequest = z.infer<typeof syncMobileLearningSignalsRequestSchema>;
 export type SyncMobileLearningSignalsResponse = z.infer<typeof syncMobileLearningSignalsResponseSchema>;
 export type SyncMobileConversationMemoriesRequest = z.infer<typeof syncMobileConversationMemoriesRequestSchema>;

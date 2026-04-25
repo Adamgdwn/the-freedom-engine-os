@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-04-25 (ChatGPT memory triage loop)
+
+- added a first-class ChatGPT memory-triage layer in the gateway so Freedom can
+  evaluate completed text turns, connected voice turns, and offline-import
+  sessions for what is actually worth durable learning instead of relying only
+  on heuristics
+- taught that triage layer to write governed `learning signals` and
+  `conversation memories` into the existing canonical Freedom memory channels,
+  keeping the base of the pyramid integrated instead of creating a second mobile
+  or gateway-only learning model
+- added a new pending `Open memory questions` lane in gateway state and memory
+  digest output so Freedom can carry forward clarifying questions when evidence
+  is incomplete instead of overcommitting weak memories
+- fixed the connected voice bootstrap so the Python realtime worker now receives
+  runtime memory context as well as recent thread messages, which closes the gap
+  where Freedom could claim code access correctly but still answer the memory
+  question from an under-hydrated prompt
+- fixed derived conversation continuity so fallback memory extraction only uses
+  user-stated context rather than accidentally memorizing Freedom's own earlier
+  mistaken claims
+
 ## 2026-04-25 (canonical conversation memory lane)
 
 - added a first-class conversation-memory lane to Freedom's durable memory
