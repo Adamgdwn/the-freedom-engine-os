@@ -54,10 +54,20 @@ For the consolidated dated list of currently known deficiencies, see
   processing/speaking state transitions, parked-task updates, and resumed review offers
 - validate conversation-learning behavior: durable learning signals appear in-session,
   focus redirection stays concise, and self-programming requests stop at approval
+- validate the new ChatGPT memory-triage loop end to end: confirm Freedom and
+  Freedom Anywhere both use ChatGPT as the learning-judgment layer to decide
+  what is worth remembering, what should stay transient, and what should become
+  a follow-up question instead of a weak memory write
 - verify Supabase-backed memory survives reloads and that local backup/restore captures
   learning signals, parked tasks, and self-programming requests cleanly
+- confirm the governed memory base is strong enough that Freedom Anywhere can
+  build on Freedom's canonical memory rather than drifting into a weaker
+  stand-alone memory posture
 - validate the new approval-gated autonomy loop: open-task review, side-question handling,
   topic-shift parking, and duplicate self-programming suppression behave consistently
+- validate the operator-facing autonomy posture: Freedom should actively ask for
+  missing facts when that would improve durable memory, learn as it goes, and
+  move toward autonomy without bypassing permission boundaries
 - validate the new personality layering: the stable core prompt stays intact, approved
   persona overlays load correctly, and pending persona-adjustment requests do not silently change behavior
 - validate overlay lineage and retirement behavior so approved revisions supersede the prior
@@ -162,8 +172,26 @@ Status legend:
   generation, and workforce-routing decisions
 - Knowledge Governance: add contracts, storage, and review surfaces so Freedom can
   recommend what to document, summarize, archive, discard, and where durable artifacts belong
+- Email use: define the governed email operating model so Freedom can decide when to
+  draft, when to suggest, what to store, and what still requires explicit approval
+  before outbound email use
+- Contact capture and storage: add first-class contact memory contracts, storage, and
+  review flows so Freedom can remember who people are, how they relate to the operator,
+  and what communication context matters without scattering that state across ad hoc notes
+- Email protocols: define durable protocol rules for recipient selection, trusted-contact
+  status, threading and reply behavior, follow-up cadence, tone constraints, and when
+  Freedom should stop for confirmation instead of drafting or sending automatically
 - add transcript-based evals for the Freedom partner loop so parking, learning capture,
   approval-gated self-programming, and email drafting can be regression-tested
+- add evals for email use, contact capture, and communication-protocol behavior so
+  Freedom can draft, store, retrieve, and reuse communication context consistently
+  without overreaching or bypassing approval boundaries
+- extend the ChatGPT memory-triage layer from gateway session completion into
+  the broader Freedom runtime so the same “what is worth learning?” judgment
+  model governs desktop, voice, mobile, and future self-programming review flows
+- add transcript-based evals specifically for memory triage quality so
+  over-learning, under-learning, follow-up-question quality, and autonomy-with-
+  permission behavior can be measured instead of inferred
 - add evals for personality persistence and self-correction so Freedom's core stance stays
   stable while approved persona overlays can refine behavior without drifting governance
 - add evals for “best solution” behavior so Freedom can challenge stale framing and propose
