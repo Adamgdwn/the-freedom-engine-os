@@ -60,7 +60,8 @@ export class RelayCompanionService {
       voiceSessionId: input.voiceSessionId,
       chatSessionId: input.chatSessionId ?? null,
       assistantName: input.assistantName,
-      runtimeContext: typeof input.runtimeContext === "string" ? input.runtimeContext.trim() || null : null
+      runtimeContext: typeof input.runtimeContext === "string" ? input.runtimeContext.trim() || null : null,
+      recentMessages: Array.isArray(input.recentMessages) ? input.recentMessages : undefined
     });
   }
 

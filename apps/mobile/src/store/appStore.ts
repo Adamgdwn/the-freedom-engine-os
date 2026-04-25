@@ -334,7 +334,7 @@ function getDisconnectedAssistantReadyState(): { state: OfflineModelState; detai
     default:
       return {
         state: "missing",
-        detail: "This slim build keeps cached chats and saved ideas, but it does not bundle the old on-device model."
+        detail: "This slim build keeps cached chats, queued conversation memory, and stand-alone continuity, but it does not bundle the old on-device model."
       };
   }
 }
@@ -346,7 +346,7 @@ function getDisconnectedModeNotice(): string {
     case "cloud":
       return "Desktop unreachable. Cached chats and hosted support are still available.";
     default:
-      return "Desktop unreachable. Cached chats and saved ideas are still available.";
+      return "Desktop unreachable. Cached chats and queued conversation memory are still available.";
   }
 }
 
@@ -4462,7 +4462,7 @@ async function enterRepairMode(
     pendingExternalRequest: null,
     notice:
       get().sessions.length > 0
-        ? "Saved desktop settings were kept. Cached chats and saved ideas are still available while you repair the link."
+        ? "Saved desktop settings were kept. Cached chats and queued conversation memory are still available while you repair the link."
         : "Saved desktop settings were kept so you can repair this link quickly.",
     error: message,
     view: get().sessions.length > 0 ? "chat" : "pairing"
