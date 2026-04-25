@@ -1,6 +1,6 @@
 import { AppShell }              from '@/components/app-shell';
 import { Panel }                  from '@/components/panel';
-import { getControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadControlPlaneSnapshot } from '@/lib/control-plane';
 
 const STATE_COLOR: Record<string, string> = {
   observed:     'bg-[color:var(--ink)]/8 text-[color:var(--ink)]',
@@ -17,8 +17,8 @@ const INTERNALIZATION_COLOR: Record<string, string> = {
   'internalized':'bg-emerald-100 text-emerald-800',
 };
 
-export default function LearningRegistryPage() {
-  const snapshot = getControlPlaneSnapshot();
+export default async function LearningRegistryPage() {
+  const snapshot = await loadControlPlaneSnapshot();
 
   return (
     <AppShell title="Learning Registry">

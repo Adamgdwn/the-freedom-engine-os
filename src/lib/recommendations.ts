@@ -1,13 +1,26 @@
 import { evidenceItems, executions, ventures, weightSets, workflows } from '@/lib/seed-data';
 import { rankVentures } from '@/lib/scoring';
-import type { Recommendation } from '@/lib/types';
+import type { EvidenceItem, Execution, Recommendation, Venture, WeightSet, Workflow } from '@/lib/types';
 
-export function buildRecommendations(): Recommendation[] {
-  const [activeWeights] = weightSets;
-  const ranked = rankVentures(ventures, activeWeights);
+type RecommendationInputs = {
+  ventures?: Venture[];
+  workflows?: Workflow[];
+  executions?: Execution[];
+  evidenceItems?: EvidenceItem[];
+  weightSets?: WeightSet[];
+};
+
+export function buildRecommendations(inputs: RecommendationInputs = {}): Recommendation[] {
+  const venturesSource = inputs.ventures ?? ventures;
+  const workflowsSource = inputs.workflows ?? workflows;
+  const executionsSource = inputs.executions ?? executions;
+  const evidenceSource = inputs.evidenceItems ?? evidenceItems;
+  const weightSetsSource = inputs.weightSets ?? weightSets;
+  const [activeWeights] = weightSetsSource;
+  const ranked = rankVentures(venturesSource, activeWeights);
   const topVenture = ranked[0]?.venture;
-  const pdfWorkflow = workflows.find((workflow) => workflow.id === 'workflow-02');
-  const blockedExecution = executions.find((execution) => execution.status === 'blocked');
+  const pdfWorkflow = workflowsSource.find((workflow) => workflow.name.toLowerCase().includes('pdf')) ?? workflowsSource[0];
+  const blockedExecution = executionsSource.find((execution) => execution.status === 'blocked');
 
   return [
     {
@@ -61,7 +74,7 @@ export function buildRecommendations(): Recommendation[] {
         'Anything without linked evidence should be tracked as an experiment with an owner, hypothesis, and checkpoint.',
       rationale:
         'This reduces founder bias and keeps the control plane centered on measurable value instead of momentum theater.',
-      evidenceIds: evidenceItems.slice(0, 2).map((item) => item.id),
+      evidenceIds: evidenceSource.slice(0, 2).map((item) => item.id),
       freedomGain: 'medium',
       confidence: 'medium',
     },

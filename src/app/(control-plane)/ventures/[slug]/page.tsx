@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { AppShell } from '@/components/app-shell';
 import { Panel } from '@/components/panel';
-import { getControlPlaneSnapshot, getVentureBySlug } from '@/lib/control-plane';
+import { loadControlPlaneSnapshot, loadVentureBySlug } from '@/lib/control-plane';
 
 export default async function VentureDetailPage({
   params,
@@ -11,8 +11,8 @@ export default async function VentureDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const venture = getVentureBySlug(slug);
-  const snapshot = getControlPlaneSnapshot();
+  const venture = await loadVentureBySlug(slug);
+  const snapshot = await loadControlPlaneSnapshot();
 
   if (!venture) {
     notFound();

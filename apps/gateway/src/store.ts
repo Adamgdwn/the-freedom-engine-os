@@ -42,6 +42,8 @@ import type {
   RegisterHostResponse,
   RegisterPushTokenRequest,
   RealtimeTicketResponse,
+  SyncMobileConversationMemoriesRequest,
+  SyncMobileConversationMemoriesResponse,
   RenameDeviceRequest,
   RepairState,
   RegisteredHost,
@@ -152,6 +154,18 @@ interface LearningSignalMemoryRow {
   summary: string;
   kind: string;
   status: string;
+  created_at?: string;
+  updated_at: string;
+}
+
+interface ConversationMemoryRow {
+  id?: string;
+  topic: string;
+  summary: string;
+  category: "identity" | "preference" | "project" | "relationship" | "context";
+  confidence: number;
+  status: "observed" | "confirmed" | "active";
+  source_session_id?: string | null;
   created_at?: string;
   updated_at: string;
 }
@@ -383,7 +397,18 @@ export class GatewayStore {
 
   async getMemoryDigest(token: string): Promise<MemoryDigest> {
     const principal = await this.requirePrincipal(token);
-    return loadMemoryDigest(principal.host.id);
+    const digest = await loadMemoryDigest(principal.host.id);
+    const state = await this.readState();
+    const derivedContext = buildStateConversationMemoryContext(state, principal.host.id);
+    if (!derivedContext || digest.context.includes("Relationship memory:") || digest.context.includes("Conversation continuity:")) {
+      return digest;
+    }
+
+    return {
+      configured: digest.configured,
+      updatedAt: digest.updatedAt,
+      context: [derivedContext, digest.context].filter(Boolean).join("\n\n").trim()
+    };
   }
 
   async syncMobileLearningSignals(
@@ -425,6 +450,48 @@ export class GatewayStore {
       synced,
       skipped,
       syncedSignalIds
+    };
+  }
+
+  async syncMobileConversationMemories(
+    token: string,
+    input: SyncMobileConversationMemoriesRequest
+  ): Promise<SyncMobileConversationMemoriesResponse> {
+    const principal = await this.requireDevice(token);
+    const memories = dedupeConversationMemoriesForSync(input.memories ?? []);
+    if (!memories.length) {
+      return { configured: isProgrammingMemoryConfigured(), synced: 0, skipped: 0, syncedMemoryIds: [] };
+    }
+
+    if (!isProgrammingMemoryConfigured()) {
+      return {
+        configured: false,
+        synced: 0,
+        skipped: memories.length,
+        syncedMemoryIds: []
+      };
+    }
+
+    const syncedMemoryIds = await upsertConversationMemories(memories);
+    const synced = syncedMemoryIds.length;
+    const skipped = Math.max(0, memories.length - synced);
+
+    const state = await this.readState();
+    this.addAuditEvent(state, {
+      hostId: principal.host.id,
+      deviceId: principal.device.id,
+      sessionId: null,
+      type: "mobile_learning_synced",
+      originSurface: "mobile_companion",
+      detail: `Synced ${synced} conversation memor${synced === 1 ? "y" : "ies"} from Freedom Anywhere${skipped ? ` (${skipped} skipped)` : ""}.`
+    });
+    await this.writeState(state);
+
+    return {
+      configured: true,
+      synced,
+      skipped,
+      syncedMemoryIds
     };
   }
 
@@ -642,6 +709,9 @@ export class GatewayStore {
     session.lastActivityAt = message.updatedAt;
     session.updatedAt = message.updatedAt;
 
+    if (message.role === "assistant") {
+      await promoteConversationMemoriesForSession(session, state.messages.filter((item) => item.sessionId === session.id));
+    }
     await this.writeState(state, { defer: true });
     this.emitMessage(principal.host.id, message);
     this.emitSession(session);
@@ -1119,6 +1189,7 @@ export class GatewayStore {
         type: "message_posted",
         detail: `${input.inputMode ?? "text"}:${input.responseStyle ?? "natural"}:${interruptType}`
       });
+      await promoteConversationMemoriesForSession(targetSession, state.messages.filter((item) => item.sessionId === targetSession.id));
       await this.writeState(state);
       this.emitMessage(principal.host.id, message);
       this.emitMessage(principal.host.id, assistantMessage);
@@ -1255,6 +1326,7 @@ export class GatewayStore {
       type: "offline_imported",
       detail: `${input.source}:${input.draftTurns.length}`
     });
+    await promoteConversationMemoriesForSession(targetSession, state.messages.filter((item) => item.sessionId === targetSession.id));
     await this.writeState(state);
     for (const message of importedMessages) {
       this.emitMessage(principal.host.id, message);
@@ -1509,6 +1581,7 @@ export class GatewayStore {
       detail: input.turnId
     });
     await this.sendSessionNotification(state, principal.host.id, session.id, "run_complete", truncatePreview(assistantMessage.content));
+    await promoteConversationMemoriesForSession(session, state.messages.filter((item) => item.sessionId === session.id));
     await this.writeState(state);
     this.emitMessage(principal.host.id, assistantMessage);
     this.emitSession(session);
@@ -2666,6 +2739,36 @@ async function fetchLearningSignalRows(limit: number): Promise<LearningSignalMem
   }
 }
 
+async function fetchConversationMemoryRows(limit: number): Promise<ConversationMemoryRow[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_conversation_memories", supabaseUrl);
+  url.searchParams.set("select", "topic,summary,category,confidence,status,updated_at");
+  url.searchParams.set("order", "updated_at.desc");
+  url.searchParams.set("limit", String(limit));
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`
+      }
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const parsed = await response.json();
+    return Array.isArray(parsed) ? (parsed as ConversationMemoryRow[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 async function upsertLearningSignals(signals: SyncMobileLearningSignalsRequest["signals"]): Promise<string[]> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -2703,6 +2806,47 @@ async function upsertLearningSignals(signals: SyncMobileLearningSignalsRequest["
   }
 }
 
+async function upsertConversationMemories(
+  memories: SyncMobileConversationMemoriesRequest["memories"]
+): Promise<string[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey || !memories.length) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_conversation_memories", supabaseUrl);
+  url.searchParams.set("on_conflict", "id");
+
+  const body = memories.map((memory) => ({
+    id: memory.id,
+    topic: memory.topic.trim(),
+    summary: memory.summary.trim(),
+    category: memory.category,
+    confidence: memory.confidence,
+    status: memory.status,
+    source_session_id: memory.sourceSessionId ?? null,
+    created_at: memory.createdAt,
+    updated_at: memory.updatedAt
+  }));
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+        "content-type": "application/json",
+        prefer: "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify(body)
+    });
+    return response.ok ? body.map((memory) => memory.id) : [];
+  } catch {
+    return [];
+  }
+}
+
 function dedupeLearningSignalsForSync(signals: SyncMobileLearningSignalsRequest["signals"]): SyncMobileLearningSignalsRequest["signals"] {
   const seen = new Set<string>();
   const deduped: SyncMobileLearningSignalsRequest["signals"] = [];
@@ -2719,6 +2863,29 @@ function dedupeLearningSignalsForSync(signals: SyncMobileLearningSignalsRequest[
     }
     seen.add(key);
     deduped.push(signal);
+  }
+
+  return deduped;
+}
+
+function dedupeConversationMemoriesForSync(
+  memories: SyncMobileConversationMemoriesRequest["memories"]
+): SyncMobileConversationMemoriesRequest["memories"] {
+  const seen = new Set<string>();
+  const deduped: SyncMobileConversationMemoriesRequest["memories"] = [];
+
+  for (const memory of memories) {
+    const key = [
+      memory.id.trim().toLowerCase(),
+      memory.topic.trim().toLowerCase(),
+      memory.category,
+      memory.summary.trim().toLowerCase()
+    ].join("::");
+    if (!memory.topic.trim() || !memory.summary.trim() || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(memory);
   }
 
   return deduped;
@@ -2754,10 +2921,127 @@ async function fetchPersonaOverlayRows(limit: number): Promise<PersonaOverlayMem
   }
 }
 
+function deriveConversationMemoriesFromMessages(
+  sessionId: string,
+  sessionTitle: string,
+  messages: ChatMessage[]
+): SyncMobileConversationMemoriesRequest["memories"] {
+  const userMessages = messages
+    .filter((message) => message.role === "user" && message.status === "completed" && message.content.trim())
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .slice(-8);
+  const assistantMessages = messages
+    .filter((message) => message.role === "assistant" && message.status === "completed" && message.content.trim())
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .slice(-4);
+  const results: SyncMobileConversationMemoriesRequest["memories"] = [];
+
+  for (const message of userMessages) {
+    const normalized = normalizeMessageText(message.content);
+    if (!normalized) {
+      continue;
+    }
+
+    const pushMemory = (
+      topic: string,
+      category: SyncMobileConversationMemoriesRequest["memories"][number]["category"],
+      confidence: number
+    ) => {
+      results.push({
+        id: `conversation-${sessionId}-${message.id}-${category}`,
+        topic,
+        summary: normalized,
+        category,
+        confidence,
+        status: "observed",
+        sourceSessionId: sessionId,
+        createdAt: message.createdAt,
+        updatedAt: message.updatedAt,
+        capturedAt: message.updatedAt
+      });
+    };
+
+    if (/\bmy name is\b|\bi am\b|\bi'm\b/i.test(normalized)) {
+      pushMemory("User identity", "identity", 0.88);
+      continue;
+    }
+    if (/\b(i like|i love|i prefer|my favorite|i usually prefer)\b/i.test(normalized)) {
+      pushMemory("User preference", "preference", 0.8);
+      continue;
+    }
+    if (/\b(i am working on|i'm working on|we are building|we're building|my project|i need help with|i want to build)\b/i.test(normalized)) {
+      pushMemory("Current project", "project", 0.78);
+      continue;
+    }
+    if (/\bremember\b|this matters to me|keep in mind\b/i.test(normalized)) {
+      pushMemory("Relationship context", "relationship", 0.72);
+    }
+  }
+
+  if (!results.length) {
+    const latestUser = userMessages.at(-1);
+    const latestAssistant = assistantMessages.at(-1);
+    const summary = [latestUser?.content?.trim(), latestAssistant?.content?.trim()].filter(Boolean).join(" ");
+    if (summary) {
+      results.push({
+        id: `conversation-${sessionId}-context`,
+        topic: sessionTitle.trim() || "Recent conversation",
+        summary: truncatePreview(summary, 280),
+        category: "context",
+        confidence: 0.62,
+        status: "observed",
+        sourceSessionId: sessionId,
+        createdAt: latestUser?.createdAt ?? latestAssistant?.createdAt ?? nowIso(),
+        updatedAt: latestAssistant?.updatedAt ?? latestUser?.updatedAt ?? nowIso(),
+        capturedAt: latestAssistant?.updatedAt ?? latestUser?.updatedAt ?? nowIso()
+      });
+    }
+  }
+
+  return dedupeConversationMemoriesForSync(results).slice(0, 3);
+}
+
+async function promoteConversationMemoriesForSession(session: ChatSession, messages: ChatMessage[]): Promise<void> {
+  if (!isProgrammingMemoryConfigured()) {
+    return;
+  }
+
+  const derived = deriveConversationMemoriesFromMessages(session.id, session.title, messages);
+  if (!derived.length) {
+    return;
+  }
+
+  await upsertConversationMemories(derived);
+}
+
+function buildStateConversationMemoryContext(state: GatewayState, hostId: string): string {
+  const sessions = state.sessions
+    .filter((session) => session.hostId === hostId)
+    .sort((left, right) => (right.lastActivityAt ?? right.updatedAt).localeCompare(left.lastActivityAt ?? left.updatedAt))
+    .slice(0, 4);
+  const memories = sessions.flatMap((session) =>
+    deriveConversationMemoriesFromMessages(
+      session.id,
+      session.title,
+      state.messages.filter((message) => message.sessionId === session.id)
+    )
+  ).slice(0, 6);
+
+  if (!memories.length) {
+    return "";
+  }
+
+  return [
+    "Conversation continuity:",
+    ...memories.map((memory) => `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`)
+  ].join("\n");
+}
+
 async function loadMemoryDigest(hostId: string): Promise<MemoryDigest> {
-  const [tasks, learningSignals, buildLane, personaOverlays] = await Promise.all([
+  const [tasks, learningSignals, conversationMemories, buildLane, personaOverlays] = await Promise.all([
     fetchTaskMemoryRows(6),
     fetchLearningSignalRows(6),
+    fetchConversationMemoryRows(8),
     loadConversationBuildLaneSummary(hostId),
     fetchPersonaOverlayRows(6)
   ]);
@@ -2776,6 +3060,12 @@ async function loadMemoryDigest(hostId: string): Promise<MemoryDigest> {
       ? [
           "Recent durable memory:",
           ...learningSignals.map((signal) => `- ${signal.topic}: ${signal.summary} (${signal.kind}, ${signal.status})`)
+        ].join("\n")
+      : "",
+    conversationMemories.length
+      ? [
+          "Relationship memory:",
+          ...conversationMemories.map((memory) => `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`)
         ].join("\n")
       : "",
     buildLane.items.length
@@ -2798,6 +3088,7 @@ async function loadMemoryDigest(hostId: string): Promise<MemoryDigest> {
   const updatedAt = [
     ...tasks.map((row) => row.updated_at),
     ...learningSignals.map((row) => row.updated_at),
+    ...conversationMemories.map((row) => row.updated_at),
     ...buildLane.items.map((item) => item.updatedAt),
     ...personaOverlays.map((row) => row.updated_at)
   ]

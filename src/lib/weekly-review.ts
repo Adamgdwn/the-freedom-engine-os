@@ -1,10 +1,16 @@
 import { buildRecommendations } from '@/lib/recommendations';
 import { executions } from '@/lib/seed-data';
-import type { WeeklyReview } from '@/lib/types';
+import type { Execution, Recommendation, WeeklyReview } from '@/lib/types';
 
-export function buildWeeklyReview(): WeeklyReview {
-  const recommendations = buildRecommendations().slice(0, 3).map((item) => item.title);
-  const blockedCount = executions.filter((execution) => execution.status !== 'completed').length;
+type WeeklyReviewInputs = {
+  executions?: Execution[];
+  recommendations?: Recommendation[];
+};
+
+export function buildWeeklyReview(inputs: WeeklyReviewInputs = {}): WeeklyReview {
+  const executionsSource = inputs.executions ?? executions;
+  const recommendations = (inputs.recommendations ?? buildRecommendations()).slice(0, 3).map((item) => item.title);
+  const blockedCount = executionsSource.filter((execution) => execution.status !== 'completed').length;
 
   return {
     createdValue: [

@@ -1,9 +1,20 @@
 import { AppShell } from '@/components/app-shell';
 import { Panel } from '@/components/panel';
-import { getControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadControlPlaneRuntimeSummary } from '@freedom/shared';
 
-export default function GovernancePage() {
-  const snapshot = getControlPlaneSnapshot();
+export default async function GovernancePage() {
+  const snapshot = await loadControlPlaneSnapshot();
+  const runtimeSummary = await loadControlPlaneRuntimeSummary();
+  const liveApprovals = runtimeSummary.source === 'supabase'
+    ? runtimeSummary.pendingApprovals.map((approval) => ({
+        id: approval.id,
+        subject: approval.subject,
+        owner: approval.ownerName,
+        threshold: approval.thresholdRule,
+        status: approval.status,
+      }))
+    : snapshot.approvals;
 
   return (
     <AppShell title="Governance Console">
@@ -33,7 +44,7 @@ export default function GovernancePage() {
         <div className="space-y-6">
           <Panel title="Approval queue" eyebrow="Decision rights">
             <div className="space-y-3">
-              {snapshot.approvals.map((approval) => (
+              {liveApprovals.length ? liveApprovals.map((approval) => (
                 <div
                   key={approval.id}
                   className="rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4"
@@ -46,7 +57,11 @@ export default function GovernancePage() {
                   </p>
                   <p className="mt-3 text-sm text-[color:var(--ink)]">Status: {approval.status}</p>
                 </div>
-              ))}
+              )) : (
+                <div className="rounded-[1.5rem] border border-[color:var(--line)] bg-[color:var(--surface-strong)] p-4 text-sm text-[color:var(--ink-soft)]">
+                  No pending approvals are in the live queue right now.
+                </div>
+              )}
             </div>
           </Panel>
 

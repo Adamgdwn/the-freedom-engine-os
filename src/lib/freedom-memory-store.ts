@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { FreedomConversationMemory } from '@/lib/freedom-conversation-memory';
 import type { FreedomPersonaOverlay } from '@/lib/freedom-persona';
 import type { FreedomMemorySnapshot, FreedomMemoryUpdateRequest } from '@/lib/freedom-memory';
 import type { SelfProgrammingRequest } from '@/lib/voice-learning';
@@ -27,6 +28,18 @@ type LearningSignalRow = {
   summary: string;
   kind: VoiceLearningSignal['kind'];
   status: VoiceLearningSignal['status'];
+  created_at: string;
+  updated_at: string;
+};
+
+type ConversationMemoryRow = {
+  id: string;
+  topic: string;
+  summary: string;
+  category: FreedomConversationMemory['category'];
+  confidence: number | null;
+  status: FreedomConversationMemory['status'];
+  source_session_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -84,6 +97,20 @@ function mapLearningSignal(row: LearningSignalRow): VoiceLearningSignal {
     summary:   row.summary,
     kind:      row.kind,
     status:    row.status,
+    createdAt: toEpoch(row.created_at),
+    updatedAt: toEpoch(row.updated_at),
+  };
+}
+
+function mapConversationMemory(row: ConversationMemoryRow): FreedomConversationMemory {
+  return {
+    id: row.id,
+    topic: row.topic,
+    summary: row.summary,
+    category: row.category,
+    confidence: typeof row.confidence === 'number' ? row.confidence : 0.5,
+    status: row.status,
+    sourceSessionId: row.source_session_id,
     createdAt: toEpoch(row.created_at),
     updatedAt: toEpoch(row.updated_at),
   };
@@ -158,6 +185,7 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
     return {
       tasks:               [],
       learningSignals:     [],
+      conversationMemories: [],
       programmingRequests: [],
       personaOverlays:     [],
       configured:          false,
@@ -169,6 +197,7 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
   const [
     tasksResult,
     learningSignalsResult,
+    conversationMemoriesResult,
     programmingRequestsResult,
     personaOverlaysResult,
   ] = await Promise.all([
@@ -180,6 +209,11 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
     client
       .from('freedom_learning_signals')
       .select('id, topic, summary, kind, status, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(25),
+    client
+      .from('freedom_conversation_memories')
+      .select('id, topic, summary, category, confidence, status, source_session_id, created_at, updated_at')
       .order('updated_at', { ascending: false })
       .limit(25),
     client
@@ -200,6 +234,9 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
   if (learningSignalsResult.error && !isMissingTableError(learningSignalsResult.error)) {
     throw learningSignalsResult.error;
   }
+  if (conversationMemoriesResult.error && !isMissingTableError(conversationMemoriesResult.error)) {
+    throw conversationMemoriesResult.error;
+  }
   if (programmingRequestsResult.error && !isMissingTableError(programmingRequestsResult.error)) {
     throw programmingRequestsResult.error;
   }
@@ -210,6 +247,7 @@ export async function loadFreedomMemorySnapshot(): Promise<FreedomMemorySnapshot
   return {
     tasks:               dataOrEmpty(tasksResult).map(mapTask),
     learningSignals:     dataOrEmpty(learningSignalsResult).map(mapLearningSignal),
+    conversationMemories: dataOrEmpty(conversationMemoriesResult).map(mapConversationMemory),
     programmingRequests: dataOrEmpty(programmingRequestsResult).map(mapProgrammingRequest),
     personaOverlays:     dataOrEmpty(personaOverlaysResult).map(mapPersonaOverlay),
     configured:          true,
@@ -294,6 +332,46 @@ export async function persistFreedomMemoryUpdate(request: FreedomMemoryUpdateReq
         updated_at: new Date().toISOString(),
       })
       .eq('id', request.update.signalId);
+    if (error) throw error;
+    return { configured: true };
+  }
+
+  if (request.channel === 'conversation') {
+    if (request.update.type === 'recorded') {
+      const { error } = await client.from('freedom_conversation_memories').upsert({
+        id: request.update.memory.id,
+        topic: request.update.memory.topic,
+        summary: request.update.memory.summary,
+        category: request.update.memory.category,
+        confidence: request.update.memory.confidence,
+        status: request.update.memory.status,
+        source_session_id: request.update.memory.sourceSessionId,
+        created_at: toIso(request.update.memory.createdAt),
+        updated_at: toIso(request.update.memory.updatedAt),
+      });
+      if (error) throw error;
+      return { configured: true };
+    }
+
+    if (request.update.type === 'status') {
+      const { error } = await client
+        .from('freedom_conversation_memories')
+        .update({
+          status: request.update.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', request.update.memoryId);
+      if (error) throw error;
+      return { configured: true };
+    }
+
+    const { error } = await client
+      .from('freedom_conversation_memories')
+      .update({
+        summary: request.update.summary,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', request.update.memoryId);
     if (error) throw error;
     return { configured: true };
   }

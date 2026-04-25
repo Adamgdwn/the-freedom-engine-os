@@ -27,8 +27,16 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Shared operator workbench shell with:
   a compact top bar, desktop activity rail, launcher-style Portfolio Home tabs,
   an inspectable desktop voice console, and a stronger mobile bottom voice action.
-- Seeded but navigable venture, workflow, governance, approval, execution, and
-  recommendation views.
+- A hybrid control-plane runtime path now exists:
+  Portfolio Home, Governance, Workflow Lab, Weekly Review, Agent Control,
+  Evidence Room, Learning Registry, Model Router, and Venture Detail can all
+  load a Supabase-backed overlay for ventures, workflows, workflow steps,
+  experiments, approvals, and executions when live data is available, while
+  still falling back to the seeded control-plane model when it is not.
+- A shared Supabase-backed runtime summary path now exists for top venture,
+  pending approvals, and weekly execution counts. The desktop gateway exposes
+  that summary to the voice runtime so Freedom voice and the control plane can
+  inspect the same live state slice.
 
 ### Voice Runtime
 
@@ -81,13 +89,22 @@ For the consolidated dated list of known gaps and unfinished areas, see
 
 - Durable storage of parked voice tasks.
 - Durable storage of learning signals from conversation.
+- Durable storage of conversation-memory entries that capture reusable
+  relationship, preference, project, and context carry-forward across sessions.
 - Durable storage of approval-gated self-programming requests.
 - Durable storage of persona overlays and persona-adjustment requests.
 - Supabase-backed server-side memory load and persist path.
 - Paired-mobile write-back path for stand-alone `learning` signals into the same
   canonical Freedom memory store used by connected runtime surfaces.
+- Paired-mobile write-back path for stand-alone `conversation memory` into that
+  same canonical Freedom memory store, so offline work can promote continuity
+  instead of only queueing generic learning signals.
+- Gateway-side promotion of completed text, voice, and offline-import sessions
+  into canonical conversation memory, plus a gateway-state continuity fallback
+  when Supabase memory is sparse or still being configured.
 - Runtime read access for Freedom to inspect open tasks, recent learning signals,
-  pending self-programming requests, approved persona overlays, and trusted email recipients during voice sessions.
+  conversation-memory context, pending self-programming requests, approved
+  persona overlays, and trusted email recipients during voice sessions.
 - Runtime read access for the live voice agent to inspect governed repo control files
   inside approved roots, including `project-control.yaml`,
   `docs/tool-permission-matrix.md`, `AI_BOOTSTRAP.md`, and registered

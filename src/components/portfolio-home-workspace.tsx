@@ -8,6 +8,7 @@ import clsx from 'clsx';
 import { Panel } from '@/components/panel';
 import { ScoreWorkbench } from '@/components/score-workbench';
 import type { ControlPlaneSnapshot } from '@/lib/control-plane';
+import type { ControlPlaneRuntimeSummary } from '@freedom/shared';
 
 type WorkspaceTab = 'overview' | 'ventures' | 'connect' | 'systems' | 'recommendations';
 
@@ -19,9 +20,20 @@ const WORKSPACE_TABS = [
   { id: 'recommendations' as const, label: 'Recommendations', icon: Sparkles },
 ];
 
-export function PortfolioHomeWorkspace({ snapshot }: { snapshot: ControlPlaneSnapshot }) {
+export function PortfolioHomeWorkspace({
+  snapshot,
+  runtimeSummary,
+}: {
+  snapshot: ControlPlaneSnapshot;
+  runtimeSummary: ControlPlaneRuntimeSummary;
+}) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('overview');
   const topRecommendation = snapshot.recommendations[0];
+  const topLiveVenture = runtimeSummary.source === 'supabase' ? runtimeSummary.topVenture : null;
+  const ventureCount = runtimeSummary.weeklyMetrics?.activeVentures ?? snapshot.ventures.length;
+  const pendingApprovalCount =
+    runtimeSummary.weeklyMetrics?.pendingApprovals ??
+    snapshot.approvals.filter((item) => item.status === 'pending').length;
 
   return (
     <div className="space-y-4">
@@ -41,6 +53,14 @@ export function PortfolioHomeWorkspace({ snapshot }: { snapshot: ControlPlaneSna
                 {topRecommendation?.action ??
                   'Refresh the evidence base, then decide where founder and agent effort should go next.'}
               </p>
+              {topLiveVenture ? (
+                <p className="mt-3 text-sm leading-6 text-white/74">
+                  Live top venture: {topLiveVenture.name} • {topLiveVenture.currentStatus}
+                  {typeof topLiveVenture.weightedScore === 'number'
+                    ? ` • score ${topLiveVenture.weightedScore.toFixed(1)}`
+                    : ''}
+                </p>
+              ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 <Link
                   href="/workflow-lab"
@@ -59,9 +79,9 @@ export function PortfolioHomeWorkspace({ snapshot }: { snapshot: ControlPlaneSna
 
             <div className="grid gap-3 sm:grid-cols-2">
               {[
-                ['Ventures', snapshot.ventures.length.toString()],
+                ['Ventures', ventureCount.toString()],
                 ['Agents', snapshot.agents.length.toString()],
-                ['Pending approvals', snapshot.approvals.filter((item) => item.status === 'pending').length.toString()],
+                ['Pending approvals', pendingApprovalCount.toString()],
                 ['Live integrations', snapshot.integrations.filter((item) => item.status === 'live').length.toString()],
                 ['Freedom sessions', snapshot.connectSessions.length.toString()],
                 ['Parallel skills', snapshot.skillDefinitions.filter((item) => item.parallelMode !== 'serial-only').length.toString()],

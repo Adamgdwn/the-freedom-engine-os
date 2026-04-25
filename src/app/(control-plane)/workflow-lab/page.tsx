@@ -1,9 +1,9 @@
 import { AppShell } from '@/components/app-shell';
 import { Panel } from '@/components/panel';
-import { getControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadControlPlaneSnapshot } from '@/lib/control-plane';
 
-export default function WorkflowLabPage() {
-  const snapshot = getControlPlaneSnapshot();
+export default async function WorkflowLabPage() {
+  const snapshot = await loadControlPlaneSnapshot();
   const leadWorkflow = snapshot.workflows[0];
   const leadSteps = snapshot.workflowSteps.filter((step) => step.workflowId === leadWorkflow?.id);
 

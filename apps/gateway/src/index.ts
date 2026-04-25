@@ -3,6 +3,7 @@ import { createReadStream } from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
 import {
+  loadControlPlaneRuntimeSummary,
   createOutboundRecipientRequestSchema,
   createSessionRequestSchema,
   createVoiceRuntimeSessionRequestSchema,
@@ -18,9 +19,10 @@ import {
   registerPushTokenRequestSchema,
   registerHostRequestSchema,
   renameDeviceRequestSchema,
-  sendExternalMessageRequestSchema,
-  sendTestNotificationRequestSchema,
-  syncMobileLearningSignalsRequestSchema,
+    sendExternalMessageRequestSchema,
+    sendTestNotificationRequestSchema,
+    syncMobileConversationMemoriesRequestSchema,
+    syncMobileLearningSignalsRequestSchema,
   updateHostVoiceProfileRequestSchema,
   updateNotificationPrefsRequestSchema,
   updateSessionRequestSchema
@@ -224,6 +226,12 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (method === "POST" && url.pathname === "/host/conversation-memories/sync") {
+      const parsed = syncMobileConversationMemoriesRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.syncMobileConversationMemories(readBearer(req), parsed));
+      return;
+    }
+
     if (method === "GET" && url.pathname === "/api/desktop-shell/state") {
       assertLoopbackRequest(req);
       sendJson(res, 200, await store.getDesktopShellState());
@@ -259,6 +267,12 @@ const server = createServer(async (req, res) => {
         return;
       }
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    if (requestMethod === "GET" && url.pathname === "/control-plane/runtime-summary") {
+      assertLoopbackRequest(req);
+      sendJson(res, 200, await loadControlPlaneRuntimeSummary());
       return;
     }
 

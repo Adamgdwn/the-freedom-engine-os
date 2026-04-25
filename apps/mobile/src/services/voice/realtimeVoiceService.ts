@@ -148,6 +148,16 @@ export class RealtimeVoiceService {
         this.handleDataMessage(payloadBuffer);
       });
 
+      room.on(RoomEvent.LocalAudioSilenceDetected, () => {
+        if (this.room !== room) {
+          return;
+        }
+        callbacks.onError(
+          "Freedom joined the voice room, but this phone's microphone is publishing silence. Check Bluetooth or headset routing, then try again."
+        );
+        void this.stopSession();
+      });
+
       await room.prepareConnection(payload.wsUrl, payload.token).catch(() => undefined);
       await room.connect(payload.wsUrl, payload.token);
       await room.localParticipant.setMicrophoneEnabled(true, MIC_CAPTURE_OPTIONS);

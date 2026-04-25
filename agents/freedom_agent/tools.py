@@ -330,6 +330,11 @@ def _loopback_gateway_request(
     return parsed if isinstance(parsed, dict) else None
 
 
+def _control_plane_runtime_summary() -> dict[str, object] | None:
+    response = _loopback_gateway_request("GET", "/control-plane/runtime-summary")
+    return response if isinstance(response, dict) else None
+
+
 def _approved_roots() -> list[Path]:
     roots_env = os.getenv("DESKTOP_APPROVED_ROOTS", "").strip()
     root_values = [item.strip() for item in roots_env.split(",") if item.strip()]
@@ -1251,7 +1256,16 @@ async def review_dispatcher_tool_manifest(tool_id: str) -> str:
 @function_tool
 async def top_venture_status() -> str:
     """Return the status of the top-priority active venture."""
-    # TODO: replace with Supabase query against ventures table
+    summary = _control_plane_runtime_summary() or {}
+    top_venture = summary.get("topVenture")
+    if isinstance(top_venture, dict):
+        name = str(top_venture.get("name") or "Unknown venture")
+        status = str(top_venture.get("currentStatus") or "status unavailable")
+        weighted_score = top_venture.get("weightedScore")
+        if isinstance(weighted_score, (int, float)):
+            return f"{name} — {status}. Latest weighted score: {weighted_score:.1f}."
+        return f"{name} — {status}."
+
     return (
         "AI Consulting Build — active. Score: 87. "
         "Blocking item: proposal template not finalized."
@@ -1261,7 +1275,21 @@ async def top_venture_status() -> str:
 @function_tool
 async def pending_approvals() -> str:
     """Return any approvals that are currently pending."""
-    # TODO: replace with Supabase query
+    summary = _control_plane_runtime_summary() or {}
+    approvals = summary.get("pendingApprovals")
+    if isinstance(approvals, list):
+        parsed_rows = [item for item in approvals if isinstance(item, dict)]
+        if not parsed_rows:
+            return "No pending approvals are in the live queue right now."
+
+        lines = []
+        for item in parsed_rows[:5]:
+            subject = str(item.get("subject") or "Untitled approval")
+            owner = str(item.get("ownerName") or "Unassigned")
+            threshold = str(item.get("thresholdRule") or "No threshold rule recorded")
+            lines.append(f"- {subject} — owner: {owner}; threshold: {threshold}")
+        return "Pending approvals:\n" + "\n".join(lines)
+
     return (
         "1 pending approval: budget increase for PDF Flow infrastructure. "
         "Awaiting: Adam."
@@ -1271,7 +1299,21 @@ async def pending_approvals() -> str:
 @function_tool
 async def weekly_metrics() -> str:
     """Return this week's key metrics."""
-    # TODO: replace with Supabase query
+    summary = _control_plane_runtime_summary() or {}
+    weekly_metrics_summary = summary.get("weeklyMetrics")
+    if isinstance(weekly_metrics_summary, dict):
+        week_label = str(weekly_metrics_summary.get("weekLabel") or "This week")
+        completed_executions = int(weekly_metrics_summary.get("completedExecutions") or 0)
+        active_ventures = int(weekly_metrics_summary.get("activeVentures") or 0)
+        governance_overrides = int(weekly_metrics_summary.get("governanceOverrides") or 0)
+        pending_approvals_count = int(weekly_metrics_summary.get("pendingApprovals") or 0)
+        return (
+            f"{week_label}: {completed_executions} completed executions, "
+            f"{active_ventures} ventures in the live registry, "
+            f"{pending_approvals_count} pending approvals, "
+            f"{governance_overrides} governance overrides."
+        )
+
     return (
         "Week of Apr 14: 3 sessions completed, "
         "2 ventures active, 0 governance overrides."

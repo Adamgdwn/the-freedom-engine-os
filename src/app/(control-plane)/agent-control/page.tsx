@@ -1,6 +1,6 @@
 import { AppShell } from '@/components/app-shell';
 import { Panel } from '@/components/panel';
-import { getControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadControlPlaneSnapshot } from '@/lib/control-plane';
 import { loadFreedomMemorySnapshot } from '@/lib/freedom-memory-store';
 import type { AgentBuildRequest } from '@/lib/types';
 
@@ -55,7 +55,7 @@ function mapBuildLaneStatus(
 }
 
 export default async function AgentControlPage() {
-  const snapshot = getControlPlaneSnapshot();
+  const snapshot = await loadControlPlaneSnapshot();
   const liveBuildRequests = await mapLiveBuildRequests();
   const visibleBuildRequests = liveBuildRequests.length ? liveBuildRequests : snapshot.agentBuildRequests;
   const leadAgent = snapshot.agents[0];

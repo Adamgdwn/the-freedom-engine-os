@@ -1,9 +1,9 @@
 import { AppShell } from '@/components/app-shell';
 import { Panel } from '@/components/panel';
-import { getControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadControlPlaneSnapshot } from '@/lib/control-plane';
 
-export default function EvidenceRoomPage() {
-  const snapshot = getControlPlaneSnapshot();
+export default async function EvidenceRoomPage() {
+  const snapshot = await loadControlPlaneSnapshot();
 
   return (
     <AppShell title="Evidence Room">

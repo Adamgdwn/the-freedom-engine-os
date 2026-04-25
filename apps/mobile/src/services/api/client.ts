@@ -21,6 +21,8 @@ import type {
   SendExternalMessageResponse,
   SyncMobileLearningSignalsRequest,
   SyncMobileLearningSignalsResponse,
+  SyncMobileConversationMemoriesRequest,
+  SyncMobileConversationMemoriesResponse,
   VoiceRuntimeSessionResponse,
   UpdateNotificationPrefsRequest,
   UpdateHostVoiceProfileRequest,
@@ -117,6 +119,14 @@ export class ApiClient {
     input: SyncMobileLearningSignalsRequest
   ): Promise<SyncMobileLearningSignalsResponse> {
     return this.request("POST", `${baseUrl}/host/learning-signals/sync`, token, input);
+  }
+
+  syncMobileConversationMemories(
+    token: string,
+    baseUrl: string,
+    input: SyncMobileConversationMemoriesRequest
+  ): Promise<SyncMobileConversationMemoriesResponse> {
+    return this.request("POST", `${baseUrl}/host/conversation-memories/sync`, token, input);
   }
 
   renameDevice(token: string, baseUrl: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice> {

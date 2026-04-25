@@ -491,6 +491,25 @@ export const mobileLearningSignalSchema = z.object({
   capturedAt: z.string().datetime().optional()
 });
 
+export const mobileConversationMemorySchema = z.object({
+  id: z.string().min(1).max(160),
+  topic: z.string().min(1).max(200),
+  summary: z.string().min(1).max(1000),
+  category: z.union([
+    z.literal("identity"),
+    z.literal("preference"),
+    z.literal("project"),
+    z.literal("relationship"),
+    z.literal("context")
+  ]),
+  confidence: z.number().min(0).max(1),
+  status: z.union([z.literal("observed"), z.literal("confirmed"), z.literal("active")]),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  sourceSessionId: z.string().min(1).max(160).nullable().optional(),
+  capturedAt: z.string().datetime().optional()
+});
+
 export const syncMobileLearningSignalsRequestSchema = z.object({
   signals: z.array(mobileLearningSignalSchema).max(20)
 });
@@ -500,6 +519,17 @@ export const syncMobileLearningSignalsResponseSchema = z.object({
   synced: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
   syncedSignalIds: z.array(z.string().min(1).max(160)).max(20)
+});
+
+export const syncMobileConversationMemoriesRequestSchema = z.object({
+  memories: z.array(mobileConversationMemorySchema).max(20)
+});
+
+export const syncMobileConversationMemoriesResponseSchema = z.object({
+  configured: z.boolean(),
+  synced: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  syncedMemoryIds: z.array(z.string().min(1).max(160)).max(20)
 });
 
 export const voiceRuntimeSessionResponseSchema = z.object({
@@ -654,8 +684,11 @@ export type RealtimeTicketResponse = z.infer<typeof realtimeTicketResponseSchema
 export type CreateVoiceRuntimeSessionRequest = z.infer<typeof createVoiceRuntimeSessionRequestSchema>;
 export type VoiceRuntimeSessionResponse = z.infer<typeof voiceRuntimeSessionResponseSchema>;
 export type MobileLearningSignal = z.infer<typeof mobileLearningSignalSchema>;
+export type MobileConversationMemory = z.infer<typeof mobileConversationMemorySchema>;
 export type SyncMobileLearningSignalsRequest = z.infer<typeof syncMobileLearningSignalsRequestSchema>;
 export type SyncMobileLearningSignalsResponse = z.infer<typeof syncMobileLearningSignalsResponseSchema>;
+export type SyncMobileConversationMemoriesRequest = z.infer<typeof syncMobileConversationMemoriesRequestSchema>;
+export type SyncMobileConversationMemoriesResponse = z.infer<typeof syncMobileConversationMemoriesResponseSchema>;
 export type UpdateHostVoiceProfileRequest = z.infer<typeof updateHostVoiceProfileRequestSchema>;
 export type HostVoiceProfileResponse = z.infer<typeof hostVoiceProfileResponseSchema>;
 export type HostBuildLaneResponse = z.infer<typeof hostBuildLaneResponseSchema>;

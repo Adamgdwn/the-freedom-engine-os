@@ -1,6 +1,6 @@
 import { AppShell } from '@/components/app-shell';
 import { Panel } from '@/components/panel';
-import { getControlPlaneSnapshot } from '@/lib/control-plane';
+import { loadControlPlaneSnapshot } from '@/lib/control-plane';
 
 const TIER_COLOR: Record<string, string> = {
   'local-default': 'bg-emerald-100 text-emerald-800',
@@ -21,8 +21,8 @@ const STATUS_COLOR: Record<string, string> = {
   denied: 'bg-[color:var(--danger)]/12 text-[color:var(--danger)]',
 };
 
-export default function ModelRouterPage() {
-  const snapshot = getControlPlaneSnapshot();
+export default async function ModelRouterPage() {
+  const snapshot = await loadControlPlaneSnapshot();
 
   const pending = snapshot.escalationRequests.filter((request) => request.status === 'pending');
   const resolved = snapshot.escalationRequests.filter((request) => request.status !== 'pending');

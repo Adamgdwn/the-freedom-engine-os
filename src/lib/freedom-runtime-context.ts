@@ -66,6 +66,20 @@ function formatLearningSection(snapshot: FreedomMemorySnapshot): string {
   ].join('\n');
 }
 
+function formatConversationMemorySection(snapshot: FreedomMemorySnapshot): string {
+  const memories = snapshot.conversationMemories.slice(0, 8);
+  if (!memories.length) {
+    return '';
+  }
+
+  return [
+    'Relationship memory:',
+    ...memories.map((memory) => (
+      `- ${memory.topic}: ${memory.summary} (${memory.category}, ${memory.status})`
+    )),
+  ].join('\n');
+}
+
 function formatPendingProgrammingSection(snapshot: FreedomMemorySnapshot): string {
   const pendingRequests = snapshot.programmingRequests
     .filter((request) => request.status === 'pending' && !request.buildLane)
@@ -123,6 +137,7 @@ export async function loadFreedomRuntimeContext(
   const snapshot = await loadFreedomMemorySnapshot();
   const sections = [
     formatRecentConversationSection(options.messages ?? [], options.messageLimit ?? 6),
+    formatConversationMemorySection(snapshot),
     formatOpenTaskSection(snapshot),
     formatLearningSection(snapshot),
     formatPendingProgrammingSection(snapshot),

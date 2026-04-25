@@ -6,6 +6,7 @@ import {
   FREEDOM_PHONE_PRODUCT_NAME,
   getAssistantVoiceCatalogEntry,
   type MobileConnectionState,
+  type MobileConversationMemory,
   type MobileLearningSignal,
   type MobileVoiceState,
   normalizeAssistantVoicePresetId,
@@ -35,6 +36,7 @@ import {
   loadOfflineState,
   saveOfflineState,
   type OfflineImportDraft,
+  type PendingConversationMemorySync,
   type PendingLearningSignalSync
 } from "../services/storage/offlineStorage";
 import { clearDeviceToken, loadDeviceToken, saveDeviceToken } from "../services/storage/tokenStorage";
@@ -156,6 +158,7 @@ interface CachedMemoryDigest {
 }
 
 interface PendingLearningSignalState extends PendingLearningSignalSync {}
+interface PendingConversationMemoryState extends PendingConversationMemorySync {}
 
 export interface AppState {
   booting: boolean;
@@ -194,6 +197,7 @@ export interface AppState {
   offlineModelDetail: string | null;
   offlineImportDrafts: Record<string, OfflineImportState>;
   pendingLearningSignals: PendingLearningSignalState[];
+  pendingConversationMemories: PendingConversationMemoryState[];
   offlineSummarizing: boolean;
   offlineImporting: boolean;
   outboundRecipients: OutboundRecipient[];
@@ -284,9 +288,11 @@ let backendInterruptTurnId: string | null = null;
 const SHOULD_PAUSE_RECOGNITION_DURING_TTS = Platform.OS === "android";
 const VOICE_CONTINUATION_GRACE_MS = 450;
 const VOICE_PARTIAL_FALLBACK_COMMIT_MS = 1800;
+const REALTIME_INITIAL_TURN_STALL_MS = 18000;
 let pendingVoiceTranscript: string | null = null;
 let pendingVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingPartialVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
+let realtimeInitialTurnStallTimer: ReturnType<typeof setTimeout> | null = null;
 
 function prefersRealtimePrimaryVoice(): boolean {
   return (VOICE_RUNTIME_MODE as string) === "realtime_primary";
@@ -691,12 +697,26 @@ function mergePendingLearningSignals(
   return [nextSignal, ...deduped].slice(0, 50);
 }
 
+function normalizeConversationMemoryKey(memory: MobileConversationMemory): string {
+  return [memory.topic.trim().toLowerCase(), memory.category, memory.summary.trim().toLowerCase()].join("::");
+}
+
+function mergePendingConversationMemories(
+  current: PendingConversationMemoryState[],
+  nextMemory: PendingConversationMemoryState
+): PendingConversationMemoryState[] {
+  const nextKey = normalizeConversationMemoryKey(nextMemory.memory);
+  const deduped = current.filter((item) => normalizeConversationMemoryKey(item.memory) !== nextKey);
+  return [nextMemory, ...deduped].slice(0, 50);
+}
+
 async function persistOfflineSnapshot(get: () => AppState): Promise<void> {
   await saveOfflineState({
     sessions: get().sessions,
     messagesBySession: get().messagesBySession,
     importsBySession: get().offlineImportDrafts,
     pendingLearningSignals: get().pendingLearningSignals,
+    pendingConversationMemories: get().pendingConversationMemories,
     selectedSessionId: get().selectedSessionId,
     memoryDigest: get().cachedMemoryDigest
   });
@@ -910,6 +930,89 @@ const STANDALONE_LEARNING_EXTRACTION_PROMPT = [
   "Return at most 2 signals."
 ].join(" ");
 
+function createConversationMemory(
+  sessionId: string,
+  topic: string,
+  summary: string,
+  category: MobileConversationMemory["category"],
+  confidence: number
+): PendingConversationMemoryState {
+  const now = new Date().toISOString();
+  const memory: MobileConversationMemory = {
+    id: `memory-mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    topic: topic.trim(),
+    summary: summary.trim(),
+    category,
+    confidence,
+    status: "observed",
+    sourceSessionId: sessionId,
+    createdAt: now,
+    updatedAt: now,
+    capturedAt: now
+  };
+
+  return {
+    queueId: `queue-${memory.id}`,
+    memory,
+    sourceSessionId: sessionId,
+    capturedAt: now,
+    lastSyncAttemptAt: null,
+    error: null
+  };
+}
+
+function extractStandaloneConversationMemories(
+  sessionId: string,
+  messages: ChatMessage[],
+  summary: string
+): PendingConversationMemoryState[] {
+  const userMessages = messages
+    .filter((message) => message.role === "user" && message.content.trim())
+    .slice(-8)
+    .map((message) => message.content.trim());
+  const candidates: PendingConversationMemoryState[] = [];
+
+  for (const text of userMessages) {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    const identityMatch =
+      normalized.match(/\bmy name is ([a-z][a-z -]{1,40})\b/i) ??
+      normalized.match(/\bi am ([a-z][a-z -]{1,40})\b/i) ??
+      normalized.match(/\bi'm ([a-z][a-z -]{1,40})\b/i);
+    if (identityMatch) {
+      candidates.push(createConversationMemory(sessionId, "User identity", normalized, "identity", 0.88));
+      continue;
+    }
+
+    if (/\b(i like|i love|i prefer|my favorite|i usually prefer)\b/i.test(normalized)) {
+      candidates.push(createConversationMemory(sessionId, "User preference", normalized, "preference", 0.8));
+      continue;
+    }
+
+    if (/\b(i am working on|i'm working on|we are building|we're building|my project|i need help with|i want to build)\b/i.test(normalized)) {
+      candidates.push(createConversationMemory(sessionId, "Current project", normalized, "project", 0.78));
+      continue;
+    }
+
+    if (/\bremember\b/i.test(normalized) || /\bthis matters to me\b/i.test(normalized)) {
+      candidates.push(createConversationMemory(sessionId, "Relationship context", normalized, "relationship", 0.72));
+    }
+  }
+
+  if (!candidates.length && summary.trim()) {
+    candidates.push(
+      createConversationMemory(
+        sessionId,
+        "Recent stand-alone conversation",
+        summary.trim().replace(/\s+/g, " ").slice(0, 400),
+        "context",
+        0.62
+      )
+    );
+  }
+
+  return candidates.slice(0, 3);
+}
+
 function parseLearningSignalsFromJson(
   raw: string,
   sessionId: string
@@ -1046,6 +1149,48 @@ async function syncPendingLearningSignals(
     cachedMemoryDigest: nextMemoryDigest ?? state.cachedMemoryDigest,
     notice: result.synced > 0
       ? `Freedom synced ${result.synced} stand-alone learning signal${result.synced === 1 ? "" : "s"} into canonical memory.`
+      : state.notice
+  }));
+  await persistOfflineSnapshot(get);
+}
+
+async function syncPendingConversationMemories(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  const token = get().token;
+  const baseUrl = get().baseUrl;
+  const pending = get().pendingConversationMemories;
+  if (!token || !baseUrl || !pending.length) {
+    return;
+  }
+
+  const attemptAt = new Date().toISOString();
+  const payload = {
+    memories: pending.map((item) => item.memory)
+  };
+
+  const result = await api.syncMobileConversationMemories(token, baseUrl, payload);
+  if (!result.configured) {
+    return;
+  }
+
+  const nextMemoryDigest =
+    result.synced > 0
+      ? await api.getMemoryDigest(token, baseUrl).catch(() => get().cachedMemoryDigest)
+      : get().cachedMemoryDigest;
+
+  set((state) => ({
+    pendingConversationMemories: result.synced > 0
+      ? state.pendingConversationMemories.filter((item) => !result.syncedMemoryIds.includes(item.memory.id))
+      : state.pendingConversationMemories.map((item) => ({
+          ...item,
+          lastSyncAttemptAt: attemptAt,
+          error: result.skipped ? "Some conversation memories were skipped during sync." : null
+        })),
+    cachedMemoryDigest: nextMemoryDigest ?? state.cachedMemoryDigest,
+    notice: result.synced > 0
+      ? `Freedom synced ${result.synced} conversation memor${result.synced === 1 ? "y" : "ies"} into canonical memory.`
       : state.notice
   }));
   await persistOfflineSnapshot(get);
@@ -1250,6 +1395,7 @@ export const useAppStore = create<AppState>((set, get) => {
   offlineModelDetail: getDisconnectedAssistantReadyState().detail,
   offlineImportDrafts: {},
   pendingLearningSignals: [],
+  pendingConversationMemories: [],
   offlineSummarizing: false,
   offlineImporting: false,
   outboundRecipients: [],
@@ -1406,6 +1552,7 @@ export const useAppStore = create<AppState>((set, get) => {
       messagesBySession: cachedOfflineState?.messagesBySession ?? {},
       offlineImportDrafts: cachedOfflineState?.importsBySession ?? {},
       pendingLearningSignals: cachedOfflineState?.pendingLearningSignals ?? [],
+      pendingConversationMemories: cachedOfflineState?.pendingConversationMemories ?? [],
       cachedMemoryDigest: cachedOfflineState?.memoryDigest ?? null,
       voiceAvailable: realtimeVoiceAvailable || deviceVoiceAvailable,
       voiceRuntimeMode: resolvedVoiceRuntimeMode,
@@ -1679,8 +1826,13 @@ export const useAppStore = create<AppState>((set, get) => {
         connectSocket(baseUrl, token, set, get);
       }
 
-      if (!shouldUseOfflineSafeMode({ token, hostStatus }) && get().pendingLearningSignals.length) {
-        await syncPendingLearningSignals(get, set).catch(() => undefined);
+      if (!shouldUseOfflineSafeMode({ token, hostStatus })) {
+        if (get().pendingLearningSignals.length) {
+          await syncPendingLearningSignals(get, set).catch(() => undefined);
+        }
+        if (get().pendingConversationMemories.length) {
+          await syncPendingConversationMemories(get, set).catch(() => undefined);
+        }
       }
 
       await persistOfflineSnapshot(get);
@@ -2136,6 +2288,11 @@ export const useAppStore = create<AppState>((set, get) => {
         summary,
         get().cachedMemoryDigest
       ).catch(() => []);
+      const conversationMemories = extractStandaloneConversationMemories(
+        sessionId,
+        get().messagesBySession[sessionId] ?? [],
+        summary
+      );
       set((state) => ({
         offlineSummarizing: false,
         offlineImportDrafts: {
@@ -2150,8 +2307,12 @@ export const useAppStore = create<AppState>((set, get) => {
           (queue, item) => mergePendingLearningSignals(queue, item),
           state.pendingLearningSignals
         ),
-        notice: learningSignals.length
-          ? `Offline import summary is ready, and Freedom queued ${learningSignals.length} durable learning signal${learningSignals.length === 1 ? "" : "s"} for canonical sync.`
+        pendingConversationMemories: conversationMemories.reduce(
+          (queue, item) => mergePendingConversationMemories(queue, item),
+          state.pendingConversationMemories
+        ),
+        notice: learningSignals.length || conversationMemories.length
+          ? `Offline import summary is ready, and Freedom queued ${learningSignals.length} learning signal${learningSignals.length === 1 ? "" : "s"} plus ${conversationMemories.length} conversation memor${conversationMemories.length === 1 ? "y" : "ies"} for canonical sync.`
           : "Offline import summary is ready to review.",
         error: null
       }));
@@ -3146,6 +3307,103 @@ function createVoiceSessionId(): string {
   return `voice-mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function shouldFallbackFromRealtimeVoice(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized.includes("desktop voice worker did not answer") ||
+    normalized.includes("microphone is publishing silence")
+  );
+}
+
+async function fallbackFromRealtimeToDeviceVoice(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  notice: string
+): Promise<void> {
+  clearRealtimeInitialTurnStallTimer();
+  clearPendingVoiceTranscript();
+  assistantSpeech.stop();
+
+  set((state) => ({
+    listening: true,
+    voiceSessionActive: true,
+    voiceMuted: false,
+    voiceRuntimeMode: "device_fallback",
+    voiceRuntimeBinding: null,
+    voiceSessionPhase: "connecting",
+    liveTranscript: "",
+    voiceAudioLevel: -2,
+    voiceAssistantDraft: null,
+    notice,
+    error: null,
+    voiceTelemetry: {
+      ...state.voiceTelemetry,
+      reconnects: state.voiceTelemetry.reconnects + 1
+    }
+  }));
+
+  try {
+    if (!(await tts.prepare())) {
+      set({
+        notice: `${notice} Spoken replies are unavailable until the hosted speech path is reachable.`,
+        error: null
+      });
+    }
+    await startVoiceLoopRecognition(get, set);
+  } catch (error) {
+    set({
+      listening: false,
+      voiceSessionActive: false,
+      voiceTargetSessionId: null,
+      voiceMuted: false,
+      voiceRuntimeBinding: null,
+      voiceSessionPhase: "error",
+      liveTranscript: "",
+      voiceAudioLevel: -2,
+      notice: null,
+      error: error instanceof Error ? error.message : "Voice fallback could not start."
+    });
+  }
+}
+
+function clearRealtimeInitialTurnStallTimer(): void {
+  if (!realtimeInitialTurnStallTimer) {
+    return;
+  }
+  clearTimeout(realtimeInitialTurnStallTimer);
+  realtimeInitialTurnStallTimer = null;
+}
+
+function refreshRealtimeInitialTurnStallTimer(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): void {
+  clearRealtimeInitialTurnStallTimer();
+  realtimeInitialTurnStallTimer = setTimeout(() => {
+    realtimeInitialTurnStallTimer = null;
+    const state = get();
+    if (
+      !state.voiceSessionActive ||
+      state.voiceRuntimeMode !== "realtime_primary" ||
+      state.voiceMuted ||
+      state.voiceSessionPhase !== "listening" ||
+      Boolean(state.liveTranscript) ||
+      Boolean(pendingVoiceTranscript) ||
+      state.voiceTelemetry.turnsStarted > 0 ||
+      state.voiceTelemetry.turnsCompleted > 0 ||
+      state.voiceTelemetry.lastHeardAt
+    ) {
+      return;
+    }
+
+    void fallbackFromRealtimeToDeviceVoice(
+      get,
+      set,
+      "Realtime voice connected, but Freedom did not hear a usable first turn. The phone switched back to the local capture path."
+    );
+  }, REALTIME_INITIAL_TURN_STALL_MS);
+}
+
 function buildRealtimeVoiceCallbacks(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
@@ -3163,8 +3421,10 @@ function buildRealtimeVoiceCallbacks(
         error: null,
         view: "chat"
       });
+      refreshRealtimeInitialTurnStallTimer(get, set);
     },
     onDisconnected: (expected) => {
+      clearRealtimeInitialTurnStallTimer();
       if (expected) {
         return;
       }
@@ -3180,6 +3440,7 @@ function buildRealtimeVoiceCallbacks(
       }));
     },
     onReconnecting: () => {
+      clearRealtimeInitialTurnStallTimer();
       set((state) => ({
         listening: false,
         voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
@@ -3195,6 +3456,9 @@ function buildRealtimeVoiceCallbacks(
         voiceSessionPhase: state.voiceMuted ? "muted" : "listening",
         error: null
       }));
+      if (!get().voiceMuted) {
+        refreshRealtimeInitialTurnStallTimer(get, set);
+      }
     },
     onStateChange: (state) => {
       set((current) => ({
@@ -3212,6 +3476,9 @@ function buildRealtimeVoiceCallbacks(
 
       if (state === "listening") {
         voiceInterruptRequested = false;
+        refreshRealtimeInitialTurnStallTimer(get, set);
+      } else {
+        clearRealtimeInitialTurnStallTimer();
       }
     },
     onTranscript: ({ text, source, final }) => {
@@ -3219,6 +3486,8 @@ function buildRealtimeVoiceCallbacks(
       if (!normalized) {
         return;
       }
+
+      clearRealtimeInitialTurnStallTimer();
 
       if (source === "assistant") {
         set((state) => ({
@@ -3249,6 +3518,16 @@ function buildRealtimeVoiceCallbacks(
       }));
     },
     onError: (message) => {
+      clearRealtimeInitialTurnStallTimer();
+      if (shouldFallbackFromRealtimeVoice(message)) {
+        void fallbackFromRealtimeToDeviceVoice(
+          get,
+          set,
+          "Realtime voice stalled, so Freedom switched this phone back to the local capture path."
+        );
+        return;
+      }
+
       set({
         listening: false,
         voiceSessionActive: false,
@@ -3271,6 +3550,7 @@ async function startRealtimeVoiceSession(
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
   targetSessionId: string
 ): Promise<void> {
+  clearRealtimeInitialTurnStallTimer();
   const runtimeContext = get().cachedMemoryDigest?.context?.trim() || undefined;
   const recentMessages = buildRecentVoiceBootstrapMessages(
     get().messagesBySession[targetSessionId] ?? []

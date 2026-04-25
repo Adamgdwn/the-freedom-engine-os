@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-04-25 (canonical conversation memory lane)
+
+- added a first-class conversation-memory lane to Freedom's durable memory
+  model so reusable relationship, preference, project, and context carry-forward
+  no longer depends only on staying inside one chat thread
+- extended the mobile shared contract and gateway sync path so stand-alone
+  Freedom Anywhere can queue conversation memories offline and merge them back
+  into canonical Freedom memory on reconnect
+- promoted completed gateway text turns, voice transcript turns, and offline
+  import summaries into the same canonical conversation-memory store used by the
+  runtime context and memory digest
+- taught the gateway memory digest to surface conversation memory explicitly and
+  to derive a continuity fallback from persisted session history when Supabase
+  memory is still sparse or unconfigured
+
+## 2026-04-25 (hybrid live control-plane snapshot overlay)
+
+- added an async control-plane snapshot loader that prefers Supabase-backed
+  ventures, workflows, workflow steps, experiments, approvals, and executions
+  when configured, while preserving seeded fallback behavior for incomplete or
+  local environments
+- switched the main control-plane pages onto that async snapshot path so the web
+  UI can inspect live venture and governance state instead of relying only on
+  seed data
+- updated recommendations and weekly-review derivation so they can operate on
+  the live-overlaid snapshot instead of only the original seed arrays
+
+## 2026-04-25 (live control-plane runtime summary bridge)
+
+- added a shared Supabase-backed control-plane runtime summary loader in
+  `@freedom/shared` so the gateway and the web control plane can read the same
+  live top-venture, pending-approval, and weekly execution summary path
+- added `GET /control-plane/runtime-summary` on the desktop gateway for
+  loopback-only voice/runtime access to that live summary
+- replaced the Freedom voice agent's `top_venture_status`,
+  `pending_approvals`, and `weekly_metrics` stub strings with gateway-backed
+  runtime reads that fall back safely when live Supabase data is unavailable
+- updated Portfolio Home and Governance to show the live runtime summary when it
+  exists, while preserving seeded fallback behavior for unconfigured or empty
+  environments
+
 ## 2026-04-25 (stand-alone learning sync foundation + relay continuity bootstrap)
 
 - extended the shared mobile voice-session contract so Freedom Anywhere can send

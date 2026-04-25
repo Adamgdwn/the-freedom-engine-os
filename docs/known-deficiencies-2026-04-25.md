@@ -25,10 +25,10 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 ### Runtime Data And Persistence
 
 - Venture, approval, workflow, policy, recommendation, and weekly-metric data
-  are still too dependent on seeded or modeled control-plane data instead of
-  live Supabase-backed retrieval.
-- Voice agent tools such as `top_venture_status`, `pending_approvals`, and
-  `weekly_metrics` still need live Supabase implementations instead of stubs.
+  are still too dependent on seeded or modeled control-plane data. A hybrid
+  live overlay now exists for ventures, workflows, workflow steps, experiments,
+  approvals, executions, and runtime summaries, but the broader control-plane
+  runtime is not yet fully sourced from canonical live retrieval.
 - The outcome model exists in specs and typed contracts, but is not yet wired
   into live runtime recommendations, workforce routing, or self-programming
   decisions.
@@ -105,8 +105,11 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
   learning, concise redirection, and approval-gated self-programming behave
   consistently.
 - Supabase-backed memory, backup, and restore still need stronger validation for
-  reload survival and clean capture of learning signals, parked tasks, and
-  self-programming requests.
+  reload survival and clean capture of learning signals, conversation-memory
+  entries, parked tasks, and self-programming requests.
+- The new conversation-memory lane still needs production validation for memory
+  quality, duplicate suppression, confidence thresholds, and the balance between
+  canonical Supabase memory and gateway-state continuity fallback.
 - The approval-gated autonomy loop still needs broader validation for open-task
   review, side-question handling, topic-shift parking, and duplicate
   self-programming suppression.
