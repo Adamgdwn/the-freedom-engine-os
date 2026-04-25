@@ -1059,10 +1059,77 @@ function updateSessionLocally(state: AppState, sessionId: string, overrides: Par
   );
 }
 
+type OfflineWorkSnapshot = {
+  cachedSessionCount: number;
+  localOnlySessionCount: number;
+  pendingOfflineDraftSessionCount: number;
+  pendingOfflineDraftTurnCount: number;
+  pendingDeferredRunCount: number;
+  pendingLearningSignalCount: number;
+  pendingConversationMemoryCount: number;
+  selectedSessionTitle: string | null;
+  selectedSessionPendingDraftTurns: number;
+  selectedSessionPendingDeferredRuns: number;
+};
+
+function buildOfflineWorkSnapshot(state: Pick<
+  AppState,
+  | "sessions"
+  | "selectedSessionId"
+  | "offlineImportDrafts"
+  | "deferredOperatorRunsBySession"
+  | "pendingLearningSignals"
+  | "pendingConversationMemories"
+>): OfflineWorkSnapshot {
+  const selectedSession = state.selectedSessionId ? state.sessions.find((session) => session.id === state.selectedSessionId) ?? null : null;
+  const selectedDraft = state.selectedSessionId ? state.offlineImportDrafts[state.selectedSessionId] ?? null : null;
+  const selectedDeferredRuns = state.selectedSessionId ? state.deferredOperatorRunsBySession[state.selectedSessionId] ?? [] : [];
+  const pendingOfflineDrafts = Object.values(state.offlineImportDrafts).filter((draft) => hasPendingOfflineImportDraft(draft));
+  const pendingDeferredRuns = Object.values(state.deferredOperatorRunsBySession).flatMap((runs) => runs.filter((run) => !run.importedAt));
+
+  return {
+    cachedSessionCount: state.sessions.length,
+    localOnlySessionCount: state.sessions.filter((session) => isLocalOnlySession(session)).length,
+    pendingOfflineDraftSessionCount: pendingOfflineDrafts.length,
+    pendingOfflineDraftTurnCount: pendingOfflineDrafts.reduce(
+      (count, draft) => count + draft.draftTurns.map((turn) => turn.trim()).filter(Boolean).length,
+      0
+    ),
+    pendingDeferredRunCount: pendingDeferredRuns.length,
+    pendingLearningSignalCount: state.pendingLearningSignals.length,
+    pendingConversationMemoryCount: state.pendingConversationMemories.length,
+    selectedSessionTitle: selectedSession?.title ?? null,
+    selectedSessionPendingDraftTurns: selectedDraft?.importedAt
+      ? 0
+      : selectedDraft?.draftTurns.map((turn) => turn.trim()).filter(Boolean).length ?? 0,
+    selectedSessionPendingDeferredRuns: selectedDeferredRuns.filter((run) => !run.importedAt).length
+  };
+}
+
+function buildOfflineWorkContext(snapshot: OfflineWorkSnapshot): string {
+  return [
+    "Offline work cache on this phone:",
+    `- Cached sessions: ${snapshot.cachedSessionCount}`,
+    `- Local-only sessions: ${snapshot.localOnlySessionCount}`,
+    `- Pending offline note sets: ${snapshot.pendingOfflineDraftSessionCount}`,
+    `- Pending offline draft turns: ${snapshot.pendingOfflineDraftTurnCount}`,
+    `- Pending deferred operator runs: ${snapshot.pendingDeferredRunCount}`,
+    `- Pending learning signals: ${snapshot.pendingLearningSignalCount}`,
+    `- Pending conversation memories: ${snapshot.pendingConversationMemoryCount}`,
+    snapshot.selectedSessionTitle ? `- Current chat title: ${snapshot.selectedSessionTitle}` : null,
+    `- Current chat pending draft turns: ${snapshot.selectedSessionPendingDraftTurns}`,
+    `- Current chat pending deferred runs: ${snapshot.selectedSessionPendingDeferredRuns}`,
+    "- Storage model: offline notes live in this app's local cached state on the phone, not in a browsable phone folder."
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function buildOfflineContextMessages(
   messages: ChatMessage[],
   prompt: string,
-  memoryDigest: CachedMemoryDigest | null = null
+  memoryDigest: CachedMemoryDigest | null = null,
+  offlineWorkSnapshot: OfflineWorkSnapshot | null = null
 ): RNLlamaOAICompatibleMessage[] {
   const history = messages
     .filter((item) => item.role === "user" || item.role === "assistant" || item.role === "system")
@@ -1078,6 +1145,12 @@ function buildOfflineContextMessages(
         content: `Cached durable memory:\n${memoryDigest.context.trim()}`
       }]
     : [];
+  const offlineWorkMessage = offlineWorkSnapshot
+    ? [{
+        role: "system" as const,
+        content: buildOfflineWorkContext(offlineWorkSnapshot)
+      }]
+    : [];
 
   return [
     {
@@ -1085,6 +1158,7 @@ function buildOfflineContextMessages(
       content: OFFLINE_ASSISTANT_SYSTEM_PROMPT
     },
     ...cachedMemoryMessage,
+    ...offlineWorkMessage,
     ...history,
     {
       role: "user",
@@ -1093,7 +1167,7 @@ function buildOfflineContextMessages(
   ];
 }
 
-function buildRelayRuntimeContext(messages: ChatMessage[], prompt: string): string {
+function buildRelayRuntimeContext(messages: ChatMessage[], prompt: string, offlineWorkSnapshot: OfflineWorkSnapshot | null): string {
   const recentTurns = messages
     .filter((item) => item.role === "user" || item.role === "assistant")
     .slice(-6);
@@ -1108,6 +1182,7 @@ function buildRelayRuntimeContext(messages: ChatMessage[], prompt: string): stri
     "Phone posture: stand-alone fallback while the desktop is unavailable.",
     "Immediate desktop-backed governed execution is not available in this lane.",
     "Freedom's full governed runtime can inspect approved code and repo control files when the desktop lane is active and permissions allow it.",
+    offlineWorkSnapshot ? buildOfflineWorkContext(offlineWorkSnapshot) : null,
     `Current user request: ${prompt.trim()}`,
     recentTurns.length ? `Recent cached turn count: ${recentTurns.length}` : null,
     assistantPreview ? `Recent assistant preview:\n${assistantPreview}` : null
@@ -1134,10 +1209,15 @@ function truncateOfflinePreview(text: string): string {
   return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
 }
 
-function buildNotesOnlyReply(): string {
+function buildNotesOnlyReply(offlineWorkSnapshot: OfflineWorkSnapshot | null): string {
+  const snapshot = offlineWorkSnapshot;
+  const pendingSummary = snapshot
+    ? ` Right now this phone has ${snapshot.pendingOfflineDraftTurnCount} pending offline draft turn${snapshot.pendingOfflineDraftTurnCount === 1 ? "" : "s"} across ${snapshot.pendingOfflineDraftSessionCount} note set${snapshot.pendingOfflineDraftSessionCount === 1 ? "" : "s"} and ${snapshot.pendingDeferredRunCount} deferred operator run${snapshot.pendingDeferredRunCount === 1 ? "" : "s"}.`
+    : "";
   return (
-    "Freedom saved that idea locally for later sync. " +
-    "This slim build does not bundle the old on-device model, and no hosted support endpoint is configured yet."
+    "Freedom saved that idea locally in this app's phone cache for later sync; it is not stored in a browsable offline folder."
+    + pendingSummary
+    + " This slim build does not bundle the old on-device model, and no hosted support endpoint is configured yet."
   );
 }
 
@@ -1173,25 +1253,26 @@ async function requestDisconnectedAssistantReply(
   messages: ChatMessage[],
   prompt: string,
   baseUrl: string,
-  memoryDigest: CachedMemoryDigest | null
+  memoryDigest: CachedMemoryDigest | null,
+  offlineWorkSnapshot: OfflineWorkSnapshot | null
 ): Promise<string> {
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
       return offlineAssistant.generateReply({
-        messages: buildOfflineContextMessages(messages, prompt, memoryDigest)
+        messages: buildOfflineContextMessages(messages, prompt, memoryDigest, offlineWorkSnapshot)
       });
     case "cloud":
       return relayCompanion.generateReply(
-        buildOfflineContextMessages(messages, prompt, memoryDigest).flatMap((message) => {
+        buildOfflineContextMessages(messages, prompt, memoryDigest, offlineWorkSnapshot).flatMap((message) => {
           if (message.role === "system" || message.role === "user" || message.role === "assistant") {
             return [{ role: message.role, content: typeof message.content === "string" ? message.content : "" }];
           }
           return [];
         }),
-        buildRelayRuntimeContext(messages, prompt)
+        buildRelayRuntimeContext(messages, prompt, offlineWorkSnapshot)
       );
     default:
-      return buildNotesOnlyReply();
+      return buildNotesOnlyReply(offlineWorkSnapshot);
   }
 }
 
@@ -1593,10 +1674,11 @@ async function sendOfflineIdeationTurn(
 
   try {
     const messages = get().messagesBySession[sessionId] ?? [];
+    const offlineWorkSnapshot = buildOfflineWorkSnapshot(get());
     const reply =
       getDisconnectedAssistantMode() === "bundled_model"
         ? await offlineAssistant.generateReply({
-            messages: buildOfflineContextMessages(messages, text, get().cachedMemoryDigest),
+            messages: buildOfflineContextMessages(messages, text, get().cachedMemoryDigest, offlineWorkSnapshot),
             onToken: (content) => {
               const updatedAt = new Date().toISOString();
               set((state) => ({
@@ -1611,7 +1693,7 @@ async function sendOfflineIdeationTurn(
               }));
             }
           })
-        : await requestDisconnectedAssistantReply(messages, text, get().baseUrl, get().cachedMemoryDigest);
+        : await requestDisconnectedAssistantReply(messages, text, get().baseUrl, get().cachedMemoryDigest, offlineWorkSnapshot);
     const completedAt = new Date().toISOString();
     set((state) => ({
       sendingMessage: false,
