@@ -628,6 +628,7 @@ export class GatewayStore {
     roomName: string;
     chatSessionId: string;
     sessionTitle: string;
+    runtimeContext: string;
     recentMessages: Array<{ id: string; role: "user" | "assistant"; content: string; createdAt: string }>;
   }> {
     const principal = await this.requireHost(token);
@@ -654,11 +655,15 @@ export class GatewayStore {
         content: item.content.trim(),
         createdAt: item.createdAt,
       }));
+    const digest = await loadMemoryDigest(principal.host.id);
+    const derivedContext = buildStateConversationMemoryContext(state, principal.host.id);
+    const runtimeContext = [derivedContext, digest.context].filter(Boolean).join("\n\n").trim();
 
     return {
       roomName,
       chatSessionId: session.id,
       sessionTitle: session.title,
+      runtimeContext,
       recentMessages,
     };
   }
@@ -2973,27 +2978,35 @@ function deriveConversationMemoriesFromMessages(
       pushMemory("Current project", "project", 0.78);
       continue;
     }
+    if (/\b(business partner|long-term partner|autonomous partner|co-founder|cofounder)\b/i.test(normalized)) {
+      pushMemory("Partnership expectation", "relationship", 0.84);
+      continue;
+    }
     if (/\bremember\b|this matters to me|keep in mind\b/i.test(normalized)) {
       pushMemory("Relationship context", "relationship", 0.72);
     }
   }
 
   if (!results.length) {
-    const latestUser = userMessages.at(-1);
-    const latestAssistant = assistantMessages.at(-1);
-    const summary = [latestUser?.content?.trim(), latestAssistant?.content?.trim()].filter(Boolean).join(" ");
-    if (summary) {
+    const recentUserSummary = userMessages
+      .slice(-2)
+      .map((message) => message.content.trim())
+      .filter(Boolean)
+      .map((message) => truncatePreview(message, 160))
+      .join(" | ");
+    if (recentUserSummary) {
+      const latestUser = userMessages.at(-1);
       results.push({
         id: `conversation-${sessionId}-context`,
         topic: sessionTitle.trim() || "Recent conversation",
-        summary: truncatePreview(summary, 280),
+        summary: recentUserSummary,
         category: "context",
         confidence: 0.62,
         status: "observed",
         sourceSessionId: sessionId,
-        createdAt: latestUser?.createdAt ?? latestAssistant?.createdAt ?? nowIso(),
-        updatedAt: latestAssistant?.updatedAt ?? latestUser?.updatedAt ?? nowIso(),
-        capturedAt: latestAssistant?.updatedAt ?? latestUser?.updatedAt ?? nowIso()
+        createdAt: latestUser?.createdAt ?? nowIso(),
+        updatedAt: latestUser?.updatedAt ?? nowIso(),
+        capturedAt: latestUser?.updatedAt ?? nowIso()
       });
     }
   }
