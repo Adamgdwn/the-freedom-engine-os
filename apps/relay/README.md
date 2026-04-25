@@ -53,6 +53,10 @@ and passed into the mobile build (for `/chat` and `/livekit-token`).
 - The relay is intentionally a fallback surface. It should preserve the same
   `Freedom` identity and stand-alone boundaries described in the phone product
   spec.
+- The relay is not the owner of a separate conversation memory model. Voice
+  continuity should follow the selected chat thread, and the relay should honor
+  the same bootstrap contract the desktop gateway uses for new realtime voice
+  rooms.
 - The current `/chat` route is a bounded OpenAI-backed fallback. If you later
   run the full Freedom voice agent on the relay host, prefer keeping `/chat`
   behavior aligned with that same runtime context instead of letting chat and
@@ -60,6 +64,11 @@ and passed into the mobile build (for `/chat` and `/livekit-token`).
 - The relay voice token response should continue matching the shared
   `VoiceRuntimeSessionResponse` contract used by the gateway so mobile does not
   need a second relay-specific runtime path.
+- `POST /livekit-token` and `GET /voice-runtime-bootstrap` should be treated as
+  one shared continuity lane with the desktop gateway: mobile supplies the
+  selected thread id plus recent completed turns, and the voice agent receives
+  the same shape of bootstrap context regardless of whether the room came from
+  desktop or relay.
 
 ## Run locally
 

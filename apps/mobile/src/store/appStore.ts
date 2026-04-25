@@ -6,6 +6,7 @@ import {
   FREEDOM_PHONE_PRODUCT_NAME,
   getAssistantVoiceCatalogEntry,
   type MobileConnectionState,
+  type MobileLearningSignal,
   type MobileVoiceState,
   normalizeAssistantVoicePresetId,
   type AssistantVoiceProfile,
@@ -33,7 +34,8 @@ import { loadSettings, saveSettings, type StoredSettings } from "../services/sto
 import {
   loadOfflineState,
   saveOfflineState,
-  type OfflineImportDraft
+  type OfflineImportDraft,
+  type PendingLearningSignalSync
 } from "../services/storage/offlineStorage";
 import { clearDeviceToken, loadDeviceToken, saveDeviceToken } from "../services/storage/tokenStorage";
 import { FcmService } from "../services/notifications/fcmService";
@@ -153,6 +155,8 @@ interface CachedMemoryDigest {
   context: string;
 }
 
+interface PendingLearningSignalState extends PendingLearningSignalSync {}
+
 export interface AppState {
   booting: boolean;
   refreshing: boolean;
@@ -189,6 +193,7 @@ export interface AppState {
   offlineModelState: OfflineModelState;
   offlineModelDetail: string | null;
   offlineImportDrafts: Record<string, OfflineImportState>;
+  pendingLearningSignals: PendingLearningSignalState[];
   offlineSummarizing: boolean;
   offlineImporting: boolean;
   outboundRecipients: OutboundRecipient[];
@@ -587,6 +592,28 @@ function createLocalMessageId(prefix: "msg" | "import"): string {
   return `${prefix}-mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function buildRecentVoiceBootstrapMessages(messages: ChatMessage[]): Array<{
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}> {
+  return messages
+    .filter((message): message is ChatMessage & { role: "user" | "assistant" } =>
+      (message.role === "user" || message.role === "assistant") &&
+      message.status === "completed" &&
+      message.content.trim().length > 0
+    )
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    .slice(-10)
+    .map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content.trim(),
+      createdAt: message.createdAt
+    }));
+}
+
 async function ensureStandaloneConversationSessionId(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
@@ -651,11 +678,25 @@ function buildOfflineImportDraft(draft: OfflineImportDraft | undefined, messages
   };
 }
 
+function normalizeLearningSignalKey(signal: MobileLearningSignal): string {
+  return [signal.topic.trim().toLowerCase(), signal.kind, signal.summary.trim().toLowerCase()].join("::");
+}
+
+function mergePendingLearningSignals(
+  current: PendingLearningSignalState[],
+  nextSignal: PendingLearningSignalState
+): PendingLearningSignalState[] {
+  const nextKey = normalizeLearningSignalKey(nextSignal.signal);
+  const deduped = current.filter((item) => normalizeLearningSignalKey(item.signal) !== nextKey);
+  return [nextSignal, ...deduped].slice(0, 50);
+}
+
 async function persistOfflineSnapshot(get: () => AppState): Promise<void> {
   await saveOfflineState({
     sessions: get().sessions,
     messagesBySession: get().messagesBySession,
     importsBySession: get().offlineImportDrafts,
+    pendingLearningSignals: get().pendingLearningSignals,
     selectedSessionId: get().selectedSessionId,
     memoryDigest: get().cachedMemoryDigest
   });
@@ -860,6 +901,156 @@ async function requestDisconnectedImportSummary(
   }
 }
 
+const STANDALONE_LEARNING_EXTRACTION_PROMPT = [
+  "Extract only durable learning signals for Freedom from this stand-alone mobile work.",
+  "Return strict JSON with shape: {\"signals\":[{\"topic\":\"...\",\"summary\":\"...\",\"kind\":\"preference|focus|workflow|capability\"}]}",
+  "Only include signals when the pattern is explicit, repeated, or clearly durable.",
+  "Do not include transient tasks, one-off facts, or speculative self-programming.",
+  "Prefer zero signals over weak signals.",
+  "Return at most 2 signals."
+].join(" ");
+
+function parseLearningSignalsFromJson(
+  raw: string,
+  sessionId: string
+): PendingLearningSignalState[] {
+  const cleaned = raw.trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const parsed = JSON.parse(cleaned) as { signals?: Array<{ topic?: unknown; summary?: unknown; kind?: unknown }> };
+  const items = Array.isArray(parsed.signals) ? parsed.signals : [];
+  const now = new Date().toISOString();
+
+  return items.flatMap((item, index) => {
+    const topic = typeof item.topic === "string" ? item.topic.trim() : "";
+    const summary = typeof item.summary === "string" ? item.summary.trim() : "";
+    const kind =
+      item.kind === "preference" || item.kind === "focus" || item.kind === "workflow" || item.kind === "capability"
+        ? item.kind
+        : null;
+    if (!topic || !summary || !kind) {
+      return [];
+    }
+
+    const signal: MobileLearningSignal = {
+      id: `learning-mobile-${Date.now().toString(36)}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+      topic,
+      summary,
+      kind,
+      status: "observed",
+      createdAt: now,
+      updatedAt: now,
+      sourceSessionId: sessionId,
+      capturedAt: now
+    };
+
+    return [{
+      queueId: `queue-${signal.id}`,
+      signal,
+      sourceSessionId: sessionId,
+      capturedAt: now,
+      lastSyncAttemptAt: null,
+      error: null
+    }];
+  });
+}
+
+async function extractStandaloneLearningSignals(
+  sessionId: string,
+  messages: ChatMessage[],
+  draftTurns: string[],
+  summary: string,
+  memoryDigest: CachedMemoryDigest | null
+): Promise<PendingLearningSignalState[]> {
+  const recentMessages = messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .slice(-8)
+    .map((message) => `${message.role === "user" ? "User" : "Freedom"}: ${message.content.trim()}`)
+    .join("\n");
+
+  const extractionInput = [
+    memoryDigest?.context?.trim() ? `Cached durable memory:\n${memoryDigest.context.trim()}` : null,
+    summary.trim() ? `Offline summary:\n${summary.trim()}` : null,
+    draftTurns.length ? `Key offline turns:\n${draftTurns.map((turn, index) => `${index + 1}. ${turn}`).join("\n")}` : null,
+    recentMessages ? `Recent conversation:\n${recentMessages}` : null
+  ].filter(Boolean).join("\n\n");
+
+  if (!extractionInput.trim()) {
+    return [];
+  }
+
+  let raw = "";
+  switch (getDisconnectedAssistantMode()) {
+    case "bundled_model":
+      raw = await offlineAssistant.generateReply({
+        messages: [
+          { role: "system", content: STANDALONE_LEARNING_EXTRACTION_PROMPT },
+          { role: "user", content: extractionInput }
+        ],
+        nPredict: 220,
+        temperature: 0.1
+      });
+      break;
+    case "cloud":
+      raw = await relayCompanion.extractLearningSignals(
+        extractionInput,
+        memoryDigest?.context?.trim() || undefined
+      );
+      break;
+    default:
+      return [];
+  }
+
+  try {
+    return parseLearningSignalsFromJson(raw, sessionId);
+  } catch {
+    return [];
+  }
+}
+
+async function syncPendingLearningSignals(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  const token = get().token;
+  const baseUrl = get().baseUrl;
+  const pending = get().pendingLearningSignals;
+  if (!token || !baseUrl || !pending.length) {
+    return;
+  }
+
+  const attemptAt = new Date().toISOString();
+  const payload = {
+    signals: pending.map((item) => item.signal)
+  };
+
+  const result = await api.syncMobileLearningSignals(token, baseUrl, payload);
+  if (!result.configured) {
+    return;
+  }
+
+  const nextMemoryDigest =
+    result.synced > 0
+      ? await api.getMemoryDigest(token, baseUrl).catch(() => get().cachedMemoryDigest)
+      : get().cachedMemoryDigest;
+
+  set((state) => ({
+    pendingLearningSignals: result.synced > 0
+      ? state.pendingLearningSignals.filter((item) => !result.syncedSignalIds.includes(item.signal.id))
+      : state.pendingLearningSignals.map((item) => ({
+          ...item,
+          lastSyncAttemptAt: attemptAt,
+          error: result.skipped ? "Some learning signals were skipped during sync." : null
+        })),
+    cachedMemoryDigest: nextMemoryDigest ?? state.cachedMemoryDigest,
+    notice: result.synced > 0
+      ? `Freedom synced ${result.synced} stand-alone learning signal${result.synced === 1 ? "" : "s"} into canonical memory.`
+      : state.notice
+  }));
+  await persistOfflineSnapshot(get);
+}
+
 async function sendOfflineIdeationTurn(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
@@ -1058,6 +1249,7 @@ export const useAppStore = create<AppState>((set, get) => {
   offlineModelState: getDisconnectedAssistantReadyState().state,
   offlineModelDetail: getDisconnectedAssistantReadyState().detail,
   offlineImportDrafts: {},
+  pendingLearningSignals: [],
   offlineSummarizing: false,
   offlineImporting: false,
   outboundRecipients: [],
@@ -1213,6 +1405,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selectedSessionId: cachedOfflineState?.selectedSessionId ?? null,
       messagesBySession: cachedOfflineState?.messagesBySession ?? {},
       offlineImportDrafts: cachedOfflineState?.importsBySession ?? {},
+      pendingLearningSignals: cachedOfflineState?.pendingLearningSignals ?? [],
       cachedMemoryDigest: cachedOfflineState?.memoryDigest ?? null,
       voiceAvailable: realtimeVoiceAvailable || deviceVoiceAvailable,
       voiceRuntimeMode: resolvedVoiceRuntimeMode,
@@ -1484,6 +1677,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
       if (!socket || socket.readyState === WebSocket.CLOSED || !get().realtimeConnected) {
         connectSocket(baseUrl, token, set, get);
+      }
+
+      if (!shouldUseOfflineSafeMode({ token, hostStatus }) && get().pendingLearningSignals.length) {
+        await syncPendingLearningSignals(get, set).catch(() => undefined);
       }
 
       await persistOfflineSnapshot(get);
@@ -1932,6 +2129,13 @@ export const useAppStore = create<AppState>((set, get) => {
         get().baseUrl,
         get().cachedMemoryDigest
       );
+      const learningSignals = await extractStandaloneLearningSignals(
+        sessionId,
+        get().messagesBySession[sessionId] ?? [],
+        draft.draftTurns,
+        summary,
+        get().cachedMemoryDigest
+      ).catch(() => []);
       set((state) => ({
         offlineSummarizing: false,
         offlineImportDrafts: {
@@ -1942,7 +2146,13 @@ export const useAppStore = create<AppState>((set, get) => {
             updatedAt: new Date().toISOString()
           }
         },
-        notice: "Offline import summary is ready to review.",
+        pendingLearningSignals: learningSignals.reduce(
+          (queue, item) => mergePendingLearningSignals(queue, item),
+          state.pendingLearningSignals
+        ),
+        notice: learningSignals.length
+          ? `Offline import summary is ready, and Freedom queued ${learningSignals.length} durable learning signal${learningSignals.length === 1 ? "" : "s"} for canonical sync.`
+          : "Offline import summary is ready to review.",
         error: null
       }));
       await persistOfflineSnapshot(get);
@@ -3062,11 +3272,15 @@ async function startRealtimeVoiceSession(
   targetSessionId: string
 ): Promise<void> {
   const runtimeContext = get().cachedMemoryDigest?.context?.trim() || undefined;
+  const recentMessages = buildRecentVoiceBootstrapMessages(
+    get().messagesBySession[targetSessionId] ?? []
+  );
   const sessionInput = {
     voiceSessionId: createVoiceSessionId(),
     chatSessionId: targetSessionId,
     assistantName: FREEDOM_PRODUCT_NAME,
-    runtimeContext
+    runtimeContext,
+    ...(recentMessages.length > 0 ? { recentMessages } : {})
   };
 
   const runtime = get().offlineMode && RELAY_BASE_URL

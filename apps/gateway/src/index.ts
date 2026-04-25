@@ -20,6 +20,7 @@ import {
   renameDeviceRequestSchema,
   sendExternalMessageRequestSchema,
   sendTestNotificationRequestSchema,
+  syncMobileLearningSignalsRequestSchema,
   updateHostVoiceProfileRequestSchema,
   updateNotificationPrefsRequestSchema,
   updateSessionRequestSchema
@@ -214,6 +215,12 @@ const server = createServer(async (req, res) => {
 
     if (method === "GET" && url.pathname === "/host/memory-digest") {
       sendJson(res, 200, await store.getMemoryDigest(readBearer(req)));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/host/learning-signals/sync") {
+      const parsed = syncMobileLearningSignalsRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.syncMobileLearningSignals(readBearer(req), parsed));
       return;
     }
 

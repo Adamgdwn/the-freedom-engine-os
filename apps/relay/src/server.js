@@ -48,6 +48,14 @@ const RELAY_STANDALONE_CHAT_PROMPT = [
 ].join(" ");
 const RELAY_STANDALONE_SUMMARY_PROMPT =
   "Summarize this stand-alone Freedom Anywhere work for later desktop review. Keep it factual, concise, and focused on next steps.";
+const RELAY_LEARNING_EXTRACT_PROMPT = [
+  "Extract only durable learning signals for Freedom from this stand-alone mobile work.",
+  "Return strict JSON with shape: {\"signals\":[{\"topic\":\"...\",\"summary\":\"...\",\"kind\":\"preference|focus|workflow|capability\"}]}",
+  "Only include signals when the pattern is explicit, repeated, or clearly durable.",
+  "Do not include transient tasks, one-off facts, or speculative self-programming.",
+  "Prefer zero signals over weak signals.",
+  "Return at most 2 signals."
+].join(" ");
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
@@ -150,6 +158,7 @@ async function handleLivekitToken(req, res) {
     ? body.assistantName.trim()
     : "Freedom";
   const runtimeContext = typeof body?.runtimeContext === "string" ? body.runtimeContext.trim() : "";
+  const recentMessages = normalizeRecentMessages(body?.recentMessages);
   const hostId = typeof body?.hostId === "string" && body.hostId.trim() ? body.hostId.trim() : "standalone";
   const roomName = `${hostId}-${voiceSessionId}`;
   const participantIdentity = `voice-mobile-${randomUUID()}`;
@@ -171,6 +180,8 @@ async function handleLivekitToken(req, res) {
     roomName,
     chatSessionId,
     runtimeContext,
+    recentMessages,
+    sessionTitle: assistantName,
     assistantName,
     createdAt: new Date().toISOString(),
     expiresAt
@@ -264,9 +275,12 @@ function requireSharedSecret(req, res) {
 }
 
 function buildRelaySystemMessages(purpose, runtimeContext) {
-  const basePrompt = purpose === "offline_summary"
-    ? RELAY_STANDALONE_SUMMARY_PROMPT
-    : RELAY_STANDALONE_CHAT_PROMPT;
+  const basePrompt =
+    purpose === "offline_summary"
+      ? RELAY_STANDALONE_SUMMARY_PROMPT
+      : purpose === "learning_extract"
+        ? RELAY_LEARNING_EXTRACT_PROMPT
+        : RELAY_STANDALONE_CHAT_PROMPT;
   const contextBlock = runtimeContext
     ? `Stand-alone runtime context:\n${runtimeContext}`
     : null;
@@ -295,6 +309,28 @@ function normalizeMessages(value) {
 
     return [{ role, content }];
   });
+}
+
+function normalizeRecentMessages(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((message) => {
+    if (!message || typeof message !== "object") {
+      return [];
+    }
+
+    const id = typeof message.id === "string" ? message.id.trim() : "";
+    const role = message.role === "user" || message.role === "assistant" ? message.role : "";
+    const content = typeof message.content === "string" ? message.content.trim() : "";
+    const createdAt = typeof message.createdAt === "string" ? message.createdAt.trim() : "";
+    if (!id || !role || !content || !createdAt) {
+      return [];
+    }
+
+    return [{ id, role, content, createdAt }];
+  }).slice(-10);
 }
 
 async function readJson(req) {

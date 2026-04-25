@@ -6,7 +6,7 @@ export type RelayMessage = {
   content: string;
 };
 
-type RelayChatPurpose = "standalone_chat" | "offline_summary";
+type RelayChatPurpose = "standalone_chat" | "offline_summary" | "learning_extract";
 
 const RELAY_TIMEOUT_MS = 20_000;
 
@@ -35,6 +35,21 @@ export class RelayCompanionService {
     const data = await this.post<{ reply: string }>("/chat", {
       messages,
       purpose: "offline_summary" satisfies RelayChatPurpose,
+      runtimeContext: runtimeContext?.trim() || undefined
+    });
+    return data.reply;
+  }
+
+  async extractLearningSignals(prompt: string, runtimeContext?: string): Promise<string> {
+    const messages: RelayMessage[] = [
+      {
+        role: "user",
+        content: prompt
+      }
+    ];
+    const data = await this.post<{ reply: string }>("/chat", {
+      messages,
+      purpose: "learning_extract",
       runtimeContext: runtimeContext?.trim() || undefined
     });
     return data.reply;

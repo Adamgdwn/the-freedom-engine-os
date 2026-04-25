@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-04-25 (stand-alone learning sync foundation + relay continuity bootstrap)
+
+- extended the shared mobile voice-session contract so Freedom Anywhere can send
+  recent completed thread turns into a new realtime voice session bootstrap,
+  keeping desktop and relay voice continuity on one shared contract instead of
+  splitting into transport-specific memory behavior
+- fixed the relay voice bootstrap path so stand-alone realtime sessions can
+  restore recent thread context the same way the desktop gateway path already did,
+  rather than starting each new relay-backed room with only generic runtime context
+- documented the architectural posture explicitly: desktop gateway, relay, and
+  Freedom Anywhere are one Freedom runtime with shared continuity rules, not
+  separate assistants with separate memory models
+- added a first canonical write-back path for Freedom Anywhere stand-alone
+  learning signals through the paired gateway, so mobile can queue durable
+  learning candidates offline and sync them into Freedom's real persistent
+  learning store after reconnect instead of keeping a second learning system on-device
+- added a bounded offline learning-extraction pass during import-summary review,
+  with conservative JSON extraction and explicit limits so only durable
+  `learning` candidates are queued; self-programming and persona changes remain
+  out of scope for stand-alone auto-sync in this phase
+
 ## 2026-04-22 (Freedom Anywhere recovery pass, release install cleanup, and reconnecting indicator fix)
 
 - established the first-principles Freedom Anywhere recovery docs and implementation

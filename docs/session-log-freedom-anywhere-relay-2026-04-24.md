@@ -22,6 +22,21 @@ The Freedom Anywhere app was showing a "Reconnecting" screen with a "Backup voic
 
 ## What We Built
 
+### Architectural posture
+
+This work only stays valid if relay, desktop gateway, and mobile all behave like
+one Freedom runtime with two transport paths, not like separate assistants with
+different memory rules.
+
+That means:
+
+- the canonical voice-session contract must stay shared between desktop and relay
+- session continuity should be attached to the selected chat thread, not to a
+  particular room or process
+- a new realtime voice session should bootstrap from the same recent thread
+  history whether the phone reached Freedom through the desktop gateway or the
+  stand-alone relay
+
 ### 1. Freedom Relay (`apps/relay/`)
 
 A small always-on Node.js service that lives on a Tailscale node (your OnePlus phone running Termux). It is **support infrastructure**, not a second assistant — when the desktop is on, Freedom still prefers the desktop gateway.
@@ -82,6 +97,37 @@ The relay companion replaced the old `CloudCompanionService` in all offline path
 - The `startVoice` action condition changed from `!offlineMode && prefersRealtimePrimary` to `prefersRealtimePrimary || (offlineMode && RELAY_BASE_URL)` — LiveKit is always tried first
 
 **Current limitation:** The relay mints the LiveKit token (the phone's credential to join a room), but a Python voice agent also needs to join that room on the AI side. The desktop-host runs this agent (`agents/freedom_agent/agent.py`). When the desktop is off, the room is empty and the phone hears silence. **Stand-alone voice requires the Python agent to also run on the relay node** — that is the next piece.
+
+### 4.1 Conversation continuity fix across desktop + relay
+
+After the first relay pass, a new stand-alone voice session could still feel
+amnesic even though the phone already held the correct chat thread locally.
+
+**Why that happened:**
+
+- the desktop gateway's `voice-runtime-bootstrap` returned `recentMessages`
+- the Freedom voice agent already knew how to prepend those `recentMessages`
+  into the runtime context for a new room
+- the relay bootstrap only carried `runtimeContext`, not the actual recent
+  thread turns
+
+So the system had split behavior:
+
+- desktop path: new voice room restored recent thread continuity
+- relay path: new voice room started "clean" and only had generic runtime context
+
+**The fix:**
+
+- extend the shared voice-session request contract so mobile can send the last
+  completed user/assistant turns from the selected chat thread
+- persist those `recentMessages` inside the relay room bootstrap
+- return them from the relay's `GET /voice-runtime-bootstrap`
+- let the existing Freedom voice-agent bootstrap path consume them the same way
+  it already does on the desktop route
+
+This is intentionally **not** a relay-specific memory feature. It is one shared
+continuity bootstrap contract used by both desktop and relay so Freedom Anywhere,
+the desktop gateway, and the relay act like one system.
 
 ---
 

@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { ChatMessage, ChatSession } from "@freedom/shared";
+import type { ChatMessage, ChatSession, MobileLearningSignal } from "@freedom/shared";
 import { sanitizeSessionsForFreedom } from "../mobile/sessionSanitizer";
 
 const OFFLINE_STATE_KEY = "freedom-mobile.offline-state";
@@ -15,10 +15,20 @@ export interface OfflineImportDraft {
   updatedAt: string;
 }
 
+export interface PendingLearningSignalSync {
+  queueId: string;
+  signal: MobileLearningSignal;
+  sourceSessionId: string;
+  capturedAt: string;
+  lastSyncAttemptAt: string | null;
+  error: string | null;
+}
+
 export interface StoredOfflineState {
   sessions: ChatSession[];
   messagesBySession: Record<string, ChatMessage[]>;
   importsBySession: Record<string, OfflineImportDraft>;
+  pendingLearningSignals?: PendingLearningSignalSync[];
   selectedSessionId: string | null;
   memoryDigest?: {
     configured: boolean;
@@ -51,6 +61,7 @@ function trimState(state: StoredOfflineState): StoredOfflineState {
     sessions,
     messagesBySession,
     importsBySession,
+    pendingLearningSignals: (state.pendingLearningSignals ?? []).slice(-50),
     selectedSessionId: state.selectedSessionId && allowedSessionIds.has(state.selectedSessionId) ? state.selectedSessionId : sessions[0]?.id ?? null,
     memoryDigest: state.memoryDigest ?? null
   };

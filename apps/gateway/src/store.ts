@@ -48,6 +48,8 @@ import type {
   RunState,
   SendExternalMessageRequest,
   SendExternalMessageResponse,
+  SyncMobileLearningSignalsRequest,
+  SyncMobileLearningSignalsResponse,
   StreamEvent,
   TaskItem,
   TailscaleStatus,
@@ -145,10 +147,12 @@ interface TaskMemoryRow {
 }
 
 interface LearningSignalMemoryRow {
+  id?: string;
   topic: string;
   summary: string;
   kind: string;
   status: string;
+  created_at?: string;
   updated_at: string;
 }
 
@@ -380,6 +384,48 @@ export class GatewayStore {
   async getMemoryDigest(token: string): Promise<MemoryDigest> {
     const principal = await this.requirePrincipal(token);
     return loadMemoryDigest(principal.host.id);
+  }
+
+  async syncMobileLearningSignals(
+    token: string,
+    input: SyncMobileLearningSignalsRequest
+  ): Promise<SyncMobileLearningSignalsResponse> {
+    const principal = await this.requireDevice(token);
+    const signals = dedupeLearningSignalsForSync(input.signals ?? []);
+    if (!signals.length) {
+      return { configured: isProgrammingMemoryConfigured(), synced: 0, skipped: 0, syncedSignalIds: [] };
+    }
+
+    if (!isProgrammingMemoryConfigured()) {
+      return {
+        configured: false,
+        synced: 0,
+        skipped: signals.length,
+        syncedSignalIds: []
+      };
+    }
+
+    const syncedSignalIds = await upsertLearningSignals(signals);
+    const synced = syncedSignalIds.length;
+    const skipped = Math.max(0, signals.length - synced);
+
+    const state = await this.readState();
+    this.addAuditEvent(state, {
+      hostId: principal.host.id,
+      deviceId: principal.device.id,
+      sessionId: null,
+      type: "mobile_learning_synced",
+      originSurface: "mobile_companion",
+      detail: `Synced ${synced} learning signal${synced === 1 ? "" : "s"} from Freedom Anywhere${skipped ? ` (${skipped} skipped)` : ""}.`
+    });
+    await this.writeState(state);
+
+    return {
+      configured: true,
+      synced,
+      skipped,
+      syncedSignalIds
+    };
   }
 
   async updateVoiceProfile(token: string, input: UpdateHostVoiceProfileRequest): Promise<AssistantVoiceProfile> {
@@ -2618,6 +2664,64 @@ async function fetchLearningSignalRows(limit: number): Promise<LearningSignalMem
   } catch {
     return [];
   }
+}
+
+async function upsertLearningSignals(signals: SyncMobileLearningSignalsRequest["signals"]): Promise<string[]> {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !serviceRoleKey || !signals.length) {
+    return [];
+  }
+
+  const url = new URL("/rest/v1/freedom_learning_signals", supabaseUrl);
+  url.searchParams.set("on_conflict", "id");
+
+  const body = signals.map((signal) => ({
+    id: signal.id,
+    topic: signal.topic.trim(),
+    summary: signal.summary.trim(),
+    kind: signal.kind,
+    status: signal.status,
+    created_at: signal.createdAt,
+    updated_at: signal.updatedAt
+  }));
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        apikey: serviceRoleKey,
+        authorization: `Bearer ${serviceRoleKey}`,
+        "content-type": "application/json",
+        prefer: "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify(body)
+    });
+    return response.ok ? body.map((signal) => signal.id) : [];
+  } catch {
+    return [];
+  }
+}
+
+function dedupeLearningSignalsForSync(signals: SyncMobileLearningSignalsRequest["signals"]): SyncMobileLearningSignalsRequest["signals"] {
+  const seen = new Set<string>();
+  const deduped: SyncMobileLearningSignalsRequest["signals"] = [];
+
+  for (const signal of signals) {
+    const key = [
+      signal.id.trim().toLowerCase(),
+      signal.topic.trim().toLowerCase(),
+      signal.kind,
+      signal.summary.trim().toLowerCase()
+    ].join("::");
+    if (!signal.topic.trim() || !signal.summary.trim() || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(signal);
+  }
+
+  return deduped;
 }
 
 async function fetchPersonaOverlayRows(limit: number): Promise<PersonaOverlayMemoryRow[]> {

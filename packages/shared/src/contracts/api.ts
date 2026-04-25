@@ -21,6 +21,8 @@ import type {
   PairedDevice,
   PostMessageRequest,
   RealtimeTicketResponse,
+  SyncMobileLearningSignalsRequest,
+  SyncMobileLearningSignalsResponse,
   RegisterPushTokenRequest,
   RegisterHostRequest,
   RegisterHostResponse,
@@ -62,6 +64,7 @@ export interface MobileApi {
   stopSession(token: string, sessionId: string): Promise<ChatSession>;
   createRealtimeTicket(token: string): Promise<RealtimeTicketResponse>;
   createVoiceRuntimeSession(token: string, input: CreateVoiceRuntimeSessionRequest): Promise<VoiceRuntimeSessionResponse>;
+  syncMobileLearningSignals(token: string, input: SyncMobileLearningSignalsRequest): Promise<SyncMobileLearningSignalsResponse>;
   renameDevice(token: string, deviceId: string, input: RenameDeviceRequest): Promise<PairedDevice>;
   revokeDevice(token: string, deviceId: string): Promise<PairedDevice>;
   registerPushToken(token: string, deviceId: string, input: RegisterPushTokenRequest): Promise<PairedDevice>;
