@@ -14,6 +14,10 @@
 - added a first-pass Freedom Anywhere typed contact-capture path so clear contact-style
   text entries can be recognized and saved into the canonical registry through the
   gateway without forcing a separate manual re-entry step
+- positioned that new typed-capture lane as the start of a broader Freedom Anywhere
+  training loop: the phone can read operator-supplied information, make a bounded
+  judgment about what it likely is, and route it into governed storage while the
+  conversation continues
 - added a Supabase migration that backfills legacy trusted email recipients into the
   new contacts plus channels model so existing outbound-email data can move forward
   without a manual re-entry pass

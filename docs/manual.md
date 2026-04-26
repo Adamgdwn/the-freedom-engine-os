@@ -177,6 +177,9 @@ that ties business outcomes back to freedom outcomes.
   retrieval. Use that as the canonical filing surface for people records and trusted
   email channels, then use `Communications` for governed draft review, send confirmation,
   and delivery audit.
+- Freedom Anywhere text capture is now starting to participate in the same learning loop:
+  if you type a clear contact-style entry, Freedom can conservatively recognize it and
+  route it into the canonical contacts registry while keeping the conversation moving.
 - The three-dots utility sheet is now oriented toward email/contact capture and
   retrieval. Treat it as the first pass toward a more robust contact-memory skill.
 - The utility sheet now uses a dedicated overlay backdrop plus an inner scroll view, so

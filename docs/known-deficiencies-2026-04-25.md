@@ -77,6 +77,10 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 - Stand-alone mobile sync now covers durable `learning` signals, conversation
   memories, and deferred governed operator-run drafts, but it still does not
   auto-sync self-programming requests or persona changes.
+- The new Freedom Anywhere typed contact-capture lane is still a narrow first pass:
+  it is strongest on explicit contact-style text with a real name and email, and it
+  still needs richer review, merge, ambiguity handling, and broader information-routing
+  judgment before it can be considered a full generalized training loop.
 - Stand-alone voice with the full Freedom Python voice agent running directly on
   the relay host is not started yet.
 - The current relay `/chat` path is still a bounded OpenAI-backed fallback and

@@ -154,6 +154,10 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Dedicated `Contacts` page for desktop-first manual entry, retrieval, and future import review.
 - First-pass Freedom Anywhere typed contact capture now exists for clear name-plus-email
   entries, routing them into the canonical contact registry through the gateway path.
+- Freedom Anywhere is now beginning to act like a governed training loop for operator-
+  supplied information: the phone can read a typed entry, use bounded logic to decide
+  whether it looks like contact material, save the result conservatively, and continue
+  the conversation instead of requiring a separate one-off data-entry mode.
 - Voice-prepared, confirmation-gated email drafts.
 - `Communications` now focuses on governed draft review, explicit send confirmation,
   and delivery audit instead of being the primary contact-entry surface.

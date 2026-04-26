@@ -97,6 +97,11 @@ surface than a one-shot relay:
 - stand-alone phone review/import now supports deferred operator-run drafts in addition
   to offline notes and conservative learning candidates; importing those drafts creates
   canonical `awaiting-approval` operator runs later rather than replaying them directly
+- typed phone capture is beginning to behave like a real training loop rather than a
+  dumb transcript box: when the operator enters clear contact-style information,
+  Freedom Anywhere can reason about the content, decide it likely belongs in the
+  contact system, save it conservatively through the gateway, and keep the live
+  conversation intact
 
 ## What To Configure
 
@@ -158,6 +163,10 @@ Optional control knobs:
 10. Use the small `Text` button for side-channel typed turns inside the current voice
     conversation, and use the `Build` view's `Launch build chat` flow when you want a
     separate project thread rather than more continuity in the default voice thread.
+11. When you want Freedom Anywhere to learn from typed information, prefer explicit
+    structured entries at first. Clear name-plus-email notes are the current strongest
+    path; broader "read this and figure out what to do with it" training is the next
+    expansion of the same loop.
 
 ## APK Download
 

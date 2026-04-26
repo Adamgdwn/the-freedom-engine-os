@@ -178,6 +178,10 @@ Status legend:
 - Contact capture and storage: add first-class contact memory contracts, storage, and
   review flows so Freedom can remember who people are, how they relate to the operator,
   and what communication context matters without scattering that state across ad hoc notes
+- extend the new Freedom Anywhere typed contact-capture lane into a broader training loop
+  where the phone can read operator-supplied information, reason about what category it
+  belongs to, ask follow-up questions when confidence is low, and route it into the
+  right governed storage surface instead of only handling explicit contact-style text
 - Email protocols: define durable protocol rules for recipient selection, trusted-contact
   status, threading and reply behavior, follow-up cadence, tone constraints, and when
   Freedom should stop for confirmation instead of drafting or sending automatically
