@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-04-26 (unified typed turns on the live Talk loop)
+
+- unified Freedom Anywhere typed turns with the main live `Talk` conversation instead
+  of treating typed sends as a separate side lane
+- when `Talk` is already active, pressing the arrow now injects the typed text into the
+  active Freedom voice session as a real turn and persists it in the canonical
+  conversation history
+- when the operator types first and presses the arrow before starting `Talk`, Freedom
+  now starts the talk loop automatically and then routes that typed turn into it
+- added a new realtime `text_turn` command on the Freedom voice worker so typed turns
+  can be handled by the same LiveKit/OpenAI voice session instead of being rerouted
+  through an unrelated text-only or fallback speech path
+- clarified the mobile `Talk` composer copy and docs so the phone now describes the
+  intended process directly: type, press the arrow, and Freedom continues the same
+  live conversation
+
 ## 2026-04-26 (contacts registry + governed communications split)
 
 - added a first canonical Supabase-backed contacts registry with contact cards and

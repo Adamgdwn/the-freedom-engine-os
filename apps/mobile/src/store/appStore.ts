@@ -246,6 +246,7 @@ export interface AppState {
   voiceAssistantDraft: string | null;
   voiceTelemetry: VoiceTelemetry;
   lastSpokenMessageId: string | null;
+  pendingTypedSpokenReplySessionId: string | null;
   notice: string | null;
   error: string | null;
   bootstrap(): Promise<void>;
@@ -304,6 +305,7 @@ export interface AppState {
 const api = new ApiClient();
 const voice = new VoiceService();
 const realtimeVoice = new RealtimeVoiceService();
+const typedSpeechRealtime = new RealtimeVoiceService();
 const fcm = new FcmService();
 const tts = new TtsService();
 const assistantSpeech = new AssistantSpeechRuntime(tts);
@@ -324,6 +326,12 @@ let pendingVoiceTranscript: string | null = null;
 let pendingVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingPartialVoiceCommitTimer: ReturnType<typeof setTimeout> | null = null;
 let realtimeInitialTurnStallTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingVoiceTextTurn: { sessionId: string; text: string } | null = null;
+let typedSpeechPlaybackQueue: Array<{ sessionId: string; text: string }> = [];
+let typedSpeechPlaybackSessionId: string | null = null;
+let typedSpeechPlaybackConnected = false;
+let typedSpeechPlaybackInFlight = false;
+let typedSpeechPlaybackStopTimer: ReturnType<typeof setTimeout> | null = null;
 
 function prefersRealtimePrimaryVoice(): boolean {
   return (VOICE_RUNTIME_MODE as string) === "realtime_primary";
@@ -396,6 +404,47 @@ function getDisconnectedAssistantReadyState(): { state: OfflineModelState; detai
         detail: "This slim build keeps cached chats, queued conversation memory, and stand-alone continuity, but it does not bundle the old on-device model."
       };
   }
+}
+
+function canRouteTypedSpeechThroughRealtime(
+  state: Pick<AppState, "offlineMode" | "voiceMuted" | "voiceSessionActive" | "voiceTargetSessionId" | "voiceRuntimeMode" | "token" | "baseUrl">,
+  sessionId: string
+): boolean {
+  if (!VOICE_SESSION_ENABLED || state.offlineMode || state.voiceMuted) {
+    return false;
+  }
+
+  if (state.voiceSessionActive) {
+    return usesRealtimeVoicePath(state) && state.voiceTargetSessionId === sessionId;
+  }
+
+  return prefersRealtimePrimaryVoice() && Boolean(state.token && state.baseUrl);
+}
+
+function clearPendingVoiceTextTurn(): void {
+  pendingVoiceTextTurn = null;
+}
+
+function canRouteTypedTurnIntoVoiceConversation(
+  state: Pick<AppState, "composerInputMode" | "offlineMode" | "voiceAvailable" | "voiceSessionActive">
+): boolean {
+  if (state.composerInputMode !== "text" || !VOICE_SESSION_ENABLED || !state.voiceAvailable) {
+    return false;
+  }
+
+  if (!state.offlineMode) {
+    return true;
+  }
+
+  return getDisconnectedAssistantMode() !== "notes_only";
+}
+
+function clearTypedSpeechPlaybackStopTimer(): void {
+  if (!typedSpeechPlaybackStopTimer) {
+    return;
+  }
+  clearTimeout(typedSpeechPlaybackStopTimer);
+  typedSpeechPlaybackStopTimer = null;
 }
 
 function getDisconnectedModeNotice(): string {
@@ -1968,6 +2017,7 @@ export const useAppStore = create<AppState>((set, get) => {
   voiceAssistantDraft: null,
   voiceTelemetry: defaultVoiceTelemetry(),
   lastSpokenMessageId: null,
+  pendingTypedSpokenReplySessionId: null,
   notice: null,
   error: null,
   async bootstrap() {
@@ -2192,9 +2242,16 @@ export const useAppStore = create<AppState>((set, get) => {
   },
   async disconnect() {
     clearPendingVoiceTranscript();
+    clearPendingVoiceTextTurn();
     disconnectSocket();
     voice.stopStreamingSession();
     void realtimeVoice.stopSession();
+    void typedSpeechRealtime.stopSession();
+    clearTypedSpeechPlaybackStopTimer();
+    typedSpeechPlaybackQueue = [];
+    typedSpeechPlaybackSessionId = null;
+    typedSpeechPlaybackConnected = false;
+    typedSpeechPlaybackInFlight = false;
     assistantSpeech.reset();
     tts.stop();
     unsubscribePushTokenRefresh?.();
@@ -2236,6 +2293,7 @@ export const useAppStore = create<AppState>((set, get) => {
       outboundRecipientEmailDraft: "",
       externalDraft: null,
       pendingExternalRequest: null,
+      pendingTypedSpokenReplySessionId: null,
       sendingExternalMessage: false,
       autoSpeak: get().autoSpeak,
       autoSendVoice: get().autoSendVoice,
@@ -2735,18 +2793,27 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
+    if (canRouteTypedTurnIntoVoiceConversation(get())) {
+      try {
+        await routeTypedTurnIntoVoiceConversation(get, set, text);
+        return;
+      } catch (error) {
+        await handleStoreError(error, set, get, "Could not route that typed turn into the talk loop.");
+        return;
+      }
+    }
+
     if (get().offlineMode) {
       await sendOfflineIdeationTurn(get, set);
       return;
     }
 
     try {
-      const token = requireValue(get().token, "Pair this phone with the desktop first.");
-      const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
-
       const isVoiceTurn = get().composerInputMode === "voice" || get().composerInputMode === "voice_polished";
       let sessionId = isVoiceTurn ? get().voiceTargetSessionId ?? get().selectedSessionId : get().selectedSessionId;
       if (!sessionId) {
+        const token = requireValue(get().token, "Pair this phone with the desktop first.");
+        const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
         const operatorSession = await ensureOperatorSession(get, set, {
           token,
           baseUrl,
@@ -2758,80 +2825,11 @@ export const useAppStore = create<AppState>((set, get) => {
         }
       }
       const resolvedSessionId = requireValue(sessionId, "Open or start a chat before sending a message.");
-      const targetSession = findSendTargetSession(resolvedSessionId, get().sessions);
-      const wasBusy = isSessionBusy(targetSession);
-
-      set({ sendingMessage: true, error: null });
-      const parsedExternalRequest = parseExternalSendRequest(text, get().outboundRecipients);
-      const message = await api.postMessage(token, baseUrl, resolvedSessionId, {
+      await postConnectedMessageTurn(get, set, {
+        sessionId: resolvedSessionId,
         text,
-        inputMode: get().composerInputMode,
-        responseStyle: get().responseStyle,
-        transcriptPolished: get().composerInputMode === "voice_polished",
-        runtimeContext: buildConnectedRuntimeContext(get())
+        inputMode: get().composerInputMode
       });
-      voiceInterruptRequested = false;
-      set((state) => ({
-        composer: "",
-        composerInputMode: "text",
-        sendingMessage: false,
-        voiceTargetSessionId:
-          state.voiceSessionActive && isVoiceTurn ? resolvedSessionId : state.voiceTargetSessionId,
-        notice:
-          wasBusy && isVoiceTurn
-            ? `${FREEDOM_RUNTIME_NAME} captured your interrupt and routed it without blocking the session.`
-            : wasBusy
-              ? `${FREEDOM_RUNTIME_NAME} routed your new request alongside the current work when it was safe to do so.`
-              : null,
-        liveTranscript: "",
-        voiceAudioLevel: -2,
-        pendingExternalRequest: parsedExternalRequest
-          ? buildPendingExternalRequest(resolvedSessionId, message.id, parsedExternalRequest, state.composerInputMode === "voice")
-          : state.pendingExternalRequest,
-        voiceSessionPhase:
-          state.voiceSessionActive && isVoiceTurn
-            ? "processing"
-            : state.voiceSessionActive && state.voiceSessionPhase !== "review"
-              ? state.voiceSessionPhase
-              : "idle",
-        messagesBySession: {
-          ...state.messagesBySession,
-          [resolvedSessionId]: [
-            ...(state.messagesBySession[resolvedSessionId] ?? []).filter((item) => item.id !== message.id),
-            message
-          ]
-        },
-        voiceTelemetry:
-          state.voiceSessionActive && isVoiceTurn
-            ? {
-                ...state.voiceTelemetry,
-                turnsStarted: state.voiceTelemetry.turnsStarted + 1
-              }
-            : state.voiceTelemetry,
-        error: null
-      }));
-      if (parsedExternalRequest) {
-        set({
-          notice: `${FREEDOM_RUNTIME_NAME} will prepare an email draft for ${parsedExternalRequest.recipientDestination} after this reply finishes, then wait for your confirmation.`,
-          error: null
-        });
-      }
-      void api.captureContactFromText(token, baseUrl, text)
-        .then((result) => {
-          if (!result.captured || !result.fullName) {
-            return;
-          }
-
-          set((state) => ({
-            notice:
-              state.notice ??
-              `${FREEDOM_RUNTIME_NAME} saved a contact card for ${result.fullName}${result.email ? ` (${result.email})` : ""}.`,
-            error: state.error
-          }));
-        })
-        .catch(() => undefined);
-      await persistOfflineSnapshot(get);
-      await get().refresh();
     } catch (error) {
       if (error instanceof Error && isDesktopUnreachableErrorMessage(error.message)) {
         set({
@@ -4259,6 +4257,7 @@ function buildRealtimeVoiceCallbacks(
         view: "chat"
       });
       refreshRealtimeInitialTurnStallTimer(get, set);
+      void flushPendingVoiceTextTurn(get, set).catch(() => undefined);
     },
     onDisconnected: (expected) => {
       clearRealtimeInitialTurnStallTimer();
@@ -4356,6 +4355,7 @@ function buildRealtimeVoiceCallbacks(
     },
     onError: (message) => {
       clearRealtimeInitialTurnStallTimer();
+      clearPendingVoiceTextTurn();
       if (shouldFallbackFromRealtimeVoice(message)) {
         void fallbackFromRealtimeToDeviceVoice(
           get,
@@ -4442,6 +4442,187 @@ async function restartActiveRealtimeVoiceSession(
   await startRealtimeVoiceSession(get, set, targetSessionId);
 }
 
+function scheduleTypedSpeechPlaybackStop(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): void {
+  clearTypedSpeechPlaybackStopTimer();
+  typedSpeechPlaybackStopTimer = setTimeout(() => {
+    typedSpeechPlaybackStopTimer = null;
+    void stopTypedSpeechPlayback(get, set).catch(() => undefined);
+  }, 1200);
+}
+
+async function stopTypedSpeechPlayback(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  clearTypedSpeechPlaybackStopTimer();
+  typedSpeechPlaybackQueue = [];
+  typedSpeechPlaybackSessionId = null;
+  typedSpeechPlaybackConnected = false;
+  typedSpeechPlaybackInFlight = false;
+  await typedSpeechRealtime.stopSession().catch(() => undefined);
+  set({ pendingTypedSpokenReplySessionId: null });
+}
+
+async function flushTypedSpeechPlaybackQueue(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  if (!typedSpeechPlaybackConnected || typedSpeechPlaybackInFlight || !typedSpeechPlaybackQueue.length) {
+    return;
+  }
+
+  const next = typedSpeechPlaybackQueue.shift();
+  if (!next) {
+    return;
+  }
+
+  typedSpeechPlaybackInFlight = true;
+  clearTypedSpeechPlaybackStopTimer();
+  try {
+    await typedSpeechRealtime.publishCommand({ type: "speak_text", text: next.text });
+  } catch (error) {
+    typedSpeechPlaybackInFlight = false;
+    typedSpeechPlaybackQueue = [];
+    await stopTypedSpeechPlayback(get, set);
+    set({
+      notice: null,
+      error: error instanceof Error ? error.message : "Freedom could not start typed-turn voice playback."
+    });
+  }
+}
+
+function buildTypedSpeechRealtimeCallbacks(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Parameters<RealtimeVoiceService["startSession"]>[1] {
+  return {
+    onConnected: (binding) => {
+      typedSpeechPlaybackSessionId = binding.chatSessionId;
+      typedSpeechPlaybackConnected = true;
+      typedSpeechPlaybackInFlight = false;
+      void flushTypedSpeechPlaybackQueue(get, set);
+    },
+    onDisconnected: () => {
+      clearTypedSpeechPlaybackStopTimer();
+      typedSpeechPlaybackQueue = [];
+      typedSpeechPlaybackConnected = false;
+      typedSpeechPlaybackInFlight = false;
+      typedSpeechPlaybackSessionId = null;
+      set({ pendingTypedSpokenReplySessionId: null });
+    },
+    onReconnecting: () => {
+      typedSpeechPlaybackConnected = false;
+    },
+    onReconnected: () => {
+      typedSpeechPlaybackConnected = true;
+      void flushTypedSpeechPlaybackQueue(get, set);
+    },
+    onStateChange: (state) => {
+      if (state === "speaking" || state === "processing") {
+        typedSpeechPlaybackInFlight = true;
+        clearTypedSpeechPlaybackStopTimer();
+        return;
+      }
+
+      if (state === "listening") {
+        const hadActiveSpeech = typedSpeechPlaybackInFlight;
+        typedSpeechPlaybackInFlight = false;
+        if (hadActiveSpeech && typedSpeechPlaybackQueue.length) {
+          void flushTypedSpeechPlaybackQueue(get, set);
+          return;
+        }
+        if (!typedSpeechPlaybackQueue.length) {
+          scheduleTypedSpeechPlaybackStop(get, set);
+        }
+      }
+    },
+    onTranscript: () => {
+      // Typed-turn playback uses the live Freedom voice renderer only.
+      // The canonical text transcript already comes from the desktop session lane.
+    },
+    onError: (message) => {
+      typedSpeechPlaybackQueue = [];
+      typedSpeechPlaybackConnected = false;
+      typedSpeechPlaybackInFlight = false;
+      typedSpeechPlaybackSessionId = null;
+      clearTypedSpeechPlaybackStopTimer();
+      set({
+        pendingTypedSpokenReplySessionId: null,
+        notice: null,
+        error: message
+      });
+    }
+  };
+}
+
+async function ensureTypedSpeechPlaybackSession(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  sessionId: string
+): Promise<void> {
+  if (typedSpeechPlaybackConnected && typedSpeechPlaybackSessionId === sessionId) {
+    return;
+  }
+
+  if (typedSpeechPlaybackSessionId && typedSpeechPlaybackSessionId !== sessionId) {
+    await stopTypedSpeechPlayback(get, set);
+  }
+
+  typedSpeechPlaybackSessionId = sessionId;
+  typedSpeechPlaybackConnected = false;
+  typedSpeechPlaybackInFlight = false;
+  clearTypedSpeechPlaybackStopTimer();
+
+  const recentMessages = buildRecentVoiceBootstrapMessages(
+    get().messagesBySession[sessionId] ?? []
+  );
+  const runtime = await api.createVoiceRuntimeSession(
+    requireValue(get().token, "Pair this phone with the desktop first."),
+    requireValue(get().baseUrl, "Desktop URL is required."),
+    {
+      voiceSessionId: createVoiceSessionId(),
+      chatSessionId: sessionId,
+      assistantName: FREEDOM_PRODUCT_NAME,
+      runtimeContext: buildConnectedRuntimeContext(get()),
+      ...(recentMessages.length > 0 ? { recentMessages } : {})
+    }
+  );
+
+  await typedSpeechRealtime.startSession(
+    runtime as Parameters<RealtimeVoiceService["startSession"]>[0],
+    buildTypedSpeechRealtimeCallbacks(get, set),
+    { enableMicrophone: false }
+  );
+}
+
+async function queueTypedSpeechPlayback(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  sessionId: string,
+  text: string
+): Promise<boolean> {
+  const trimmed = text.trim();
+  if (!trimmed || !canRouteTypedSpeechThroughRealtime(get(), sessionId)) {
+    return false;
+  }
+
+  if (get().voiceSessionActive) {
+    if (!usesRealtimeVoicePath(get()) || get().voiceTargetSessionId !== sessionId) {
+      return false;
+    }
+    await realtimeVoice.publishCommand({ type: "speak_text", text: trimmed });
+    return true;
+  }
+
+  typedSpeechPlaybackQueue.push({ sessionId, text: trimmed });
+  await ensureTypedSpeechPlaybackSession(get, set, sessionId);
+  await flushTypedSpeechPlaybackQueue(get, set);
+  return true;
+}
+
 async function startVoiceLoopRecognition(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
@@ -4479,8 +4660,15 @@ function stopActiveVoiceLoop(
   overrides?: Pick<AppState, "notice" | "error">
 ): void {
   clearPendingVoiceTranscript();
+  clearPendingVoiceTextTurn();
   voice.stopStreamingSession();
   void realtimeVoice.stopSession();
+  void typedSpeechRealtime.stopSession();
+  clearTypedSpeechPlaybackStopTimer();
+  typedSpeechPlaybackQueue = [];
+  typedSpeechPlaybackSessionId = null;
+  typedSpeechPlaybackConnected = false;
+  typedSpeechPlaybackInFlight = false;
   assistantSpeech.stop();
   set({
     listening: false,
@@ -4492,6 +4680,7 @@ function stopActiveVoiceLoop(
     liveTranscript: "",
     voiceAudioLevel: -2,
     voiceAssistantDraft: null,
+    pendingTypedSpokenReplySessionId: null,
     notice: overrides?.notice ?? null,
     error: overrides?.error ?? null
   });
@@ -4549,6 +4738,189 @@ function buildPendingExternalRequest(
     requestedSubject: request.requestedSubject,
     requestedBody: request.requestedBody
   };
+}
+
+async function postConnectedMessageTurn(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  options: {
+    sessionId: string;
+    text: string;
+    inputMode: InputMode;
+  }
+): Promise<void> {
+  const token = requireValue(get().token, "Pair this phone with the desktop first.");
+  const baseUrl = requireValue(get().baseUrl, "Desktop URL is required.");
+  const targetSession = findSendTargetSession(options.sessionId, get().sessions);
+  const wasBusy = isSessionBusy(targetSession);
+  const isVoiceTurn = options.inputMode === "voice" || options.inputMode === "voice_polished";
+  const parsedExternalRequest = parseExternalSendRequest(options.text, get().outboundRecipients);
+
+  set({ sendingMessage: true, error: null });
+
+  const message = await api.postMessage(token, baseUrl, options.sessionId, {
+    text: options.text,
+    inputMode: options.inputMode,
+    responseStyle: get().responseStyle,
+    transcriptPolished: options.inputMode === "voice_polished",
+    runtimeContext: buildConnectedRuntimeContext(get())
+  });
+
+  voiceInterruptRequested = false;
+  set((state) => ({
+    composer: "",
+    composerInputMode: "text",
+    selectedSessionId: options.sessionId,
+    view: "chat",
+    sendingMessage: false,
+    voiceTargetSessionId:
+      state.voiceSessionActive && isVoiceTurn ? options.sessionId : state.voiceTargetSessionId,
+    notice:
+      wasBusy && isVoiceTurn
+        ? `${FREEDOM_RUNTIME_NAME} captured your interrupt and routed it without blocking the session.`
+        : wasBusy
+          ? `${FREEDOM_RUNTIME_NAME} routed your new request alongside the current work when it was safe to do so.`
+          : null,
+    liveTranscript: "",
+    voiceAudioLevel: -2,
+    pendingExternalRequest: parsedExternalRequest
+      ? buildPendingExternalRequest(options.sessionId, message.id, parsedExternalRequest, options.inputMode !== "text")
+      : state.pendingExternalRequest,
+    voiceSessionPhase:
+      state.voiceSessionActive && isVoiceTurn
+        ? "processing"
+        : state.voiceSessionActive && state.voiceSessionPhase !== "review"
+          ? state.voiceSessionPhase
+          : "idle",
+    messagesBySession: {
+      ...state.messagesBySession,
+      [options.sessionId]: [
+        ...(state.messagesBySession[options.sessionId] ?? []).filter((item) => item.id !== message.id),
+        message
+      ]
+    },
+    voiceTelemetry:
+      state.voiceSessionActive && isVoiceTurn
+        ? {
+            ...state.voiceTelemetry,
+            turnsStarted: state.voiceTelemetry.turnsStarted + 1
+          }
+        : state.voiceTelemetry,
+    pendingTypedSpokenReplySessionId: null,
+    error: null
+  }));
+
+  if (parsedExternalRequest) {
+    set({
+      notice: `${FREEDOM_RUNTIME_NAME} will prepare an email draft for ${parsedExternalRequest.recipientDestination} after this reply finishes, then wait for your confirmation.`,
+      error: null
+    });
+  }
+
+  void api.captureContactFromText(token, baseUrl, options.text)
+    .then((result) => {
+      if (!result.captured || !result.fullName) {
+        return;
+      }
+
+      set((state) => ({
+        notice:
+          state.notice ??
+          `${FREEDOM_RUNTIME_NAME} saved a contact card for ${result.fullName}${result.email ? ` (${result.email})` : ""}.`,
+        error: state.error
+      }));
+    })
+    .catch(() => undefined);
+
+  await persistOfflineSnapshot(get);
+  await get().refresh();
+}
+
+async function flushPendingVoiceTextTurn(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<boolean> {
+  const pending = pendingVoiceTextTurn;
+  if (!pending || !get().voiceSessionActive) {
+    return false;
+  }
+
+  if (usesRealtimeVoicePath(get()) && get().voiceRuntimeBinding?.chatSessionId === pending.sessionId) {
+    await realtimeVoice.publishCommand({ type: "text_turn", text: pending.text });
+    clearPendingVoiceTextTurn();
+    set({
+      sendingMessage: false,
+      selectedSessionId: pending.sessionId,
+      view: "chat",
+      liveTranscript: pending.text,
+      voiceSessionPhase: "processing",
+      notice: null,
+      error: null
+    });
+    await persistOfflineSnapshot(get);
+    return true;
+  }
+
+  if (usesDeviceVoicePath(get()) && get().voiceTargetSessionId === pending.sessionId) {
+    clearPendingVoiceTextTurn();
+    await postConnectedMessageTurn(get, set, {
+      sessionId: pending.sessionId,
+      text: pending.text,
+      inputMode: "voice_polished"
+    });
+    return true;
+  }
+
+  return false;
+}
+
+async function routeTypedTurnIntoVoiceConversation(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void,
+  text: string
+): Promise<void> {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return;
+  }
+
+  const targetSessionId = get().voiceSessionActive
+    ? requireValue(get().voiceTargetSessionId ?? get().selectedSessionId, "Open or start a chat before sending a message.")
+    : await resolveVoiceTargetSessionId(get, set);
+
+  pendingVoiceTextTurn = {
+    sessionId: targetSessionId,
+    text: trimmed
+  };
+
+  set({
+    composer: "",
+    composerInputMode: "text",
+    selectedSessionId: targetSessionId,
+    view: "chat",
+    sendingMessage: true,
+    notice: get().voiceSessionActive
+      ? null
+      : get().offlineMode
+        ? "Freedom is starting the talk loop on this phone and routing your typed turn into the live conversation."
+        : "Freedom is starting the talk loop and routing your typed turn into the live conversation.",
+    error: null
+  });
+
+  try {
+    if (!get().voiceSessionActive) {
+      await get().toggleListening();
+    }
+
+    const flushed = await flushPendingVoiceTextTurn(get, set);
+    if (!flushed) {
+      throw new Error("Freedom could not attach that typed turn to the active talk loop.");
+    }
+  } catch (error) {
+    clearPendingVoiceTextTurn();
+    set({ sendingMessage: false });
+    throw error;
+  }
 }
 
 function buildExternalDraftFromPendingRequest(
@@ -4986,7 +5358,12 @@ function applyStreamEvent(
       isVoiceTargetSession &&
       usesDeviceVoicePath(currentState)
   );
+  const pendingTypedSpokenReply =
+    currentState.pendingTypedSpokenReplySessionId === payload.sessionId &&
+    payload.message.role === "assistant";
   let shouldDirectFallbackSpeak = false;
+  let shouldQueueTypedSpeechReply = false;
+  let shouldStopTypedSpeechReply = false;
 
   set((state) => {
     const currentMessages = state.messagesBySession[payload.sessionId] ?? [];
@@ -5010,6 +5387,13 @@ function applyStreamEvent(
     const speechQueued =
       shouldVoiceSpeak &&
       assistantSpeech.ingest(payload.message.id, payload.message.content, payload.message.status, VOICE_TTS_MIN_CHARS);
+    shouldQueueTypedSpeechReply =
+      pendingTypedSpokenReply &&
+      payload.message.status === "completed" &&
+      payload.message.content.trim().length > 0;
+    shouldStopTypedSpeechReply =
+      pendingTypedSpokenReply &&
+      (payload.message.status === "failed" || payload.message.status === "interrupted");
     shouldDirectFallbackSpeak = shouldDirectlyFallbackSpeech(payload.message, shouldVoiceSpeak, Boolean(speechQueued));
     const voiceTelemetry =
       payload.message.role === "assistant" &&
@@ -5032,6 +5416,10 @@ function applyStreamEvent(
       externalDraft: resolvedExternalDraft,
       pendingExternalRequest:
         payload.message.role === "assistant" && payload.message.status !== "streaming" && pendingExternalRequest ? null : state.pendingExternalRequest,
+      pendingTypedSpokenReplySessionId:
+        (shouldQueueTypedSpeechReply || shouldStopTypedSpeechReply)
+          ? null
+          : state.pendingTypedSpokenReplySessionId,
       voiceAssistantDraft:
         payload.message.role === "assistant" && isVoiceTargetSession && voiceSessionUsesDeviceSpeech ? payload.message.content : state.voiceAssistantDraft,
       voiceSessionPhase:
@@ -5045,7 +5433,9 @@ function applyStreamEvent(
                 : "listening"
           : state.voiceSessionPhase,
       lastSpokenMessageId:
-        shouldVoiceSpeak && payload.message.status === "completed" ? payload.message.id : state.lastSpokenMessageId,
+        shouldVoiceSpeak && payload.message.status === "completed"
+          ? payload.message.id
+          : state.lastSpokenMessageId,
       voiceTelemetry,
       notice:
         payload.message.role === "assistant" && payload.message.status === "completed" && pendingExternalRequest
@@ -5062,6 +5452,12 @@ function applyStreamEvent(
 
   if (shouldDirectFallbackSpeak) {
     tts.speak(payload.message.content);
+  }
+
+  if (shouldQueueTypedSpeechReply) {
+    void queueTypedSpeechPlayback(get, set, payload.sessionId, payload.message.content).catch(() => undefined);
+  } else if (shouldStopTypedSpeechReply) {
+    void stopTypedSpeechPlayback(get, set).catch(() => undefined);
   }
 
   if (shouldQueueExternalDraftPrompt && preparedExternalDraft && pendingExternalRequest) {
@@ -5450,6 +5846,12 @@ async function enterRepairMode(
   disconnectSocket();
   voice.stopStreamingSession();
   void realtimeVoice.stopSession();
+  void typedSpeechRealtime.stopSession();
+  clearTypedSpeechPlaybackStopTimer();
+  typedSpeechPlaybackQueue = [];
+  typedSpeechPlaybackSessionId = null;
+  typedSpeechPlaybackConnected = false;
+  typedSpeechPlaybackInFlight = false;
   assistantSpeech.reset();
   tts.stop();
   unsubscribePushTokenRefresh?.();
@@ -5483,6 +5885,7 @@ async function enterRepairMode(
     liveTranscript: "",
     voiceAudioLevel: -2,
     voiceAssistantDraft: null,
+    pendingTypedSpokenReplySessionId: null,
     voiceTelemetry: defaultVoiceTelemetry(),
     lastSpokenMessageId: null,
     externalDraft: null,

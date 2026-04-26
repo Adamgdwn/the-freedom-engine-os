@@ -1244,6 +1244,19 @@ export function ChatScreen(props: {
     }
   }, [lastMessage?.role, lastMessage?.status, store.offlineMode, store.sendingMessage]);
 
+  useEffect(() => {
+    if (store.offlineMode) {
+      return;
+    }
+    if (store.sendingMessage) {
+      setShowTranscript(true);
+      return;
+    }
+    if (lastMessage?.role === "user" && lastMessage.inputMode === "text") {
+      setShowTranscript(true);
+    }
+  }, [lastMessage?.id, lastMessage?.role, lastMessage?.inputMode, store.offlineMode, store.sendingMessage]);
+
   return (
     <View style={styles.chatScreen}>
       <ScrollView
@@ -1630,7 +1643,7 @@ export function ChatScreen(props: {
             </Pressable>
           </View>
           <Text style={styles.voiceComposerPanelHint}>
-            Type a side note or a full turn here without giving up the live voice controls below.
+            Type here, then press the arrow to feed it into the live Freedom conversation. If Talk is not running yet, the arrow will start it first.
           </Text>
           <TextInput
             ref={composerRef}

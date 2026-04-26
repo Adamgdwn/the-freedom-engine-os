@@ -37,6 +37,10 @@ For the consolidated dated list of currently known deficiencies, see
   desktop control plane is now a denser workbench and the Android shell now matches the
   command-and-capture voice posture more closely, with `Start`, `Talk`, and the hidden
   utility sheet replacing the older dashboard-style phone shell
+- Unified typed-plus-talk loop:
+  Freedom Anywhere typed turns on the `Talk` canvas now join the same live Freedom
+  conversation instead of a separate side lane, and pressing the arrow can bootstrap
+  the talk loop automatically when the operator starts with text first
 - Conversational voice profile control:
   Freedom can now save live voice preferences for preset voice, gender presentation,
   accent hints, tone, warmth, and pace from conversation, and the Android companion

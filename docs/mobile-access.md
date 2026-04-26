@@ -85,6 +85,10 @@ surface than a one-shot relay:
   a raised typed-turn composer, and one lower `Recent thread` card for opening and
   collapsing transcript history without overloading the center Freedom dialogue; the
   transcript itself now scrolls inside a bounded panel so the collapse control stays reachable
+- the typed composer on `Talk` now feeds the same live Freedom conversation instead of
+  a separate side-channel: if the talk loop is already active, the arrow injects that
+  typed turn into the current voice session; if not, the arrow starts the talk loop and
+  routes the typed turn into it automatically
 - the governed `From Conversations To Build` queue now lives in the pull-down utility
   sheet instead of the main start surface, so Freedom can surface it intentionally when
   a conversation should graduate into real build work
@@ -160,9 +164,11 @@ Optional control knobs:
    gender presentation, accent hint, tone, pace, or warmth. Restart the voice session
    to hear a new realtime preset; the phone's local spoken-reply fallback picker stays
    separate in Homebase.
-10. Use the small `Text` button for side-channel typed turns inside the current voice
-    conversation, and use the `Build` view's `Launch build chat` flow when you want a
-    separate project thread rather than more continuity in the default voice thread.
+10. Use the small `Text` button when you want to type into the current Freedom
+    conversation. Press the arrow to send that typed turn through the live talk loop;
+    if `Talk` is not already running, the arrow now starts it first. Use the `Build`
+    view's `Launch build chat` flow when you want a separate project thread rather than
+    more continuity in the default voice thread.
 11. When you want Freedom Anywhere to learn from typed information, prefer explicit
     structured entries at first. Clear name-plus-email notes are the current strongest
     path; broader "read this and figure out what to do with it" training is the next

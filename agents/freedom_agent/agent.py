@@ -16,6 +16,7 @@ Required env vars (set in .env at repo root or export in shell):
 import asyncio
 import json
 import os
+from collections import Counter
 from dotenv import load_dotenv
 from openai.types import realtime
 
@@ -106,6 +107,7 @@ async def entrypoint(ctx: agents.JobContext) -> None:
     instructions = SYSTEM_PROMPT if not supplemental_context else f"{SYSTEM_PROMPT}\n\nRuntime context:\n{supplemental_context}"
     user_transcript_count = 0
     assistant_transcript_count = 0
+    suppressed_assistant_outputs: Counter[str] = Counter()
 
     session = AgentSession(
         llm=lk_openai.realtime.RealtimeModel(
@@ -133,6 +135,39 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         except Exception:
             return
 
+    async def handle_text_turn(text: str) -> None:
+        nonlocal user_transcript_count
+        transcript = text.strip()
+        if not transcript:
+            return
+
+        try:
+            await session.interrupt()
+        except Exception:
+            pass
+
+        user_transcript_count += 1
+        persist_voice_runtime_transcript(
+            ctx.room.name,
+            f"{ctx.room.name}:user:{user_transcript_count}",
+            "user",
+            transcript,
+        )
+        await publish_event({
+            "type": "transcript",
+            "text": transcript,
+            "source": "user",
+            "final": True,
+        })
+
+        try:
+            await session.generate_reply(
+                user_input=transcript,
+                input_modality="text",
+            )
+        except Exception:
+            return
+
     def on_data_received(packet: rtc.DataPacket) -> None:
         try:
             message = json.loads(packet.data.decode("utf-8"))
@@ -141,6 +176,18 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
         if message.get("type") == "interrupt":
             asyncio.ensure_future(session.interrupt())
+            return
+
+        if message.get("type") == "text_turn":
+            asyncio.ensure_future(handle_text_turn(str(message.get("text", ""))))
+            return
+
+        if message.get("type") == "speak_text":
+            text = str(message.get("text", "")).strip()
+            if not text:
+                return
+            suppressed_assistant_outputs[text] += 1
+            session.say(text)
 
     @session.on("user_input_transcribed")
     def on_user_input_transcribed(event) -> None:
@@ -175,6 +222,11 @@ async def entrypoint(ctx: agents.JobContext) -> None:
 
         text = getattr(item, "text_content", "").strip()
         if text:
+            if suppressed_assistant_outputs.get(text, 0) > 0:
+                suppressed_assistant_outputs[text] -= 1
+                if suppressed_assistant_outputs[text] <= 0:
+                    suppressed_assistant_outputs.pop(text, None)
+                return
             assistant_transcript_count += 1
             persist_voice_runtime_transcript(
                 ctx.room.name,

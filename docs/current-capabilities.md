@@ -213,6 +213,11 @@ For the consolidated dated list of known gaps and unfinished areas, see
   `Mute`, a small `Text` entry button, a dedicated raised typed-turn composer,
   and one lower `Recent thread` card as the transcript open/close surface, with the
   transcript body scrolling inside a bounded panel so the collapse action stays visible.
+- Typed entry on that same `Talk` canvas now follows the same live conversation model
+  instead of acting like a side lane: if `Talk` is already running, pressing the arrow
+  sends the typed text into the active Freedom voice conversation as a real turn; if
+  `Talk` is not running yet, the arrow starts the talk loop first and then routes that
+  typed turn into it automatically.
 - Freedom Anywhere now supports two distinct thread postures:
   one continuity-first default voice thread for ongoing relationship memory and
   day-to-day work, plus explicit new project kickoff through the `Build` view's

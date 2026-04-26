@@ -54,6 +54,10 @@ type RealtimeVoiceCallbacks = {
   onError(message: string): void;
 };
 
+type RealtimeVoiceStartOptions = {
+  enableMicrophone?: boolean;
+};
+
 function isVoiceRuntimeState(value: unknown): value is VoiceRuntimeState {
   return value === "listening" || value === "processing" || value === "speaking";
 }
@@ -86,19 +90,27 @@ export class RealtimeVoiceService {
   private audioSessionStarted = false;
   private responderWatchdog: ReturnType<typeof setTimeout> | null = null;
   private receivedWorkerSignal = false;
+  private microphoneEnabled = true;
 
   async isAvailable(): Promise<boolean> {
     return true;
   }
 
-  async startSession(payload: RealtimeVoiceSessionPayload, callbacks: RealtimeVoiceCallbacks): Promise<void> {
+  async startSession(
+    payload: RealtimeVoiceSessionPayload,
+    callbacks: RealtimeVoiceCallbacks,
+    options?: RealtimeVoiceStartOptions
+  ): Promise<void> {
     await this.stopSession();
 
     this.disconnectExpected = false;
     this.callbacks = callbacks;
+    this.microphoneEnabled = options?.enableMicrophone !== false;
 
     try {
-      await ensureMicrophonePermission();
+      if (this.microphoneEnabled) {
+        await ensureMicrophonePermission();
+      }
       await AudioSession.configureAudio({
         android: {
           preferredOutputList: ["bluetooth", "headset", "speaker", "earpiece"],
@@ -149,7 +161,7 @@ export class RealtimeVoiceService {
       });
 
       room.on(RoomEvent.LocalAudioSilenceDetected, () => {
-        if (this.room !== room) {
+        if (this.room !== room || !this.microphoneEnabled) {
           return;
         }
         callbacks.onError(
@@ -160,7 +172,7 @@ export class RealtimeVoiceService {
 
       await room.prepareConnection(payload.wsUrl, payload.token).catch(() => undefined);
       await room.connect(payload.wsUrl, payload.token);
-      await room.localParticipant.setMicrophoneEnabled(true, MIC_CAPTURE_OPTIONS);
+      await room.localParticipant.setMicrophoneEnabled(this.microphoneEnabled, MIC_CAPTURE_OPTIONS);
       this.receivedWorkerSignal = false;
       this.startResponderWatchdog(room, callbacks);
 
@@ -186,8 +198,16 @@ export class RealtimeVoiceService {
       return;
     }
 
+    await this.publishCommand({ type: "interrupt" });
+  }
+
+  async publishCommand(message: Record<string, unknown>): Promise<void> {
+    if (!this.room) {
+      return;
+    }
+
     await this.room.localParticipant.publishData(
-      encodeTextUtf8(JSON.stringify({ type: "interrupt" })),
+      encodeTextUtf8(JSON.stringify(message)),
       { reliable: true }
     );
   }
