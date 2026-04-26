@@ -11,6 +11,9 @@
 - rewired the web/control-plane email path to prefer trusted email channels from the
   canonical contact registry while keeping the older recipient table as a compatibility
   lane during transition
+- added a first-pass Freedom Anywhere typed contact-capture path so clear contact-style
+  text entries can be recognized and saved into the canonical registry through the
+  gateway without forcing a separate manual re-entry step
 - added a Supabase migration that backfills legacy trusted email recipients into the
   new contacts plus channels model so existing outbound-email data can move forward
   without a manual re-entry pass

@@ -10,6 +10,7 @@ export * from "./modelRouter.js";
 export * from "./autonomousOperator.js";
 export * from "./voiceProfile.js";
 export * from "./controlPlaneRuntime.js";
+export * from "./contactCapture.js";
 export {
   buildLaneApprovalStates,
   buildLaneRequestedFromValues,

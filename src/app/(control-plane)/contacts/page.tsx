@@ -46,6 +46,11 @@ export default function ContactsPage() {
                 silo of “possible contacts.”
               </p>
               <p>
+                Freedom Anywhere now has a first-pass typed capture lane as well: if you enter a
+                clear contact-style note with a real name and email address, Freedom can save that
+                into this registry in the background while still keeping the conversation moving.
+              </p>
+              <p>
                 Use Communications after the contact exists. That keeps the operating path clean:
                 file the person here, then draft and send through the governed external-communications surface.
               </p>

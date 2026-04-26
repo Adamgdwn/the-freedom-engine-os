@@ -152,6 +152,8 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Canonical Supabase-backed contact registry with trusted email channels for the current
   web/control-plane path.
 - Dedicated `Contacts` page for desktop-first manual entry, retrieval, and future import review.
+- First-pass Freedom Anywhere typed contact capture now exists for clear name-plus-email
+  entries, routing them into the canonical contact registry through the gateway path.
 - Voice-prepared, confirmation-gated email drafts.
 - `Communications` now focuses on governed draft review, explicit send confirmation,
   and delivery audit instead of being the primary contact-entry surface.

@@ -102,7 +102,7 @@ export function VoicePanel() {
         </div>
         <p className="mt-2 text-xs text-[color:var(--ink-soft)]">
           {emailStatus.enabled
-            ? `${emailStatus.recipientCount} trusted recipients ready`
+            ? `${emailStatus.recipientCount} trusted contact lanes ready`
             : 'Email delivery not configured yet'}
         </p>
         {pendingEmailDraft ? (

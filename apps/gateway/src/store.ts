@@ -2,12 +2,14 @@ import { EventEmitter } from "node:events";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { createId, generatePairingCode, nowIso } from "@freedom/shared";
+import { createId, generatePairingCode, nowIso, parseContactCaptureText } from "@freedom/shared";
 import { AccessToken } from "livekit-server-sdk";
 import type {
   AutonomousOperatorRun,
   AuditEvent,
   AssistantVoiceProfile,
+  CaptureContactFromTextRequest,
+  CaptureContactFromTextResponse,
   ChatMessage,
   ChatSession,
   ConversationBuildLaneItem,
@@ -122,6 +124,22 @@ interface VoiceRuntimeSessionRecord {
   createdAt: string;
   expiresAt: string;
 }
+
+type ContactRow = {
+  id: string;
+  full_name: string;
+  preferred_name: string | null;
+  organization: string | null;
+  title: string | null;
+  relationship_context: string | null;
+  notes: string | null;
+};
+
+type ContactChannelRow = {
+  id: string;
+  contact_id: string;
+  value: string;
+};
 
 type MemoryFollowUpRecord = MemoryFollowUpCandidate;
 type OperatorRunRecord = AutonomousOperatorRun;
@@ -1323,6 +1341,30 @@ export class GatewayStore {
       channel: recipient.channel,
       deliveredAt
     };
+  }
+
+  async captureContactFromText(
+    token: string,
+    input: CaptureContactFromTextRequest
+  ): Promise<CaptureContactFromTextResponse> {
+    const principal = await this.requireDevice(token);
+    await this.touchDevice(principal.device);
+    const result = await captureContactIntoSupabase(input.text);
+
+    if (result.captured) {
+      const state = await this.readState();
+      this.addAuditEvent(state, {
+        hostId: principal.host.id,
+        deviceId: principal.device.id,
+        sessionId: null,
+        type: "contact_captured",
+        originSurface: "mobile_companion",
+        detail: `${result.fullName ?? "Unknown"} <${result.email ?? "no-email"}>`
+      });
+      await this.writeState(state);
+    }
+
+    return result;
   }
 
   async listSessions(token: string): Promise<ChatSession[]> {
@@ -3403,6 +3445,190 @@ async function fetchConversationMemoryRows(limit: number): Promise<ConversationM
   } catch {
     return [];
   }
+}
+
+function contactSupabaseHeaders(serviceRoleKey: string): HeadersInit {
+  return {
+    apikey: serviceRoleKey,
+    authorization: `Bearer ${serviceRoleKey}`,
+    "content-type": "application/json",
+    prefer: "return=representation"
+  };
+}
+
+function getSupabaseAdminRuntime() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  return { supabaseUrl, serviceRoleKey };
+}
+
+async function captureContactIntoSupabase(text: string): Promise<CaptureContactFromTextResponse> {
+  const candidate = parseContactCaptureText(text);
+  if (!candidate) {
+    return {
+      captured: false,
+      contactId: null,
+      fullName: null,
+      email: null,
+      reason: "no_candidate"
+    };
+  }
+
+  const { supabaseUrl, serviceRoleKey } = getSupabaseAdminRuntime();
+  if (!supabaseUrl || !serviceRoleKey) {
+    return {
+      captured: false,
+      contactId: null,
+      fullName: null,
+      email: null,
+      reason: "no_candidate"
+    };
+  }
+
+  try {
+    const channelUrl = new URL("/rest/v1/freedom_contact_channels", supabaseUrl);
+    channelUrl.searchParams.set("select", "id,contact_id,value");
+    channelUrl.searchParams.set("channel_type", "eq.email");
+    channelUrl.searchParams.set("value", `eq.${candidate.email}`);
+    channelUrl.searchParams.set("limit", "1");
+
+    const existingChannelResponse = await fetch(channelUrl, {
+      headers: contactSupabaseHeaders(serviceRoleKey)
+    });
+    if (existingChannelResponse.ok) {
+      const existingChannels = await existingChannelResponse.json() as ContactChannelRow[];
+      const existingChannel = Array.isArray(existingChannels) ? existingChannels[0] : null;
+      if (existingChannel?.contact_id) {
+        const contactUrl = new URL("/rest/v1/freedom_contacts", supabaseUrl);
+        contactUrl.searchParams.set("select", "id,full_name,preferred_name,organization,title,relationship_context,notes");
+        contactUrl.searchParams.set("id", `eq.${existingChannel.contact_id}`);
+        contactUrl.searchParams.set("limit", "1");
+        const existingContactResponse = await fetch(contactUrl, {
+          headers: contactSupabaseHeaders(serviceRoleKey)
+        });
+        const existingContacts = existingContactResponse.ok
+          ? (await existingContactResponse.json() as ContactRow[])
+          : [];
+        const existingContact = Array.isArray(existingContacts) ? existingContacts[0] : null;
+
+        if (existingContact) {
+          const updatePayload = {
+            full_name: existingContact.full_name || candidate.fullName,
+            organization: existingContact.organization || candidate.organization,
+            title: existingContact.title || candidate.title,
+            relationship_context: existingContact.relationship_context || candidate.relationshipContext,
+            notes: mergeContactNotes(existingContact.notes, candidate.notes),
+            updated_at: nowIso()
+          };
+
+          await fetch(new URL(`/rest/v1/freedom_contacts?id=eq.${existingContact.id}`, supabaseUrl), {
+            method: "PATCH",
+            headers: contactSupabaseHeaders(serviceRoleKey),
+            body: JSON.stringify(updatePayload)
+          });
+        }
+
+        return {
+          captured: true,
+          contactId: existingChannel.contact_id,
+          fullName: candidate.fullName,
+          email: candidate.email,
+          reason: "updated_contact"
+        };
+      }
+    }
+
+    const createdAt = nowIso();
+    const createContactResponse = await fetch(new URL("/rest/v1/freedom_contacts", supabaseUrl), {
+      method: "POST",
+      headers: contactSupabaseHeaders(serviceRoleKey),
+      body: JSON.stringify({
+        full_name: candidate.fullName,
+        preferred_name: null,
+        organization: candidate.organization,
+        title: candidate.title,
+        relationship_context: candidate.relationshipContext,
+        notes: candidate.notes,
+        status: "active",
+        source_kind: "mobile_capture",
+        source_detail: "freedom_anywhere_text",
+        created_at: createdAt,
+        updated_at: createdAt
+      })
+    });
+
+    if (!createContactResponse.ok) {
+      return {
+        captured: false,
+        contactId: null,
+        fullName: null,
+        email: null,
+        reason: "no_candidate"
+      };
+    }
+
+    const createdContacts = await createContactResponse.json() as ContactRow[];
+    const createdContact = Array.isArray(createdContacts) ? createdContacts[0] : null;
+    if (!createdContact?.id) {
+      return {
+        captured: false,
+        contactId: null,
+        fullName: null,
+        email: null,
+        reason: "no_candidate"
+      };
+    }
+
+    await fetch(new URL("/rest/v1/freedom_contact_channels", supabaseUrl), {
+      method: "POST",
+      headers: contactSupabaseHeaders(serviceRoleKey),
+      body: JSON.stringify({
+        contact_id: createdContact.id,
+        channel_type: "email",
+        label: "Primary email",
+        value: candidate.email,
+        is_primary: true,
+        trust_for_email: true,
+        approval_required: true,
+        status: "active",
+        source_kind: "mobile_capture",
+        source_detail: "freedom_anywhere_text",
+        created_at: createdAt,
+        updated_at: createdAt
+      })
+    });
+
+    return {
+      captured: true,
+      contactId: createdContact.id,
+      fullName: candidate.fullName,
+      email: candidate.email,
+      reason: "saved_contact"
+    };
+  } catch {
+    return {
+      captured: false,
+      contactId: null,
+      fullName: null,
+      email: null,
+      reason: "no_candidate"
+    };
+  }
+}
+
+function mergeContactNotes(current: string | null, incoming: string | null): string | null {
+  const currentValue = current?.trim() ?? "";
+  const incomingValue = incoming?.trim() ?? "";
+  if (!incomingValue) {
+    return currentValue || null;
+  }
+  if (!currentValue) {
+    return incomingValue;
+  }
+  if (currentValue.includes(incomingValue)) {
+    return currentValue;
+  }
+  return `${currentValue}\n\n${incomingValue}`;
 }
 
 async function upsertLearningSignals(signals: SyncMobileLearningSignalsRequest["signals"]): Promise<string[]> {

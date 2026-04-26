@@ -1,5 +1,7 @@
 import type {
   ChatMessage,
+  CaptureContactFromTextRequest,
+  CaptureContactFromTextResponse,
   ChatSession,
   CreateOutboundRecipientRequest,
   CreateSessionRequest,
@@ -81,6 +83,7 @@ export interface MobileApi {
   createOutboundRecipient(token: string, input: CreateOutboundRecipientRequest): Promise<OutboundRecipient>;
   deleteOutboundRecipient(token: string, recipientId: string): Promise<{ ok: true; deletedRecipientId: string }>;
   sendExternalMessage(token: string, input: SendExternalMessageRequest): Promise<SendExternalMessageResponse>;
+  captureContactFromText(token: string, input: CaptureContactFromTextRequest): Promise<CaptureContactFromTextResponse>;
 }
 
 export interface HostApi {

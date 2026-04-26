@@ -361,7 +361,7 @@ async function resolveTrustedRecipient(input: {
   }
 
   if (!data) {
-    throw new Error('Recipient is not trusted yet. Add it in Communications first.');
+    throw new Error('Recipient is not trusted yet. Add it on the Contacts page first.');
   }
 
   return mapRecipient(data);

@@ -4,6 +4,7 @@ import path from "node:path";
 import dotenv from "dotenv";
 import {
   autonomousOperatorRunSchema,
+  captureContactFromTextRequestSchema,
   operatorRunPatchSchema,
   loadControlPlaneRuntimeSummary,
   createOutboundRecipientRequestSchema,
@@ -533,6 +534,12 @@ const server = createServer(async (req, res) => {
     if (method === "POST" && url.pathname === "/outbound/send") {
       const parsed = sendExternalMessageRequestSchema.parse(await readJson(req));
       sendJson(res, 200, await store.sendExternalMessage(readBearer(req), parsed));
+      return;
+    }
+
+    if (method === "POST" && url.pathname === "/contacts/capture") {
+      const parsed = captureContactFromTextRequestSchema.parse(await readJson(req));
+      sendJson(res, 200, await store.captureContactFromText(readBearer(req), parsed));
       return;
     }
 

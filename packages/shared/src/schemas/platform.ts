@@ -618,6 +618,18 @@ export const sendExternalMessageResponseSchema = z.object({
   deliveredAt: z.string().datetime()
 });
 
+export const captureContactFromTextRequestSchema = z.object({
+  text: z.string().min(1).max(4000)
+});
+
+export const captureContactFromTextResponseSchema = z.object({
+  captured: z.boolean(),
+  contactId: z.string().min(1).nullable(),
+  fullName: z.string().min(1).nullable(),
+  email: z.string().email().nullable(),
+  reason: z.enum(["saved_contact", "updated_contact", "no_candidate"])
+});
+
 export const wakeRelayRequestSchema = z.object({
   targetId: z.string().min(1)
 });
@@ -728,6 +740,8 @@ export type OutboundRecipient = z.infer<typeof outboundRecipientSchema>;
 export type CreateOutboundRecipientRequest = z.infer<typeof createOutboundRecipientRequestSchema>;
 export type SendExternalMessageRequest = z.infer<typeof sendExternalMessageRequestSchema>;
 export type SendExternalMessageResponse = z.infer<typeof sendExternalMessageResponseSchema>;
+export type CaptureContactFromTextRequest = z.infer<typeof captureContactFromTextRequestSchema>;
+export type CaptureContactFromTextResponse = z.infer<typeof captureContactFromTextResponseSchema>;
 export type WakeRelayRequest = z.infer<typeof wakeRelayRequestSchema>;
 export type WakeRelayResponse = z.infer<typeof wakeRelayResponseSchema>;
 export type WakeRelayTarget = z.infer<typeof wakeRelayTargetSchema>;

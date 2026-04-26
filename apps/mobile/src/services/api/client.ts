@@ -1,6 +1,7 @@
 import type {
   AssistantVoiceProfile,
   AutonomousOperatorRun,
+  CaptureContactFromTextResponse,
   ChatMessage,
   ChatSession,
   CreateOutboundRecipientRequest,
@@ -211,6 +212,14 @@ export class ApiClient {
     input: SendExternalMessageRequest
   ): Promise<SendExternalMessageResponse> {
     return this.request("POST", `${baseUrl}/outbound/send`, token, input);
+  }
+
+  captureContactFromText(
+    token: string,
+    baseUrl: string,
+    text: string
+  ): Promise<CaptureContactFromTextResponse> {
+    return this.request("POST", `${baseUrl}/contacts/capture`, token, { text });
   }
 
   private async request<T>(method: string, url: string, token?: string, body?: unknown): Promise<T> {

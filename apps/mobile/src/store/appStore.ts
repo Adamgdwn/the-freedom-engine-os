@@ -2816,6 +2816,20 @@ export const useAppStore = create<AppState>((set, get) => {
           error: null
         });
       }
+      void api.captureContactFromText(token, baseUrl, text)
+        .then((result) => {
+          if (!result.captured || !result.fullName) {
+            return;
+          }
+
+          set((state) => ({
+            notice:
+              state.notice ??
+              `${FREEDOM_RUNTIME_NAME} saved a contact card for ${result.fullName}${result.email ? ` (${result.email})` : ""}.`,
+            error: state.error
+          }));
+        })
+        .catch(() => undefined);
       await persistOfflineSnapshot(get);
       await get().refresh();
     } catch (error) {
