@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  ContactRound,
   BookOpen,
   Bot,
   CalendarCheck,
@@ -24,6 +25,7 @@ export const CONTROL_PLANE_NAVIGATION: NavigationItem[] = [
   { href: '/', label: 'Portfolio Home', shortLabel: 'Home', icon: Home },
   { href: '/workflow-lab', label: 'Workflow Lab', shortLabel: 'Workflows', icon: FlaskConical },
   { href: '/agent-control', label: 'Agent Control', shortLabel: 'Agents', icon: Bot },
+  { href: '/contacts', label: 'Contacts', shortLabel: 'Contacts', icon: ContactRound },
   { href: '/communications', label: 'Communications', shortLabel: 'Comms', icon: Mail },
   { href: '/governance', label: 'Governance', shortLabel: 'Govern', icon: ShieldCheck },
   { href: '/evidence-room', label: 'Evidence Room', shortLabel: 'Evidence', icon: FolderSearch },

@@ -2,7 +2,7 @@
 
 Document status: live reference
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -22,8 +22,8 @@ For the consolidated dated list of known gaps and unfinished areas, see
 ### Control Plane
 
 - Next.js 16 governed control plane with:
-  Portfolio Home, Workflow Lab, Agent Control, Governance Console, Evidence Room,
-  Weekly Review, Learning Registry, Model Router, and Communications.
+  Portfolio Home, Workflow Lab, Agent Control, Contacts, Communications,
+  Governance Console, Evidence Room, Weekly Review, Learning Registry, and Model Router.
 - Shared operator workbench shell with:
   a compact top bar, desktop activity rail, launcher-style Portfolio Home tabs,
   an inspectable desktop voice console, and a stronger mobile bottom voice action.
@@ -149,9 +149,12 @@ For the consolidated dated list of known gaps and unfinished areas, see
 ### Communications
 
 - Server-side outbound email using Resend env configuration.
-- Trusted-recipient registry in Supabase for the current web/control-plane path.
+- Canonical Supabase-backed contact registry with trusted email channels for the current
+  web/control-plane path.
+- Dedicated `Contacts` page for desktop-first manual entry, retrieval, and future import review.
 - Voice-prepared, confirmation-gated email drafts.
-- UI confirmation before sending external email.
+- `Communications` now focuses on governed draft review, explicit send confirmation,
+  and delivery audit instead of being the primary contact-entry surface.
 - Recent delivery audit shown in the Communications page.
 - Legacy mobile/gateway outbound email path still exists in parallel.
 
@@ -366,7 +369,8 @@ For the consolidated dated list of known gaps and unfinished areas, see
 
 - Use voice for interruption-safe operating partner conversations.
 - Use the Learning Registry and durable memory to inspect what Freedom is noticing repeatedly.
-- Use Communications when Freedom should draft or send a governed external summary.
+- Use Contacts when you need to file or retrieve a person record manually, then use
+  Communications when Freedom should draft or send a governed external summary.
 - Use Agent Control and Governance to inspect what is modeled versus what is approved/live.
 
 ## Most Important Gaps Before Building More
@@ -379,4 +383,5 @@ For the consolidated dated list of known gaps and unfinished areas, see
 - Extend the new stand-alone learning-sync foundation into reviewed/offline-safe
   self-programming and persona-improvement proposals only after their governance and
   provenance posture is explicit.
-- Unify the older mobile/gateway email recipient store with the newer control-plane email store if a single recipient registry is desired.
+- Unify the older mobile/gateway email recipient store with the newer control-plane
+  contact plus trusted-email-channel model so every surface uses one communications registry.

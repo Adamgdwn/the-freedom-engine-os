@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-04-26 (contacts registry + governed communications split)
+
+- added a first canonical Supabase-backed contacts registry with contact cards and
+  trusted email channels so desktop manual entry and retrieval now have one durable
+  home instead of relying on a flat recipient list
+- added a dedicated desktop `Contacts` control-plane page with an expandable
+  instructions panel so the operator workflow is explicit: file people there, then
+  use `Communications` for governed send review and delivery audit
+- rewired the web/control-plane email path to prefer trusted email channels from the
+  canonical contact registry while keeping the older recipient table as a compatibility
+  lane during transition
+- added a Supabase migration that backfills legacy trusted email recipients into the
+  new contacts plus channels model so existing outbound-email data can move forward
+  without a manual re-entry pass
+- clarified the docs so `Contacts` is now the manual filing surface and
+  `Communications` is the governed external-send surface
+- kept the Android release lane aligned with the live runtime fixes from this branch:
+  debug and release installs now stay distinct, the relay again defaults to `43311`,
+  and the mobile runtime config points at the stable Tailscale hostname instead of a
+  stale relay IP
+
 ## 2026-04-25 (durable local memory fallback + mobile processing indicator)
 
 - fixed a core long-term-memory gap by making the desktop gateway keep a durable

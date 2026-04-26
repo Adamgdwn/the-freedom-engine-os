@@ -1,11 +1,19 @@
 import http from "node:http";
 import os from "node:os";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import dotenv from "dotenv";
 import { AccessToken } from "livekit-server-sdk";
 import OpenAI from "openai";
 
+const relayDir = path.dirname(fileURLToPath(import.meta.url));
+for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(relayDir, "../../../.env")]) {
+  dotenv.config({ path: envPath, override: true });
+}
+
 const host = process.env.FREEDOM_RELAY_HOST || "0.0.0.0";
-const port = Number(process.env.FREEDOM_RELAY_PORT || "43211");
+const port = Number(process.env.FREEDOM_RELAY_PORT || "43311");
 const startedAt = new Date().toISOString();
 
 const relaySharedSecret = process.env.FREEDOM_RELAY_SHARED_SECRET?.trim() || "";

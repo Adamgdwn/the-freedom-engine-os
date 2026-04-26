@@ -135,8 +135,8 @@ It consolidates gaps previously spread across `docs/current-capabilities.md`,
 ### Data Model And System Consolidation
 
 - The older mobile and gateway email-recipient store still needs to be unified
-  with the newer control-plane email store if the goal is one recipient
-  registry.
+  with the newer control-plane contact plus trusted-email-channel store if the
+  goal is one canonical communications registry.
 - The tool surface is still split between built-in voice-agent tools and the
   dispatcher manifest system rather than one fully unified discovery and
   execution path.

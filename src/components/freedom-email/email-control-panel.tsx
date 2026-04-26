@@ -12,49 +12,13 @@ export function EmailControlPanel() {
     emailRecipients,
     recentEmailDeliveries,
     pendingEmailDraft,
-    addEmailRecipient,
-    deleteEmailRecipient,
     sendPendingEmailDraft,
     dismissPendingEmailDraft,
   } = useVoiceSession();
 
-  const [label, setLabel] = useState('');
-  const [destination, setDestination] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  function handleAddRecipient() {
-    startTransition(() => {
-      void (async () => {
-        try {
-          setError(null);
-          setNotice(null);
-          await addEmailRecipient({ label, destination });
-          setLabel('');
-          setDestination('');
-          setNotice('Trusted recipient saved.');
-        } catch (currentError) {
-          setError(currentError instanceof Error ? currentError.message : 'Could not save trusted recipient.');
-        }
-      })();
-    });
-  }
-
-  function handleDeleteRecipient(recipientId: string) {
-    startTransition(() => {
-      void (async () => {
-        try {
-          setError(null);
-          setNotice(null);
-          await deleteEmailRecipient(recipientId);
-          setNotice('Trusted recipient removed.');
-        } catch (currentError) {
-          setError(currentError instanceof Error ? currentError.message : 'Could not remove trusted recipient.');
-        }
-      })();
-    });
-  }
 
   function handleSendDraft() {
     startTransition(() => {
@@ -104,7 +68,7 @@ export function EmailControlPanel() {
           </p>
           <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
             Freedom can prepare an email draft from voice, but it will not send until you confirm.
-            Only trusted recipients saved here can receive those drafts.
+            Trusted email now comes from the contact registry on the Contacts page, with this panel kept as the governed send and audit surface.
           </p>
         </div>
 
@@ -151,40 +115,15 @@ export function EmailControlPanel() {
         <Panel
           title="Trusted Recipients"
           eyebrow="Recipient registry"
-          aside="These recipients are the approval boundary for external email."
+          aside="These trusted email lanes are projected from the canonical contact registry on the Contacts page."
         >
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
-                Label
-              </span>
-              <input
-                value={label}
-                onChange={(event) => setLabel(event.target.value)}
-                placeholder="Adam"
-                className="w-full rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--primary)]"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-[color:var(--ink-soft)]">
-                Email
-              </span>
-              <input
-                value={destination}
-                onChange={(event) => setDestination(event.target.value)}
-                placeholder="freedom@agoperations.ca"
-                className="w-full rounded-2xl border border-[color:var(--line)] bg-white px-4 py-3 text-sm text-[color:var(--ink)] outline-none transition focus:border-[color:var(--primary)]"
-              />
-            </label>
-          </div>
           <div className="mt-4 flex flex-wrap gap-3">
-            <button
-              onClick={handleAddRecipient}
-              disabled={isPending || !label.trim() || !destination.trim()}
-              className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm text-white transition hover:opacity-90 disabled:opacity-60"
+            <Link
+              href="/contacts"
+              className="rounded-full bg-[color:var(--ink)] px-4 py-2 text-sm text-white transition hover:opacity-90"
             >
-              Save trusted recipient
-            </button>
+              Open Contacts
+            </Link>
             <Link
               href="/governance"
               className="rounded-full border border-[color:var(--line)] bg-white px-4 py-2 text-sm text-[color:var(--ink-soft)] transition hover:bg-[color:var(--surface-strong)]"
@@ -209,18 +148,17 @@ export function EmailControlPanel() {
                     <h3 className="text-lg font-semibold text-[color:var(--ink)]">{recipient.label}</h3>
                     <p className="mt-1 text-sm text-[color:var(--ink-soft)]">{recipient.destination}</p>
                   </div>
-                  <button
-                    onClick={() => handleDeleteRecipient(recipient.id)}
-                    disabled={isPending}
-                    className="rounded-full border border-[color:var(--line)] px-3 py-1.5 text-sm text-[color:var(--ink-soft)] transition hover:text-[color:var(--danger)] disabled:opacity-60"
+                  <Link
+                    href="/contacts"
+                    className="rounded-full border border-[color:var(--line)] px-3 py-1.5 text-sm text-[color:var(--ink-soft)] transition hover:text-[color:var(--ink)]"
                   >
-                    Remove
-                  </button>
+                    View contact
+                  </Link>
                 </div>
               ))
             ) : (
               <div className="rounded-[1.5rem] border border-dashed border-[color:var(--line)] bg-white/55 p-4 text-sm text-[color:var(--ink-soft)]">
-                No trusted recipients yet. Add at least one before asking Freedom to email externally.
+                No trusted recipients yet. Add a contact on the Contacts page before asking Freedom to email externally.
               </div>
             )}
           </div>

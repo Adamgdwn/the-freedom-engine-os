@@ -173,6 +173,10 @@ that ties business outcomes back to freedom outcomes.
 - The idle typed-entry control on that same footer is intentionally compact now: look
   for the small `Text` button beside `Mute`, then use the `Build` view's `Launch build
   chat` flow when you want a truly separate new work thread.
+- The desktop control plane now has a dedicated `Contacts` page for manual entry and
+  retrieval. Use that as the canonical filing surface for people records and trusted
+  email channels, then use `Communications` for governed draft review, send confirmation,
+  and delivery audit.
 - The three-dots utility sheet is now oriented toward email/contact capture and
   retrieval. Treat it as the first pass toward a more robust contact-memory skill.
 - The utility sheet now uses a dedicated overlay backdrop plus an inner scroll view, so

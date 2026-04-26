@@ -129,6 +129,11 @@ android {
     }
     buildTypes {
         debug {
+            // Keep debug installs separate so Metro/dev builds never overwrite the
+            // operator-facing release app on the phone.
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            resValue "string", "app_name", "Freedom Anywhere Debug"
             signingConfig signingConfigs.debug
         }
         release {

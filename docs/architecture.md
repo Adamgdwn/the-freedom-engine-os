@@ -59,7 +59,7 @@ For a fast operator-facing view of what is actually live right now, use
    Personality page and only approved overlays remain active runtime refinements.
 11. When Freedom prepares an external email, the Python worker publishes a draft event,
    the control plane presents it for explicit confirmation, and the server sends it
-   only to a trusted recipient recorded in Supabase.
+   only to a trusted email channel recorded in the canonical Supabase contact registry.
 12. Local backup and restore scripts export the durable memory tables into repo-local
    storage so partner memory can survive a wider service issue.
 13. Desktop-host routes non-voice work through a shared model-router policy so routine

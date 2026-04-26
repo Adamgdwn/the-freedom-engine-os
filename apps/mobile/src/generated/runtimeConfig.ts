@@ -1,7 +1,7 @@
 export const DEFAULT_BASE_URL = "http://pop-os.taildcb5c5.ts.net:43111";
 export const DISCONNECTED_ASSISTANT_MODE = "cloud";
-export const DISCONNECTED_ASSISTANT_BASE_URL = "http://100.101.116.15:43311";
-export const RELAY_BASE_URL = "http://100.101.116.15:43311";
+export const DISCONNECTED_ASSISTANT_BASE_URL = "http://pop-os.taildcb5c5.ts.net:43311";
+export const RELAY_BASE_URL = "http://pop-os.taildcb5c5.ts.net:43311";
 export const RELAY_SHARED_SECRET = "PUT_A_LONG_RANDOM_SECRET_HERE";
 export const FCM_ENABLED = false;
 export const MOBILE_APP_VERSION_NAME = "0.2.75";

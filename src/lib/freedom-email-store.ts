@@ -10,6 +10,12 @@ import type {
   FreedomEmailStatus,
   FreedomOutboundProvider,
 } from '@/lib/freedom-email';
+import {
+  createFreedomContact,
+  deleteFreedomContact,
+  loadTrustedEmailRecipientsFromContacts,
+  resolveTrustedEmailRecipientFromContacts,
+} from '@/lib/freedom-contacts-store';
 import { normalizeEmailAddress } from '@/lib/freedom-email';
 import { createSupabaseAdminClient, isSupabaseAdminConfigured } from '@/lib/supabase-admin';
 
@@ -54,6 +60,10 @@ function normalizeOptional(value: string | undefined) {
 
 function normalizeProvider(value: string | undefined): FreedomOutboundProvider {
   return value?.trim().toLowerCase() === 'resend' ? 'resend' : 'none';
+}
+
+function isMissingTableError(error: { code?: string } | null | undefined): boolean {
+  return error?.code === 'PGRST205';
 }
 
 function mapRecipient(row: RecipientRow): FreedomEmailRecipient {
@@ -216,11 +226,8 @@ export async function loadFreedomEmailSnapshot(): Promise<FreedomEmailSnapshot> 
   }
 
   const client = createSupabaseAdminClient();
-  const [recipientsResult, deliveriesResult] = await Promise.all([
-    client
-      .from('freedom_email_recipients')
-      .select('id, label, destination, created_at, updated_at')
-      .order('label', { ascending: true }),
+  const [trustedRecipients, deliveriesResult] = await Promise.all([
+    loadTrustedEmailRecipientsFromContacts(),
     client
       .from('freedom_email_deliveries')
       .select('id, recipient, subject, provider, delivery_id, delivered_at')
@@ -228,15 +235,23 @@ export async function loadFreedomEmailSnapshot(): Promise<FreedomEmailSnapshot> 
       .limit(10),
   ]);
 
-  if (recipientsResult.error) {
-    throw recipientsResult.error;
-  }
-
   if (deliveriesResult.error) {
     throw deliveriesResult.error;
   }
 
-  const recipients = (recipientsResult.data ?? []).map(mapRecipient);
+  let recipients = trustedRecipients;
+  if (!recipients.length) {
+    const recipientsResult = await client
+      .from('freedom_email_recipients')
+      .select('id, label, destination, created_at, updated_at')
+      .order('label', { ascending: true });
+
+    if (recipientsResult.error && !isMissingTableError(recipientsResult.error)) {
+      throw recipientsResult.error;
+    }
+
+    recipients = (recipientsResult.data ?? []).map(mapRecipient);
+  }
 
   return {
     status:           resolveEmailStatus(recipients.length),
@@ -249,38 +264,55 @@ export async function loadFreedomEmailSnapshot(): Promise<FreedomEmailSnapshot> 
 export async function createFreedomEmailRecipient(
   input: FreedomEmailRecipientCreateRequest,
 ): Promise<FreedomEmailRecipient> {
-  const client = createSupabaseAdminClient();
-  const now = Date.now();
-  const destination = normalizeEmailAddress(input.destination);
+  const contact = await createFreedomContact({
+    fullName: input.label,
+    primaryEmail: input.destination,
+    primaryEmailLabel: 'Primary email',
+    trustForEmail: true,
+    approvalRequired: true,
+    relationshipContext: 'Created from the trusted outbound email shortcut.',
+  });
 
-  const { data, error } = await client
-    .from('freedom_email_recipients')
-    .upsert({
-      label:       input.label.trim(),
-      destination,
-      created_at:  toIso(now),
-      updated_at:  toIso(now),
-    }, {
-      onConflict: 'destination',
-    })
-    .select('id, label, destination, created_at, updated_at')
-    .single();
-
-  if (error) {
-    throw error;
+  const emailChannel = contact.channels.find((channel) => channel.channelType === 'email');
+  if (!emailChannel) {
+    throw new Error('Freedom could not create a trusted email channel for that contact.');
   }
 
-  return mapRecipient(data);
+  return {
+    id: emailChannel.id,
+    label: contact.preferredName?.trim() || contact.fullName.trim(),
+    destination: emailChannel.value,
+    createdAt: emailChannel.createdAt,
+    updatedAt: emailChannel.updatedAt,
+  };
 }
 
 export async function deleteFreedomEmailRecipient(recipientId: string) {
   const client = createSupabaseAdminClient();
+  const trustedRecipient = await resolveTrustedEmailRecipientFromContacts({
+    recipientId,
+  });
+
+  if (trustedRecipient) {
+    const { data: channelRow, error: channelError } = await client
+      .from('freedom_contact_channels')
+      .select('contact_id')
+      .eq('id', recipientId)
+      .single();
+
+    if (channelError) {
+      throw channelError;
+    }
+
+    return deleteFreedomContact(channelRow.contact_id);
+  }
+
   const { error } = await client
     .from('freedom_email_recipients')
     .delete()
     .eq('id', recipientId);
 
-  if (error) {
+  if (error && !isMissingTableError(error)) {
     throw error;
   }
 
@@ -291,8 +323,12 @@ async function resolveTrustedRecipient(input: {
   recipientId?: string | null;
   recipientDestination?: string | null;
 }) {
-  const client = createSupabaseAdminClient();
+  const contactRecipient = await resolveTrustedEmailRecipientFromContacts(input);
+  if (contactRecipient) {
+    return contactRecipient;
+  }
 
+  const client = createSupabaseAdminClient();
   if (input.recipientId) {
     const { data, error } = await client
       .from('freedom_email_recipients')
@@ -300,11 +336,13 @@ async function resolveTrustedRecipient(input: {
       .eq('id', input.recipientId)
       .single();
 
-    if (error) {
+    if (error && !isMissingTableError(error)) {
       throw error;
     }
 
-    return mapRecipient(data);
+    if (data) {
+      return mapRecipient(data);
+    }
   }
 
   const destination = normalizeOptional(input.recipientDestination ?? undefined);
@@ -318,7 +356,11 @@ async function resolveTrustedRecipient(input: {
     .eq('destination', normalizeEmailAddress(destination))
     .single();
 
-  if (error) {
+  if (error && !isMissingTableError(error)) {
+    throw error;
+  }
+
+  if (!data) {
     throw new Error('Recipient is not trusted yet. Add it in Communications first.');
   }
 
