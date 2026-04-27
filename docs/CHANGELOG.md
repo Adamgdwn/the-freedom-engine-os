@@ -8,6 +8,8 @@
   launcher mipmaps, and the iOS app icon catalog
 - updated the Linux desktop launcher installer so local desktop entries reference
   the new PNG app icon asset
+- bumped the Android release metadata to `versionCode 83` / `versionName 0.2.76`
+  so the refreshed phone icon ships as a visibly newer APK
 
 ## 2026-04-26 (unified typed turns on the live Talk loop)
 
