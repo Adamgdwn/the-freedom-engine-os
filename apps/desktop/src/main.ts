@@ -23,6 +23,10 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.setName("Freedom Desktop");
+  if (process.platform === "linux") {
+    const linuxApp = app as typeof app & { setDesktopName?: (desktopName: string) => void };
+    linuxApp.setDesktopName?.("freedom-desktop.desktop");
+  }
 
   app.on("second-instance", () => {
     void revealOperatorConsole({ focus: true, forceDashboard: true });
@@ -402,6 +406,10 @@ function createAppIcon() {
 
 function resolveAppIconPath(): string {
   const candidates = [
+    path.join(__dirname, "assets", "freedom-robot-owl-icon.png"),
+    path.join(__dirname, "..", "assets", "freedom-robot-owl-icon.png"),
+    path.join(process.cwd(), "assets", "freedom-robot-owl-icon.png"),
+    path.join(process.cwd(), "apps", "desktop", "assets", "freedom-robot-owl-icon.png"),
     path.join(__dirname, "assets", "freedom-icon.png"),
     path.join(__dirname, "..", "assets", "freedom-icon.png"),
     path.join(process.cwd(), "assets", "freedom-icon.png"),

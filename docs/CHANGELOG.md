@@ -12,6 +12,11 @@
   so the refreshed phone icon ships as a visibly newer APK
 - fixed the Electron dev/build path so the desktop shell copies the PNG icon into
   `dist/assets` and uses it for both the window and tray icon
+- replaced the legacy SVG launcher fallback with the robot owl mark and set the
+  Linux desktop file name from Electron so the shell can associate the running app
+  with the refreshed launcher icon
+- added a new `freedom-robot-owl-icon.png` desktop asset and pointed the Linux
+  launcher at that fresh filename to avoid stale icon caches
 
 ## 2026-04-26 (unified typed turns on the live Talk loop)
 

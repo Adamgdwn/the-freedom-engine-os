@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const applicationsDir = path.join(os.homedir(), ".local", "share", "applications");
 const desktopFilePath = path.join(applicationsDir, "freedom-desktop.desktop");
-const iconPath = path.join(repoRoot, "apps/desktop/assets/freedom-icon.png");
+const iconPath = path.join(repoRoot, "apps/desktop/assets/freedom-robot-owl-icon.png");
 const launcherScriptPath = path.join(repoRoot, "scripts/launch-freedom-desktop.sh");
 
 const desktopFile = `[Desktop Entry]
