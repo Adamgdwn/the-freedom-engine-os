@@ -4,10 +4,13 @@ module.exports = {
   expo: {
     name: "Freedom Anywhere",
     slug: "freedom-mobile-companion",
+    icon: "./assets/app-icon.png",
     android: {
+      icon: "./assets/app-icon.png",
       package: "com.freedommobile"
     },
     ios: {
+      icon: "./assets/app-icon.png",
       bundleIdentifier: "com.freedommobile"
     },
     plugins: bundledOfflineEnabled

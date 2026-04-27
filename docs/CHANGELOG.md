@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-04-26 (desktop and phone app icon refresh)
+
+- replaced the generated Freedom desktop tray/launcher icon with the new robot owl
+  brand mark
+- added the same mark as the Freedom Anywhere app icon in Expo metadata, Android
+  launcher mipmaps, and the iOS app icon catalog
+- updated the Linux desktop launcher installer so local desktop entries reference
+  the new PNG app icon asset
+
 ## 2026-04-26 (unified typed turns on the live Talk loop)
 
 - unified Freedom Anywhere typed turns with the main live `Talk` conversation instead

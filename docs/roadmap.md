@@ -45,6 +45,9 @@ For the consolidated dated list of currently known deficiencies, see
   Freedom can now save live voice preferences for preset voice, gender presentation,
   accent hints, tone, warmth, and pace from conversation, and the Android companion
   now distinguishes the live realtime voice from the phone's fallback spoken-reply voice
+- Brand icon refresh:
+  the new robot owl mark now ships as the desktop tray/launcher icon and the
+  Freedom Anywhere phone app icon across Expo, Android, and iOS assets
 
 ## Now
 

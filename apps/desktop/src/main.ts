@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, Tray, Notification, clipboard, nativeImage, shell } from "electron";
+import path from "node:path";
 import type { Event as ElectronEvent, HandlerDetails, MenuItemConstructorOptions } from "electron";
 import type { DesktopOverviewResponse } from "@freedom/shared";
 import { renderLoadingHtml } from "./loadingHtml.js";
@@ -393,19 +394,5 @@ function sanitizeShellDetail(detail: string): string {
 }
 
 function createAppIcon() {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-      <defs>
-        <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#11243e" />
-          <stop offset="100%" stop-color="#1b365d" />
-        </linearGradient>
-      </defs>
-      <rect width="256" height="256" rx="64" fill="#fdf8ef" />
-      <rect x="26" y="26" width="204" height="204" rx="52" fill="url(#g)" />
-      <path d="M85 210 119 84h18l34 126h-29l-5-24h-19l-5 24H85zm39-50h9l-4-22c-1-7-2-13-3-19-1 6-2 12-3 19l-4 22zm-10 1h28v18h-28z" fill="#fdf8ef"/>
-      <circle cx="186" cy="79" r="18" fill="#d96b1c"/>
-    </svg>
-  `;
-  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+  return nativeImage.createFromPath(path.join(__dirname, "..", "assets", "freedom-icon.png"));
 }
