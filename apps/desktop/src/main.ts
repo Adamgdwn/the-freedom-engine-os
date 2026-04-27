@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, Tray, Notification, clipboard, nativeImage, shell } from "electron";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import type { Event as ElectronEvent, HandlerDetails, MenuItemConstructorOptions } from "electron";
 import type { DesktopOverviewResponse } from "@freedom/shared";
@@ -58,6 +59,7 @@ if (!hasSingleInstanceLock) {
 }
 
 function createWindow(): void {
+  const appIcon = createAppIcon();
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -66,6 +68,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: "#fdf8ef",
+    icon: appIcon,
     title: "Freedom Desktop",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
@@ -394,5 +397,15 @@ function sanitizeShellDetail(detail: string): string {
 }
 
 function createAppIcon() {
-  return nativeImage.createFromPath(path.join(__dirname, "..", "assets", "freedom-icon.png"));
+  return nativeImage.createFromPath(resolveAppIconPath());
+}
+
+function resolveAppIconPath(): string {
+  const candidates = [
+    path.join(__dirname, "assets", "freedom-icon.png"),
+    path.join(__dirname, "..", "assets", "freedom-icon.png"),
+    path.join(process.cwd(), "assets", "freedom-icon.png"),
+    path.join(process.cwd(), "apps", "desktop", "assets", "freedom-icon.png")
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
 }

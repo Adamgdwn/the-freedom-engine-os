@@ -10,6 +10,8 @@
   the new PNG app icon asset
 - bumped the Android release metadata to `versionCode 83` / `versionName 0.2.76`
   so the refreshed phone icon ships as a visibly newer APK
+- fixed the Electron dev/build path so the desktop shell copies the PNG icon into
+  `dist/assets` and uses it for both the window and tray icon
 
 ## 2026-04-26 (unified typed turns on the live Talk loop)
 
