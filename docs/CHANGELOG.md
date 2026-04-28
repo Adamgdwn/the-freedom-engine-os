@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-04-27 (stand-alone voice loop recovery + relay health truth)
+
+- changed Freedom Anywhere stand-alone `cloud` voice so it uses the local-capture plus
+  hosted Freedom speech lane directly instead of attempting a failing realtime-first
+  detour before every offline turn
+- removed the Android recognizer teardown race and added explicit recognizer-running
+  tracking so the phone can recover cleanly after spoken replies instead of leaving the
+  UI "active" while Android is no longer actually listening
+- kept barge-in recognition live during assistant playback and prevented device-fallback
+  recognizer restarts from surfacing as misleading desktop reconnect UI churn
+- added a real localhost relay health probe for stand-alone hosted support so the phone
+  now reports `Hosted support unavailable` when the Termux relay on `127.0.0.1:43311`
+  is down instead of falsely claiming the hosted lane is ready
+- removed the old stand-alone `Recent thread` card from the main `Talk` canvas and kept
+  the center surface focused on the live voice state plus compact reply preview
+- reduced relay fallback timeout from `20s` to `7s` so a dead phone-local relay fails
+  faster and shows an honest error instead of burning a long silent wait
+- rebuilt and reinstalled the Android release APK and revalidated the local relay health
+  endpoint plus installed package version `0.2.77 (84)`
+
 ## 2026-04-27 (stand-alone relay truth + hosted speech recovery)
 
 - fixed Freedom Anywhere stand-alone mode so the slim build only advertises

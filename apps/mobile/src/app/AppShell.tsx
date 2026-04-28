@@ -21,6 +21,7 @@ import { ChatScreen, HostScreen, PairingScreen, SessionsScreen, StartScreen } fr
 import {
   getEffectiveConnectionState,
   getEffectiveDeferredExecutionState,
+  getEffectiveFreedomVoiceProfile,
   getEffectiveVoiceState,
   type AppState
 } from "../store/appStore";
@@ -85,14 +86,8 @@ export function AppShell(): React.JSX.Element {
   const showGlobalBanners = store.view === "host" || store.view === "sessions";
   const connectionState = getEffectiveConnectionState(store);
   const settingsConnectionConnected = connectionState !== "stand_alone";
-  const liveVoiceSummary = summarizeAssistantVoiceProfile(
-    store.hostStatus?.voiceProfile ?? {
-      targetVoice: store.selectedFreedomVoicePresetId,
-      tone: null,
-      warmth: null,
-      pace: null
-    }
-  );
+  const effectiveFreedomVoiceProfile = getEffectiveFreedomVoiceProfile(store);
+  const liveVoiceSummary = summarizeAssistantVoiceProfile(effectiveFreedomVoiceProfile);
   const showPairing = !store.token && store.view === "pairing";
   const connectedOperatorRunLedger = store.token && !store.offlineMode ? store.operatorRunLedger : null;
   const operatorRunReviewGapCount =
@@ -429,7 +424,7 @@ export function AppShell(): React.JSX.Element {
                     </View>
                     <View style={styles.voiceChoiceList}>
                       {assistantVoiceCatalog.map((voice) => {
-                        const activeVoiceId = store.hostStatus?.voiceProfile?.targetVoice ?? store.selectedFreedomVoicePresetId ?? "marin";
+                        const activeVoiceId = effectiveFreedomVoiceProfile.targetVoice ?? store.selectedFreedomVoicePresetId ?? "marin";
                         const isActive = activeVoiceId === voice.id;
                         return (
                           <Pressable

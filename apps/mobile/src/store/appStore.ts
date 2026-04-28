@@ -216,6 +216,7 @@ export interface AppState {
   offlineMode: boolean;
   offlineModelState: OfflineModelState;
   offlineModelDetail: string | null;
+  relayReachable: boolean | null;
   offlineImportDrafts: Record<string, OfflineImportState>;
   deferredOperatorRunsBySession: Record<string, MobileDeferredOperatorRun[]>;
   pendingLearningSignals: PendingLearningSignalState[];
@@ -319,7 +320,7 @@ let voiceInterruptRequested = false;
 let backendInterruptTurnId: string | null = null;
 // Keep recognition live during spoken replies so barge-in can fire while Freedom is
 // talking. Assistant echo filtering handles the self-hear suppression instead.
-const SHOULD_PAUSE_RECOGNITION_DURING_TTS = Platform.OS === "android";
+const SHOULD_PAUSE_RECOGNITION_DURING_TTS = false;
 const VOICE_CONTINUATION_GRACE_MS = 450;
 const VOICE_PARTIAL_FALLBACK_COMMIT_MS = 1800;
 const REALTIME_INITIAL_TURN_STALL_MS = 18000;
@@ -384,7 +385,7 @@ function getDisconnectedAssistantMode(): DisconnectedAssistantMode {
 
 function getDisconnectedAssistantRuntimeMode(): MobileVoiceRuntimeMode {
   if (getDisconnectedAssistantMode() === "bundled_model") return "on_device_offline";
-  if (getDisconnectedAssistantMode() === "cloud") return "realtime_primary";
+  if (getDisconnectedAssistantMode() === "cloud") return "device_fallback";
   return "device_fallback";
 }
 
@@ -437,7 +438,7 @@ function canRouteTypedTurnIntoVoiceConversation(
     return true;
   }
 
-  return getDisconnectedAssistantMode() !== "notes_only";
+  return state.voiceSessionActive && getDisconnectedAssistantMode() !== "notes_only";
 }
 
 function clearTypedSpeechPlaybackStopTimer(): void {
@@ -448,12 +449,65 @@ function clearTypedSpeechPlaybackStopTimer(): void {
   typedSpeechPlaybackStopTimer = null;
 }
 
-function getDisconnectedModeNotice(): string {
+function getStandaloneRelayBaseUrl(): string | null {
+  const configured = getConfiguredDisconnectedAssistantBaseUrl()?.trim();
+  return configured ? configured.replace(/\/$/, "") : null;
+}
+
+async function probeStandaloneRelayReachability(): Promise<boolean> {
+  const baseUrl = getStandaloneRelayBaseUrl();
+  if (!baseUrl) {
+    return false;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 2500);
+  try {
+    const response = await fetch(`${baseUrl}/health`, {
+      method: "GET",
+      signal: controller.signal
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function refreshStandaloneRelayHealth(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
+): Promise<void> {
+  if (getDisconnectedAssistantMode() !== "cloud") {
+    set({ relayReachable: null });
+    return;
+  }
+
+  const reachable = await probeStandaloneRelayReachability();
+  set((state) => ({
+    relayReachable: reachable,
+    offlineModelDetail:
+      state.offlineMode && getDisconnectedAssistantMode() === "cloud"
+        ? reachable
+          ? "Freedom relay ready on this phone for hosted replies, search, and speech."
+          : "Freedom relay on this phone is unreachable right now. Hosted replies and Freedom voice will stay paused until localhost:43311 is back."
+        : state.offlineModelDetail
+  }));
+}
+
+function isRelayUnreachableErrorMessage(message: string): boolean {
+  return message.toLowerCase().includes("freedom relay unreachable");
+}
+
+function getDisconnectedModeNotice(relayReachable: boolean | null = null): string {
   switch (getDisconnectedAssistantMode()) {
     case "bundled_model":
       return "Desktop unreachable. Cached chats and on-device ideation are still available.";
     case "cloud":
-      return "Desktop unreachable. Cached chats and hosted support are still available.";
+      return relayReachable === false
+        ? "Desktop unreachable. Cached chats are still available, but hosted support on this phone is down right now."
+        : "Desktop unreachable. Cached chats and hosted support are still available.";
     default:
       return "Desktop unreachable. Cached chats and queued conversation memory are still available.";
   }
@@ -556,6 +610,9 @@ export function getEffectiveConnectionState(
   if (!state.token) {
     return "stand_alone";
   }
+  if (state.offlineMode) {
+    return "stand_alone";
+  }
   if (!state.realtimeConnected && state.hostStatus?.connectionState === "desktop_linked") {
     return "reconnecting";
   }
@@ -589,7 +646,7 @@ export function getEffectiveVoiceState(
   if (!state.realtimeConnected && state.hostStatus?.voiceState === "voice_primary_ready") {
     return "voice_primary_recovering";
   }
-  return state.hostStatus?.voiceState ?? (state.offlineMode && !RELAY_BASE_URL ? "voice_fallback_only" : "voice_primary_starting");
+  return state.hostStatus?.voiceState ?? (state.offlineMode ? "voice_fallback_only" : "voice_primary_starting");
 }
 
 export function getEffectiveDeferredExecutionState(
@@ -715,16 +772,33 @@ function buildLocalFreedomVoiceProfile(voiceId: AssistantVoicePresetId): Assista
   };
 }
 
-function resolveSelectedFreedomVoicePresetId(
-  storedVoiceId: string | null | undefined,
-  hostStatus: HostStatus | null | undefined
-): AssistantVoicePresetId {
-  return normalizeAssistantVoicePresetId(hostStatus?.voiceProfile?.targetVoice ?? storedVoiceId ?? "marin");
+function shouldUseStandaloneFreedomVoiceProfile(
+  state: Pick<AppState, "token" | "offlineMode" | "hostStatus">
+): boolean {
+  if (!state.token || state.offlineMode) {
+    return true;
+  }
+  return state.hostStatus?.connectionState === "stand_alone";
 }
 
-function getEffectiveFreedomVoiceProfile(
-  state: Pick<AppState, "hostStatus" | "selectedFreedomVoicePresetId">
+function resolveSelectedFreedomVoicePresetId(
+  storedVoiceId: string | null | undefined,
+  hostStatus: HostStatus | null | undefined,
+  preferStoredVoice = false
+): AssistantVoicePresetId {
+  return normalizeAssistantVoicePresetId(
+    preferStoredVoice
+      ? storedVoiceId ?? hostStatus?.voiceProfile?.targetVoice ?? "marin"
+      : hostStatus?.voiceProfile?.targetVoice ?? storedVoiceId ?? "marin"
+  );
+}
+
+export function getEffectiveFreedomVoiceProfile(
+  state: Pick<AppState, "hostStatus" | "selectedFreedomVoicePresetId" | "offlineMode" | "token">
 ): AssistantVoiceProfile {
+  if (shouldUseStandaloneFreedomVoiceProfile(state)) {
+    return buildLocalFreedomVoiceProfile(state.selectedFreedomVoicePresetId);
+  }
   return state.hostStatus?.voiceProfile ?? buildLocalFreedomVoiceProfile(state.selectedFreedomVoicePresetId);
 }
 
@@ -853,7 +927,9 @@ function buildConnectedRuntimeContext(
   return context || undefined;
 }
 
-function getFreedomSpeechProvider(state: Pick<AppState, "baseUrl" | "offlineMode" | "token" | "selectedFreedomVoicePresetId" | "hostStatus">) {
+function getFreedomSpeechProvider(
+  state: Pick<AppState, "baseUrl" | "offlineMode" | "token" | "selectedFreedomVoicePresetId" | "hostStatus" | "relayReachable">
+) {
   if (!state.offlineMode && state.baseUrl) {
     return {
       endpointUrl: state.baseUrl,
@@ -863,8 +939,8 @@ function getFreedomSpeechProvider(state: Pick<AppState, "baseUrl" | "offlineMode
     };
   }
 
-  const standaloneBaseUrl = getConfiguredDisconnectedAssistantBaseUrl();
-  if (!standaloneBaseUrl) {
+  const standaloneBaseUrl = getStandaloneRelayBaseUrl();
+  if (!standaloneBaseUrl || state.relayReachable === false) {
     return null;
   }
 
@@ -881,6 +957,10 @@ function createLocalMessageId(prefix: "msg" | "import"): string {
   return `${prefix}-mobile-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function normalizeChatMessageContent(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function buildRecentVoiceBootstrapMessages(messages: ChatMessage[]): Array<{
   id: string;
   role: "user" | "assistant";
@@ -891,14 +971,14 @@ function buildRecentVoiceBootstrapMessages(messages: ChatMessage[]): Array<{
     .filter((message): message is ChatMessage & { role: "user" | "assistant" } =>
       (message.role === "user" || message.role === "assistant") &&
       message.status === "completed" &&
-      message.content.trim().length > 0
+      normalizeChatMessageContent(message.content).length > 0
     )
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
     .slice(-10)
     .map((message) => ({
       id: message.id,
       role: message.role,
-      content: message.content.trim(),
+      content: normalizeChatMessageContent(message.content),
       createdAt: message.createdAt
     }));
 }
@@ -943,7 +1023,7 @@ function buildOfflineImportSummaryFallback(messages: ChatMessage[], draftTurns: 
   const assistantPreview = messages
     .filter((item) => item.role === "assistant")
     .slice(-2)
-    .map((item) => item.content.trim())
+    .map((item) => normalizeChatMessageContent(item.content))
     .filter(Boolean)
     .join("\n\n");
 
@@ -1363,7 +1443,7 @@ function buildRelayRuntimeContext(
   const assistantPreview = recentTurns
     .filter((item) => item.role === "assistant")
     .slice(-2)
-    .map((item) => item.content.trim())
+    .map((item) => normalizeChatMessageContent(item.content))
     .filter(Boolean)
     .join("\n\n");
 
@@ -1550,9 +1630,9 @@ function extractStandaloneConversationMemories(
   summary: string
 ): PendingConversationMemoryState[] {
   const userMessages = messages
-    .filter((message) => message.role === "user" && message.content.trim())
+    .filter((message) => message.role === "user" && normalizeChatMessageContent(message.content))
     .slice(-8)
-    .map((message) => message.content.trim());
+    .map((message) => normalizeChatMessageContent(message.content));
   const candidates: PendingConversationMemoryState[] = [];
 
   for (const text of userMessages) {
@@ -1652,7 +1732,8 @@ async function extractStandaloneLearningSignals(
   const recentMessages = messages
     .filter((message) => message.role === "user" || message.role === "assistant")
     .slice(-8)
-    .map((message) => `${message.role === "user" ? "User" : "Freedom"}: ${message.content.trim()}`)
+    .map((message) => `${message.role === "user" ? "User" : "Freedom"}: ${normalizeChatMessageContent(message.content)}`)
+    .filter((message) => !message.endsWith(": "))
     .join("\n");
 
   const extractionInput = [
@@ -1896,35 +1977,46 @@ async function sendOfflineIdeationTurn(
             systemStateContext
           );
     const completedAt = new Date().toISOString();
-    set((state) => ({
-      sendingMessage: false,
-      messagesBySession: pushLocalMessage(state, sessionId, {
+    set((state) => {
+      const nextMessages = pushLocalMessage(state, sessionId, {
         ...assistantMessage,
         content: reply,
         status: "completed",
         updatedAt: completedAt
-      }),
-      sessions: updateSessionLocally(state, sessionId, {
-        lastPreview: truncateOfflinePreview(reply || text),
-        lastActivityAt: completedAt,
-        updatedAt: completedAt
-      }),
-      voiceAssistantDraft: state.voiceSessionActive ? reply : null,
-      voiceSessionPhase: state.voiceSessionActive ? "assistant-speaking" : state.voiceSessionPhase,
-      notice: "Offline ideation captured. Review and import notes when the desktop comes back.",
-      error: null,
-      voiceTelemetry:
-        state.voiceSessionActive
-          ? {
-              ...state.voiceTelemetry,
-              turnsStarted: state.voiceTelemetry.turnsStarted + 1,
-              turnsCompleted: state.voiceTelemetry.turnsCompleted + 1,
-              lastRoundTripMs: state.voiceTelemetry.lastHeardAt ? Date.now() - new Date(state.voiceTelemetry.lastHeardAt).getTime() : null
-            }
-          : state.voiceTelemetry
-    }));
+      });
+      return {
+        sendingMessage: false,
+        messagesBySession: nextMessages,
+        sessions: updateSessionLocally(state, sessionId, {
+          lastPreview: truncateOfflinePreview(reply || text),
+          lastActivityAt: completedAt,
+          updatedAt: completedAt
+        }),
+        voiceAssistantDraft: state.voiceSessionActive ? reply : null,
+        voiceSessionPhase: state.voiceSessionActive ? "assistant-speaking" : state.voiceSessionPhase,
+        notice: "Offline ideation captured. Review and import notes when the desktop comes back.",
+        error: null,
+        offlineImportDrafts: {
+          ...state.offlineImportDrafts,
+          [sessionId]: buildOfflineImportDraft(
+            state.offlineImportDrafts[sessionId],
+            nextMessages[sessionId] ?? [],
+            state.offlineImportDrafts[sessionId]?.draftTurns ?? []
+          )
+        },
+        voiceTelemetry:
+          state.voiceSessionActive
+            ? {
+                ...state.voiceTelemetry,
+                turnsStarted: state.voiceTelemetry.turnsStarted + 1,
+                turnsCompleted: state.voiceTelemetry.turnsCompleted + 1,
+                lastRoundTripMs: state.voiceTelemetry.lastHeardAt ? Date.now() - new Date(state.voiceTelemetry.lastHeardAt).getTime() : null
+              }
+            : state.voiceTelemetry
+      };
+    });
     if (get().voiceSessionActive || get().autoSpeak) {
-      assistantSpeech.ingest(assistantMessageId, reply, "completed", VOICE_TTS_MIN_CHARS);
+      assistantSpeech.queuePrompt(reply);
     }
     await persistOfflineSnapshot(get);
   } catch (error) {
@@ -1942,6 +2034,9 @@ async function sendOfflineIdeationTurn(
       voiceSessionPhase: state.voiceSessionActive ? "error" : state.voiceSessionPhase,
       error: error instanceof Error ? error.message : "Offline ideation failed."
     }));
+    if (error instanceof Error && isRelayUnreachableErrorMessage(error.message)) {
+      set({ relayReachable: false });
+    }
     await persistOfflineSnapshot(get);
     throw error;
   }
@@ -1988,6 +2083,7 @@ export const useAppStore = create<AppState>((set, get) => {
   offlineMode: false,
   offlineModelState: getDisconnectedAssistantReadyState().state,
   offlineModelDetail: getDisconnectedAssistantReadyState().detail,
+  relayReachable: null,
   offlineImportDrafts: {},
   deferredOperatorRunsBySession: {},
   pendingLearningSignals: [],
@@ -2160,10 +2256,15 @@ export const useAppStore = create<AppState>((set, get) => {
       offlineMode: !token,
       offlineModelState: getDisconnectedAssistantReadyState().state,
       offlineModelDetail: getDisconnectedAssistantReadyState().detail,
+      relayReachable: null,
       notice: token ? "Restoring the saved desktop link." : null,
       booting: false,
       view: token || (cachedOfflineState?.sessions?.length ?? 0) > 0 ? "start" : "pairing"
     });
+
+    if (!token || getDisconnectedAssistantMode() === "cloud") {
+      void refreshStandaloneRelayHealth(get, set).catch(() => undefined);
+    }
 
     if (settings?.baseUrl && token) {
       await get().refresh();
@@ -2288,6 +2389,7 @@ export const useAppStore = create<AppState>((set, get) => {
       offlineMode: true,
       offlineModelState: getDisconnectedAssistantReadyState().state,
       offlineModelDetail: getDisconnectedAssistantReadyState().detail,
+      relayReachable: null,
       offlineSummarizing: false,
       offlineImporting: false,
       outboundRecipients: [],
@@ -2322,6 +2424,7 @@ export const useAppStore = create<AppState>((set, get) => {
       view: get().sessions.length ? "start" : "pairing"
     });
     voiceInterruptRequested = false;
+    void refreshStandaloneRelayHealth(get, set).catch(() => undefined);
   },
   async refresh() {
     const token = get().token;
@@ -2343,6 +2446,7 @@ export const useAppStore = create<AppState>((set, get) => {
           : standaloneSurfaceHint(),
         error: null
       }));
+      void refreshStandaloneRelayHealth(get, set).catch(() => undefined);
       await persistOfflineSnapshot(get);
       return;
     }
@@ -2392,9 +2496,11 @@ export const useAppStore = create<AppState>((set, get) => {
           ? get().currentDeviceId
           : devices.find((device) => device.deviceName === get().deviceName)?.id ?? devices[0]?.id ?? null;
 
+      const offlineSafeMode = shouldUseOfflineSafeMode({ token, hostStatus: resolvedHostStatus });
       const resolvedFreedomVoicePresetId = resolveSelectedFreedomVoicePresetId(
         get().selectedFreedomVoicePresetId,
-        resolvedHostStatus
+        resolvedHostStatus,
+        offlineSafeMode
       );
 
       if (
@@ -2429,10 +2535,16 @@ export const useAppStore = create<AppState>((set, get) => {
           accumulator[session.id] = get().renameDraftBySession[session.id] ?? session.title;
           return accumulator;
         }, {}),
-        offlineMode: shouldUseOfflineSafeMode({ token, hostStatus: resolvedHostStatus }),
-        notice: resolvedHostStatus.connectionState === "stand_alone" ? getDisconnectedModeNotice() : null,
+        offlineMode: offlineSafeMode,
+        notice: resolvedHostStatus.connectionState === "stand_alone" ? getDisconnectedModeNotice(get().relayReachable) : null,
         error: null
       });
+
+      if (offlineSafeMode) {
+        void refreshStandaloneRelayHealth(get, set).catch(() => undefined);
+      } else {
+        set({ relayReachable: null });
+      }
 
       if (nextSelected) {
         await get().selectSession(nextSelected);
@@ -2476,10 +2588,13 @@ export const useAppStore = create<AppState>((set, get) => {
           offlineMode: nextOfflineMode,
           realtimeConnected: false,
           notice: nextOfflineMode
-            ? getDisconnectedModeNotice()
+            ? getDisconnectedModeNotice(get().relayReachable)
             : `${FREEDOM_PHONE_PRODUCT_NAME} is reconnecting to the desktop link now.`,
           error: null
         });
+        if (nextOfflineMode) {
+          void refreshStandaloneRelayHealth(get, set).catch(() => undefined);
+        }
         await persistOfflineSnapshot(get);
       } else {
         await handleStoreError(error, set, get, "Could not refresh this phone's desktop state.");
@@ -3791,7 +3906,7 @@ export const useAppStore = create<AppState>((set, get) => {
     assistantSpeech.reset();
     voiceInterruptRequested = false;
 
-    if (prefersRealtimePrimaryVoice() || (get().offlineMode && RELAY_BASE_URL)) {
+    if (prefersRealtimePrimaryVoice() && !get().offlineMode) {
       try {
         await startRealtimeVoiceSession(get, set, targetSessionId);
         return;
@@ -3971,11 +4086,18 @@ function buildVoiceSessionCallbacks(
 ): Parameters<VoiceService["startStreamingSession"]>[0] {
   return {
     onListening: () => {
+      if (isVoiceAssistantActive(get)) {
+        return;
+      }
+      const currentState = get();
+      const queuedVoiceTurnPending = hasQueuedVoiceAutoSend(currentState);
       set((state) => ({
-        listening: state.voiceMuted ? false : true,
+        listening: state.voiceMuted ? false : !queuedVoiceTurnPending,
         voiceSessionPhase:
           state.voiceMuted
             ? "muted"
+            : queuedVoiceTurnPending
+              ? "processing"
             : state.voiceSessionPhase === "assistant-speaking" ||
                 state.voiceSessionPhase === "processing" ||
                 state.voiceSessionPhase === "review" ||
@@ -3985,9 +4107,15 @@ function buildVoiceSessionCallbacks(
         notice: null,
         error: null
       }));
+      if (queuedVoiceTurnPending && !currentState.sendingMessage) {
+        maybeAutoSendVoiceResult(get, set).catch(() => undefined);
+      }
     },
     onSpeechStart: () => {
       if (get().voiceMuted) {
+        return;
+      }
+      if (isVoiceAssistantActive(get)) {
         return;
       }
       clearPendingVoiceCommitTimer();
@@ -4018,6 +4146,9 @@ function buildVoiceSessionCallbacks(
       if (get().voiceMuted) {
         return;
       }
+      if (isVoiceAssistantActive(get)) {
+        return;
+      }
       set({ voiceAudioLevel: value });
     },
     onPartialTranscript: (text) => {
@@ -4029,11 +4160,11 @@ function buildVoiceSessionCallbacks(
         return;
       }
 
-      const merged = pendingVoiceTranscript ? mergeVoiceTranscriptSegments(pendingVoiceTranscript, normalized) : normalized;
-      pendingVoiceTranscript = merged;
-
-      if (isVoiceAssistantActive(get) && isLikelyAssistantEcho(merged, get().voiceAssistantDraft ?? "")) {
+      const assistantActive = isVoiceAssistantActive(get);
+      const assistantDraft = get().voiceAssistantDraft ?? "";
+      if (assistantActive && isLikelyAssistantEcho(normalized, assistantDraft)) {
         clearPendingPartialVoiceCommitTimer();
+        clearPendingVoiceTranscript();
         set({
           liveTranscript: "",
           voiceAudioLevel: -2,
@@ -4041,6 +4172,9 @@ function buildVoiceSessionCallbacks(
         });
         return;
       }
+
+      const merged = pendingVoiceTranscript ? mergeVoiceTranscriptSegments(pendingVoiceTranscript, normalized) : normalized;
+      pendingVoiceTranscript = merged;
 
       set((state) => ({
         liveTranscript: merged,
@@ -4052,7 +4186,8 @@ function buildVoiceSessionCallbacks(
       }));
       schedulePartialVoiceFallbackCommit(get, set);
 
-      if (!voiceInterruptRequested && isVoiceAssistantActive(get) && shouldInterruptAssistant(merged, VOICE_INTERRUPT_MIN_CHARS, VOICE_BACKCHANNEL_MAX_WORDS)) {
+      if (!voiceInterruptRequested && assistantActive && shouldInterruptAssistant(normalized, VOICE_INTERRUPT_MIN_CHARS, VOICE_BACKCHANNEL_MAX_WORDS)) {
+        pendingVoiceTranscript = normalized;
         voiceInterruptRequested = true;
         assistantSpeech.stop();
         void requestImmediateVoiceInterrupt(get, set).catch(() => undefined);
@@ -4076,17 +4211,19 @@ function buildVoiceSessionCallbacks(
         return;
       }
 
-      const merged = pendingVoiceTranscript ? mergeVoiceTranscriptSegments(pendingVoiceTranscript, normalized) : normalized;
-      pendingVoiceTranscript = merged;
       clearPendingPartialVoiceCommitTimer();
-
-      if (isVoiceAssistantActive(get) && isLikelyAssistantEcho(merged, get().voiceAssistantDraft ?? "")) {
+      const assistantActive = isVoiceAssistantActive(get);
+      const assistantDraft = get().voiceAssistantDraft ?? "";
+      if (assistantActive && isLikelyAssistantEcho(normalized, assistantDraft)) {
         clearPendingVoiceTranscript();
         set({ liveTranscript: "", voiceAudioLevel: -2, voiceSessionPhase: "assistant-speaking" });
         return;
       }
 
-      if (isVoiceAssistantActive(get) && !voiceInterruptRequested && !shouldInterruptAssistant(merged, VOICE_INTERRUPT_MIN_CHARS, VOICE_BACKCHANNEL_MAX_WORDS)) {
+      const merged = pendingVoiceTranscript ? mergeVoiceTranscriptSegments(pendingVoiceTranscript, normalized) : normalized;
+      pendingVoiceTranscript = merged;
+
+      if (assistantActive && !voiceInterruptRequested && !shouldInterruptAssistant(normalized, VOICE_INTERRUPT_MIN_CHARS, VOICE_BACKCHANNEL_MAX_WORDS)) {
         clearPendingVoiceTranscript();
         set({ liveTranscript: "", voiceSessionPhase: "assistant-speaking" });
         return;
@@ -4109,6 +4246,24 @@ function buildVoiceSessionCallbacks(
     onReconnect: () => {
       if (get().voiceMuted) {
         set({ listening: false, voiceSessionPhase: "muted" });
+        return;
+      }
+      if (!usesRealtimeVoicePath(get())) {
+        set((state) => ({
+          listening: hasQueuedVoiceAutoSend(state) ? false : true,
+          voiceSessionPhase:
+            hasQueuedVoiceAutoSend(state)
+              ? "processing"
+              : state.voiceSessionPhase === "assistant-speaking" ||
+                  state.voiceSessionPhase === "processing" ||
+                  state.voiceSessionPhase === "user-speaking"
+                ? state.voiceSessionPhase
+                : "listening",
+          voiceTelemetry: {
+            ...state.voiceTelemetry,
+            reconnects: state.voiceTelemetry.reconnects + 1
+          }
+        }));
         return;
       }
       set((state) => ({
@@ -5009,6 +5164,10 @@ function clearPendingVoiceTranscript(): void {
   pendingVoiceTranscript = null;
 }
 
+function hasQueuedVoiceAutoSend(state: Pick<AppState, "autoSendVoice" | "composer" | "composerInputMode" | "sendingMessage">): boolean {
+  return isQueuedVoiceAutoSendPending(state.autoSendVoice, state.composer, state.composerInputMode) || state.sendingMessage;
+}
+
 function schedulePendingVoiceCommit(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
@@ -5143,16 +5302,42 @@ async function ensureVoiceLoopListening(
   get: () => AppState,
   set: (partial: Partial<AppState> | ((state: AppState) => Partial<AppState>)) => void
 ): Promise<void> {
-  if (!SHOULD_PAUSE_RECOGNITION_DURING_TTS) {
+  const state = get();
+  if (!state.voiceSessionActive || state.voiceMuted || state.voiceSessionPhase === "review" || usesRealtimeVoicePath(state)) {
     return;
   }
 
-  const state = get();
-  if (!state.voiceSessionActive || state.voiceMuted || state.voiceSessionPhase === "review" || state.listening) {
+  if (hasQueuedVoiceAutoSend(state) && !state.sendingMessage) {
+    set({
+      listening: false,
+      voiceSessionPhase: "processing",
+      voiceAudioLevel: -2
+    });
+    await maybeAutoSendVoiceResult(get, set);
+    return;
+  }
+
+  if (voice.isSessionActive()) {
+    if (!voice.isRecognizerRunning()) {
+      await voice.restartActiveRecognition();
+    }
+    if (!state.listening || state.voiceSessionPhase === "assistant-speaking" || state.voiceSessionPhase === "interrupted") {
+      set({
+        listening: true,
+        voiceSessionPhase: "listening",
+        voiceAudioLevel: -2
+      });
+    }
     return;
   }
 
   await startVoiceLoopRecognition(get, set);
+}
+
+function shouldDesktopReconnectAffectVoiceUi(
+  state: Pick<AppState, "voiceSessionActive" | "voiceRuntimeMode" | "offlineMode">
+): boolean {
+  return state.voiceSessionActive && state.voiceRuntimeMode === "realtime_primary" && !state.offlineMode;
 }
 
 function connectSocket(
@@ -5180,7 +5365,7 @@ function connectSocket(
           realtimeConnected: true,
           error: null,
           voiceSessionPhase:
-            state.voiceSessionActive && state.voiceSessionPhase === "reconnecting" ? "listening" : state.voiceSessionPhase
+            shouldDesktopReconnectAffectVoiceUi(state) && state.voiceSessionPhase === "reconnecting" ? "listening" : state.voiceSessionPhase
         }));
         get().refresh().catch(() => undefined);
       };
@@ -5205,9 +5390,9 @@ function connectSocket(
         socket = null;
         set((state) => ({
           realtimeConnected: false,
-          voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
+          voiceSessionPhase: shouldDesktopReconnectAffectVoiceUi(state) ? "reconnecting" : state.voiceSessionPhase,
           notice: state.offlineMode
-            ? getDisconnectedModeNotice()
+            ? state.notice
             : "Realtime connection dropped. Freedom is reconnecting to the desktop link now.",
           error: null
         }));
@@ -5220,8 +5405,8 @@ function connectSocket(
     } catch {
       set((state) => ({
         realtimeConnected: false,
-        voiceSessionPhase: state.voiceSessionActive ? "reconnecting" : state.voiceSessionPhase,
-        notice: state.offlineMode ? getDisconnectedModeNotice() : "Freedom is reconnecting the live desktop link now.",
+        voiceSessionPhase: shouldDesktopReconnectAffectVoiceUi(state) ? "reconnecting" : state.voiceSessionPhase,
+        notice: state.offlineMode ? state.notice : "Freedom is reconnecting the live desktop link now.",
         error: null
       }));
       get().refresh().catch(() => undefined);
@@ -5274,7 +5459,8 @@ function scheduleReconnect(
   reconnectAttempts += 1;
 
   if (reconnectAttempts === GRACE_WINDOW_ATTEMPTS + 1) {
-    set({ offlineMode: true, notice: getDisconnectedModeNotice() });
+    set((state) => ({ offlineMode: true, notice: getDisconnectedModeNotice(state.relayReachable) }));
+    void refreshStandaloneRelayHealth(_get, set).catch(() => undefined);
   }
 
   const delayMs = reconnectAttempts > GRACE_WINDOW_ATTEMPTS ? SLOW_POLL_DELAY_MS : GRACE_WINDOW_DELAY_MS;
@@ -5392,7 +5578,7 @@ function applyStreamEvent(
     shouldQueueTypedSpeechReply =
       pendingTypedSpokenReply &&
       payload.message.status === "completed" &&
-      payload.message.content.trim().length > 0;
+      normalizeChatMessageContent(payload.message.content).length > 0;
     shouldStopTypedSpeechReply =
       pendingTypedSpokenReply &&
       (payload.message.status === "failed" || payload.message.status === "interrupted");

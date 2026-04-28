@@ -23,6 +23,8 @@ const startedAt = new Date().toISOString();
 const relaySharedSecret = process.env.FREEDOM_RELAY_SHARED_SECRET?.trim() || "";
 const openaiApiKey = process.env.OPENAI_API_KEY?.trim() || "";
 const openaiModel = process.env.FREEDOM_RELAY_OPENAI_MODEL?.trim() || "gpt-4o-mini";
+const perplexityApiKey = process.env.PERPLEXITY_API_KEY?.trim() || "";
+const webSearchModel = process.env.FREEDOM_WEB_SEARCH_MODEL?.trim() || "sonar";
 const relayRealtimeModel = process.env.FREEDOM_RELAY_REALTIME_MODEL?.trim() || "gpt-realtime-mini";
 const livekitApiKey = process.env.LIVEKIT_API_KEY?.trim() || "";
 const livekitApiSecret = process.env.LIVEKIT_API_SECRET?.trim() || "";
@@ -109,6 +111,23 @@ const assistantVoiceCatalog = [
     pace: "adaptive"
   }
 ];
+const RELAY_TIMEOUT_MS = 20_000;
+const WEB_LOOKUP_PATTERNS = [
+  /\bsearch\b/i,
+  /\blook\s+up\b/i,
+  /\blookup\b/i,
+  /\bresearch\b/i,
+  /\bon the web\b/i,
+  /\bonline\b/i,
+  /\bcurrent\b/i,
+  /\blatest\b/i,
+  /\btoday\b/i,
+  /\bnews\b/i,
+  /\bweather\b/i,
+  /\bforecast\b/i,
+  /\bprice\b/i,
+  /\bstock\b/i
+];
 
 async function loadFirebaseMessaging() {
   if (firebaseMessaging || !firebaseProjectId || !firebaseServiceAccountPath) {
@@ -170,7 +189,7 @@ const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
 const RELAY_STANDALONE_CHAT_PROMPT = [
   "You are Freedom supporting Freedom Anywhere while the desktop is unavailable.",
   "Freedom Anywhere is the phone doorway into Freedom, not a separate assistant product.",
-  "In stand-alone mode, help with capture, planning, brainstorming, summaries, and practical next steps until the desktop returns.",
+  "In stand-alone mode, help with capture, planning, brainstorming, summaries, practical next steps, and live public web lookups when the relay provides them.",
   "You may use the stand-alone runtime context and recent conversation bootstrap as real memory context for this session.",
   "Do not claim live desktop access, live governed execution, or completed actions you cannot verify here.",
   "Freedom's full governed runtime can inspect approved code and repo control files when the desktop lane is active and permissions allow it, so describe that capability accurately without pretending it is live in this stand-alone lane.",
@@ -217,7 +236,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, {
         ok: true,
         service: "freedom-relay",
-        endpoints: ["/health", "POST /chat", "POST /livekit-token", "POST /desktop-pulse"]
+        endpoints: ["/health", "POST /chat", "POST /livekit-token", "POST /desktop-pulse", "/api/mobile-companion/speech"]
       });
     }
 
@@ -259,6 +278,24 @@ async function handleChat(req, res) {
 
   const purpose = typeof body?.purpose === "string" ? body.purpose.trim() : "standalone_chat";
   const runtimeContext = typeof body?.runtimeContext === "string" ? body.runtimeContext.trim() : "";
+  const latestUserPrompt = normalizeMessageContent(
+    [...messages].reverse().find((message) => message.role === "user")?.content
+  );
+  const shouldUseWebLookup =
+    purpose === "standalone_chat" &&
+    Boolean(
+      body?.enableWebLookup === true ||
+      (latestUserPrompt && WEB_LOOKUP_PATTERNS.some((pattern) => pattern.test(latestUserPrompt)))
+    );
+  if (shouldUseWebLookup) {
+    const reply = await requestPerplexityLookup(systemMessagesForWebLookup(purpose, runtimeContext, messages));
+    return sendJson(res, 200, {
+      reply,
+      model: webSearchModel,
+      usage: null,
+      usedWebLookup: true
+    });
+  }
   const systemMessages = buildRelaySystemMessages(purpose, runtimeContext);
 
   const completion = await openai.chat.completions.create({
@@ -271,7 +308,8 @@ async function handleChat(req, res) {
   return sendJson(res, 200, {
     reply,
     model: completion.model,
-    usage: completion.usage ?? null
+    usage: completion.usage ?? null,
+    usedWebLookup: false
   });
 }
 
@@ -462,6 +500,17 @@ function buildRelaySystemMessages(purpose, runtimeContext) {
   ];
 }
 
+function systemMessagesForWebLookup(purpose, runtimeContext, messages) {
+  return [
+    ...buildRelaySystemMessages(purpose, runtimeContext),
+    ...messages.slice(-8)
+  ];
+}
+
+function normalizeMessageContent(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function normalizeMessages(value) {
   if (!Array.isArray(value)) {
     return null;
@@ -541,6 +590,72 @@ function normalizeSpeechVoiceProfile(profile) {
     pace: profile?.pace?.trim() || null,
     notes: profile?.notes?.trim() || null
   };
+}
+
+async function requestPerplexityLookup(messages) {
+  if (!perplexityApiKey) {
+    throw new Error("PERPLEXITY_API_KEY is not configured on the relay.");
+  }
+
+  const payload = await requestJson("https://api.perplexity.ai/v1/sonar", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${perplexityApiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: webSearchModel,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are Freedom's stand-alone web lookup tool. Answer concisely, include dates when they matter, and ground the answer in current web results."
+        }
+      ].concat(messages),
+      temperature: 0.2,
+      web_search_options: {
+        search_mode: "web",
+        disable_search: false,
+        return_related_questions: false
+      }
+    })
+  });
+
+  const text = payload?.choices?.[0]?.message?.content?.trim();
+  if (!text) {
+    throw new Error("The stand-alone web lookup returned an empty reply.");
+  }
+
+  const citations = Array.isArray(payload?.citations)
+    ? payload.citations.filter((item) => typeof item === "string" && item.trim().length > 0)
+    : [];
+  const topCitations = citations.slice(0, 3).map((url) => `- ${url}`).join("\n");
+  return topCitations ? `${text}\n\nSources:\n${topCitations}` : text;
+}
+
+async function requestJson(url, init) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RELAY_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = payload?.error?.message || payload?.error || `Request failed (${response.status}).`;
+      throw new Error(String(detail));
+    }
+    return payload;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Relay request timed out after ${Math.round(RELAY_TIMEOUT_MS / 1000)} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function readJson(req) {

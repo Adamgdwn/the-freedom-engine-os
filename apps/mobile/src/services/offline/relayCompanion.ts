@@ -7,15 +7,39 @@ export type RelayMessage = {
 };
 
 type RelayChatPurpose = "standalone_chat" | "offline_summary" | "learning_extract";
+const WEB_LOOKUP_PATTERNS = [
+  /\bsearch\b/i,
+  /\blook\s+up\b/i,
+  /\blookup\b/i,
+  /\bresearch\b/i,
+  /\bon the web\b/i,
+  /\bonline\b/i,
+  /\bcurrent\b/i,
+  /\blatest\b/i,
+  /\btoday\b/i,
+  /\bnews\b/i,
+  /\bweather\b/i,
+  /\bforecast\b/i,
+  /\bprice\b/i,
+  /\bstock\b/i
+];
 
-const RELAY_TIMEOUT_MS = 20_000;
+const RELAY_TIMEOUT_MS = 7_000;
+
+function normalizeRelayMessageContent(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 export class RelayCompanionService {
   async generateReply(messages: RelayMessage[], runtimeContext?: string): Promise<string> {
+    const latestUserPrompt = normalizeRelayMessageContent(
+      [...messages].reverse().find((message) => message.role === "user")?.content
+    );
     const data = await this.post<{ reply: string }>("/chat", {
       messages,
       purpose: "standalone_chat" satisfies RelayChatPurpose,
-      runtimeContext: runtimeContext?.trim() || undefined
+      runtimeContext: runtimeContext?.trim() || undefined,
+      enableWebLookup: Boolean(latestUserPrompt && WEB_LOOKUP_PATTERNS.some((pattern) => pattern.test(latestUserPrompt)))
     });
     return data.reply;
   }

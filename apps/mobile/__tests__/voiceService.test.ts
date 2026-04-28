@@ -152,6 +152,26 @@ describe("VoiceService", () => {
     expect(Voice.start).toHaveBeenCalledTimes(1);
   });
 
+  test("can restart the active recognizer when the session is still alive but Android has stopped listening", async () => {
+    const service = new VoiceService();
+
+    await service.startStreamingSession({
+      onError: jest.fn()
+    });
+    (Voice.start as jest.Mock).mockClear();
+
+    const endListener = getListener("onSpeechEnd");
+    endListener();
+
+    expect(service.isSessionActive()).toBe(true);
+    expect(service.isRecognizerRunning()).toBe(false);
+
+    await service.restartActiveRecognition();
+
+    expect(Voice.start).toHaveBeenCalledTimes(1);
+    expect(service.isRecognizerRunning()).toBe(true);
+  });
+
   test("starts recognition with the device locale and manual permission handling on Android", async () => {
     const service = new VoiceService();
     const originalPlatformOs = Platform.OS;

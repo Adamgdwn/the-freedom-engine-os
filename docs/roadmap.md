@@ -59,6 +59,12 @@ For the consolidated dated list of currently known deficiencies, see
 - verify APK sideload on device and confirm voice + gateway pairing work end-to-end
 - run a fresh real-device pass for stand-alone conversation quality now that the
   phone-hosted relay and hosted speech fallback are both live again
+- close the remaining stand-alone voice handoff gap on device:
+  confirm captured voice turns stay visibly in `processing`, relay-backed send starts
+  immediately, hosted Freedom speech plays, and the loop returns to listening without
+  falling back to a stale preview or a hidden idle state
+- harden the current phone-hosted Termux relay uptime story so stand-alone hosted text
+  and speech do not disappear when the local relay process is terminated between tests
 - validate conversational voice-profile updates end to end: review current profile,
   save a new one in voice, restart the session, and confirm the next live voice uses
   the expected preset mapping

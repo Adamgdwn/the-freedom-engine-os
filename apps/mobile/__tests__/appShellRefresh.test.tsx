@@ -233,7 +233,34 @@ jest.mock("../src/store/appStore", () => ({
   useAppStore: jest.fn((selector?: (state: typeof mockStore) => unknown) => (selector ? selector(mockStore) : mockStore)),
   getEffectiveConnectionState: jest.fn((state: typeof mockStore) => mockConnectionState(state)),
   getEffectiveVoiceState: jest.fn((state: typeof mockStore) => mockVoiceState(state)),
-  getEffectiveDeferredExecutionState: jest.fn((state: typeof mockStore) => mockDeferredExecutionState(state))
+  getEffectiveDeferredExecutionState: jest.fn((state: typeof mockStore) => mockDeferredExecutionState(state)),
+  getEffectiveFreedomVoiceProfile: jest.fn((state: typeof mockStore) => (
+    state.offlineMode || !state.token || state.hostStatus?.connectionState === "stand_alone"
+      ? {
+          targetVoice: state.selectedFreedomVoicePresetId,
+          displayName: state.selectedFreedomVoicePresetId,
+          gender: "neutral",
+          accent: null,
+          tone: null,
+          warmth: "medium",
+          pace: "steady",
+          notes: null,
+          source: "manual",
+          updatedAt: "2026-04-27T00:00:00.000Z"
+        }
+      : (state.hostStatus?.voiceProfile ?? {
+          targetVoice: state.selectedFreedomVoicePresetId,
+          displayName: state.selectedFreedomVoicePresetId,
+          gender: "neutral",
+          accent: null,
+          tone: null,
+          warmth: "medium",
+          pace: "steady",
+          notes: null,
+          source: "manual",
+          updatedAt: "2026-04-27T00:00:00.000Z"
+        })
+  ))
 }));
 
 describe("refresh affordances", () => {

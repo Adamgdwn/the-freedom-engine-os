@@ -34,7 +34,8 @@ surface than a one-shot relay:
 
 - continuous voice loop instead of one-tap transcript capture
 - explicit barge-in interruption with immediate TTS stop and visible acknowledgment
-- recognition paused during assistant playback, then resumed automatically after spoken replies
+- recognizer continuity now stays live through stand-alone assistant playback so Android
+  barge-in and post-reply recovery do not depend on a full stop/start every turn
 - auto-send voice turns with review only for genuinely risky or unusually long
   transcripts
 - primary Freedom voice choices now surfaced as the real realtime presets such as
@@ -72,6 +73,10 @@ surface than a one-shot relay:
 - stand-alone hosted speech now uses the relay's authenticated
   `GET /api/mobile-companion/speech` endpoint, so disconnected spoken replies can still
   work when realtime voice is unavailable but the relay is reachable
+- the stand-alone hosted lane now actively checks the local relay before advertising
+  `Hosted support ready`, so if the current phone-hosted Termux relay dies the mobile
+  surface should fall back to an honest unavailable state instead of pretending hosted
+  voice is still online
 - the slim release only advertises stand-alone `cloud` mode when both a disconnected
   host and a real `FREEDOM_RELAY_SHARED_SECRET` are present; placeholder or missing
   relay secrets now force a truthful `notes_only` fallback instead of a broken fake-cloud state
@@ -88,9 +93,9 @@ surface than a one-shot relay:
 - the `Talk` header now uses that same layout without the old back-control remnant, so
   both primary voice surfaces read consistently
 - compact footer actions on the `Talk` canvas with `Mute`, `Text`, live voice controls,
-  a raised typed-turn composer, and one lower `Recent thread` card for opening and
-  collapsing transcript history without overloading the center Freedom dialogue; the
-  transcript itself now scrolls inside a bounded panel so the collapse control stays reachable
+  a raised typed-turn composer, and bounded transcript history only when the operator
+  intentionally opens it, so the stand-alone `Talk` canvas can stay voice-first instead
+  of filling the screen with a passive `Recent thread` card
 - the typed composer on `Talk` now feeds the same live Freedom conversation instead of
   a separate side-channel: if the talk loop is already active, the arrow injects that
   typed turn into the current voice session; if not, the arrow starts the talk loop and
@@ -238,6 +243,10 @@ network routing is unavailable.
   and authenticated `GET /api/mobile-companion/speech`.
   On the current OnePlus Termux relay, those calls should all succeed on port `43311`
   with the same `FREEDOM_RELAY_SHARED_SECRET` used by the desktop and mobile build.
+- If the stand-alone chip says `Hosted support unavailable` or the phone reports
+  `Freedom relay unreachable at http://127.0.0.1:43311`, treat that as a real Termux
+  relay outage first. Restart `node ~/freedom-relay/src/server.js` in the live Termux
+  shell, then re-check `GET /health` on `127.0.0.1:43311` before chasing mobile UI bugs.
 - If `Talk` connects but stays on `Listening`, treat that as a missing or stalled desktop
   voice worker first. The phone can connect to the LiveKit room successfully even when
   nobody is there yet to answer.

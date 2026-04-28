@@ -184,6 +184,7 @@ export class VoiceService {
   private lastCommittedTranscript = "";
   private lastCommittedAt = 0;
   private sessionActive = false;
+  private recognitionRunning = false;
   private manualStopRequested = false;
   private suppressUnexpectedEndReconnect = false;
   private callbacks: VoiceCallbacks | null = null;
@@ -215,13 +216,12 @@ export class VoiceService {
       throw new Error("Speech recognition is not available in this build.");
     }
 
-    this.stopStreamingSession();
-    await resetNativeRecognizer();
+    await this.prepareForNewSession();
     await ensureMicrophonePermission();
     await ensureSupportedAndroidRecognitionService();
-    this.clearForceAbortTimer();
     this.callbacks = callbacks;
     this.sessionActive = true;
+    this.recognitionRunning = false;
     this.manualStopRequested = false;
     this.suppressUnexpectedEndReconnect = false;
     this.latestTranscript = "";
@@ -234,6 +234,7 @@ export class VoiceService {
   stopStreamingSession(): void {
     this.manualStopRequested = true;
     this.sessionActive = false;
+    this.recognitionRunning = false;
     this.suppressUnexpectedEndReconnect = true;
     this.clearReconnectTimer();
     this.clearForceAbortTimer();
@@ -272,12 +273,57 @@ export class VoiceService {
     this.stopStreamingSession();
   }
 
+  isSessionActive(): boolean {
+    return this.sessionActive;
+  }
+
+  isRecognizerRunning(): boolean {
+    return this.recognitionRunning;
+  }
+
+  async restartActiveRecognition(): Promise<void> {
+    if (!this.sessionActive || this.manualStopRequested) {
+      return;
+    }
+
+    this.clearReconnectTimer();
+    this.recognitionRunning = false;
+    await this.startRecognition();
+  }
+
+  private async prepareForNewSession(): Promise<void> {
+    this.manualStopRequested = true;
+    this.sessionActive = false;
+    this.recognitionRunning = false;
+    this.suppressUnexpectedEndReconnect = true;
+    this.clearReconnectTimer();
+    this.clearForceAbortTimer();
+    this.clearPartialFinalizeTimer();
+
+    try {
+      await Voice.stop();
+    } catch {
+      // Ignore cleanup failures between sessions.
+    }
+
+    try {
+      await Voice.cancel();
+    } catch {
+      // Ignore cleanup failures between sessions.
+    }
+
+    await resetNativeRecognizer();
+    this.cleanup();
+  }
+
   private attachListeners(): void {
     Voice.onSpeechStart = () => {
+      this.recognitionRunning = true;
       this.callbacks?.onListening?.();
       this.callbacks?.onSpeechStart?.();
     };
     Voice.onSpeechEnd = () => {
+      this.recognitionRunning = false;
       this.clearPartialFinalizeTimer();
       this.callbacks?.onSpeechEnd?.();
 
@@ -319,6 +365,7 @@ export class VoiceService {
       this.latestTranscript = "";
     };
     Voice.onSpeechError = (event) => {
+      this.recognitionRunning = false;
       this.clearPartialFinalizeTimer();
       if (this.latestTranscript && isRecoverableSessionError(event)) {
         this.emitFinalTranscript(this.latestTranscript);
@@ -359,7 +406,9 @@ export class VoiceService {
       );
       this.suppressUnexpectedEndReconnect = false;
       await Voice.start(preferredLanguage, startOptions);
+      this.recognitionRunning = true;
     } catch (error) {
+      this.recognitionRunning = false;
       this.callbacks?.onError(error instanceof Error ? error.message : "Voice recognition could not start.");
       this.stopStreamingSession();
     }
@@ -415,6 +464,7 @@ export class VoiceService {
     this.latestTranscript = "";
     this.lastCommittedTranscript = "";
     this.lastCommittedAt = 0;
+    this.recognitionRunning = false;
     this.callbacks = null;
   }
 

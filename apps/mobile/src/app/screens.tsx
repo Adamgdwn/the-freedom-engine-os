@@ -31,7 +31,7 @@ export const refreshScrollInteractionProps = {
   overScrollMode: "always" as const
 };
 
-function disconnectedHint(fallbackTitle: string | null): string {
+function disconnectedHint(fallbackTitle: string | null, relayReachable: boolean | null): string {
   const disconnectedMode = getStandaloneAssistantMode();
   if (fallbackTitle) {
     return fallbackTitle;
@@ -40,7 +40,9 @@ function disconnectedHint(fallbackTitle: string | null): string {
     case "bundled_model":
       return "Cached chats and on-device ideation are ready.";
     case "cloud":
-      return "Cached chats and hosted support are ready.";
+      return relayReachable === false
+        ? "Cached chats are ready, but hosted support on this phone is unavailable."
+        : "Cached chats and hosted support are ready.";
     default:
       return "Cached chats and saved ideas are ready.";
   }
@@ -58,6 +60,12 @@ function disconnectedCompanionLabel(state: AppState): string {
           : "On-device model bundled";
   }
   if (disconnectedMode === "cloud") {
+    if (state.relayReachable === false) {
+      return "Hosted support unavailable";
+    }
+    if (state.relayReachable === null) {
+      return "Checking hosted support";
+    }
     return "Hosted support ready";
   }
   return "Saved for later";
@@ -68,7 +76,18 @@ function disconnectedCompanionTone(state: AppState): "teal" | "orange" {
   if (disconnectedMode === "bundled_model") {
     return state.offlineModelState === "ready" ? "teal" : "orange";
   }
+  if (disconnectedMode === "cloud") {
+    return state.relayReachable === true ? "teal" : "orange";
+  }
   return "teal";
+}
+
+function compactVoiceReplyPreview(value: string | null | undefined): string | null {
+  const normalized = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  if (!normalized) {
+    return null;
+  }
+  return normalized.length > 220 ? `${normalized.slice(0, 217).trimEnd()}...` : normalized;
 }
 
 function connectedVoiceLaneLabel(state: AppState): string {
@@ -241,13 +260,13 @@ export function StartScreen(props: {
   const voiceHint = !store.token
     ? currentSession?.title ?? standaloneSurfaceHint()
     : store.offlineMode
-      ? disconnectedHint(currentSession?.title ?? null)
+      ? disconnectedHint(currentSession?.title ?? null, store.relayReachable)
     : currentSession?.title ?? "Freedom is ready when you are.";
   const surfaceMessage = store.error ?? store.notice;
   const surfaceMessageTone = store.error ? "error" : "info";
   const compactVoiceSurface = windowWidth < 400;
   const tightVoiceSurface = windowWidth < 360;
-  const showThinkingSpinner = store.voiceSessionPhase === "processing";
+  const showThinkingSpinner = store.voiceSessionPhase === "processing" || store.sendingMessage;
 
   return (
     <ScrollView
@@ -1151,7 +1170,7 @@ export function ChatScreen(props: {
   const hasPendingOfflineDraft = Boolean(
     storedOfflineDraft && !storedOfflineDraft.importedAt && storedOfflineDraft.draftTurns.some((turn) => turn.trim().length > 0)
   );
-  const showOfflineImportReview = Boolean(store.selectedSessionId && (store.offlineMode || pendingDeferredOperatorRuns.length || hasPendingOfflineDraft));
+  const showOfflineImportReview = Boolean(store.selectedSessionId && (pendingDeferredOperatorRuns.length || hasPendingOfflineDraft));
   const showComposerPanel = manualToolsVisible || (hasDraftText && !composerMinimized);
   const composerPanelHeight = Math.max(220, Math.min(320, Math.round(windowHeight * 0.32)));
   const transcriptPanelHeight = Math.max(250, Math.min(460, Math.round(windowHeight * 0.46)));
@@ -1159,6 +1178,7 @@ export function ChatScreen(props: {
   const compactVoiceSurface = windowWidth < 400;
   const tightVoiceSurface = windowWidth < 360;
   const connectionState = getEffectiveConnectionState(store);
+  const lastAssistantPreview = store.offlineMode && lastMessage?.role === "assistant" ? compactVoiceReplyPreview(lastMessage.content) : null;
   const centerHeadline =
     !store.token && !busy && !store.sendingMessage && !store.voiceSessionActive
       ? "On this phone"
@@ -1176,12 +1196,14 @@ export function ChatScreen(props: {
   const centerSubhead = store.liveTranscript
     ? store.liveTranscript
     : store.voiceAssistantDraft
-      ? store.voiceAssistantDraft
+      ? compactVoiceReplyPreview(store.voiceAssistantDraft) ?? store.voiceAssistantDraft
+      : lastAssistantPreview
+        ? lastAssistantPreview
       : !store.token
         ? selectedSession?.title ?? standaloneSurfaceHint()
       : store.offlineMode
-        ? disconnectedHint(null)
-      : busy || store.sendingMessage
+        ? disconnectedHint(null, store.relayReachable)
+        : busy || store.sendingMessage
         ? `${FREEDOM_RUNTIME_NAME} is still working on the current request.`
         : selectedSession?.title ?? "Talk to Freedom";
   const surfaceMessage = store.error ?? store.notice;
@@ -1233,15 +1255,6 @@ export function ChatScreen(props: {
     }, 80);
     return () => clearTimeout(timer);
   }, [showComposerPanel, showExternalDraftCard]);
-
-  useEffect(() => {
-    if (!store.offlineMode) {
-      return;
-    }
-    if (store.sendingMessage || lastMessage?.role === "assistant") {
-      setShowTranscript(true);
-    }
-  }, [lastMessage?.role, lastMessage?.status, store.offlineMode, store.sendingMessage]);
 
   useEffect(() => {
     if (store.offlineMode) {
@@ -1375,7 +1388,7 @@ export function ChatScreen(props: {
               </View>
             </ScrollView>
           </View>
-        ) : (
+        ) : !store.voiceSessionActive && !store.offlineMode ? (
           <Pressable
             testID="voice-thread-peek"
             style={styles.voicePeekPill}
@@ -1390,7 +1403,7 @@ export function ChatScreen(props: {
             </Text>
             <Text style={styles.voicePeekAction}>Open</Text>
           </Pressable>
-        )}
+        ) : null}
       </ScrollView>
 
       {showExternalDraftCard || showOfflineImportReview ? (
@@ -1642,7 +1655,7 @@ export function ChatScreen(props: {
             </Pressable>
           </View>
           <Text style={styles.voiceComposerPanelHint}>
-            Type here, then press the arrow to feed it into the live Freedom conversation. If Talk is not running yet, the arrow will start it first.
+            Type here, then press the arrow to send it. If Talk is already running, the arrow feeds it into the live Freedom conversation.
           </Text>
           <TextInput
             ref={composerRef}
@@ -1784,7 +1797,7 @@ function summarizeThreadPeek(
   }
 
   if (lastMessage?.content) {
-    return lastMessage.content.trim().replace(/\s+/g, " ").slice(0, 180);
+    return (typeof lastMessage.content === "string" ? lastMessage.content : "").trim().replace(/\s+/g, " ").slice(0, 180);
   }
 
   if (session?.rootPath) {
