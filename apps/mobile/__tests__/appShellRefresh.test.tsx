@@ -384,12 +384,25 @@ describe("refresh affordances", () => {
         rootPath: "/tmp/workspace",
         title: "Voice thread",
         kind: "operator",
+        pinned: false,
+        archived: false,
+        identity: {
+          productName: "Freedom",
+          assistantName: "Freedom",
+          freedomSessionId: "freedom-session-1",
+          originSurface: "mobile_companion",
+          workspaceContext: "/tmp/workspace",
+          auditCorrelationId: "audit-session-1"
+        },
+        threadId: null,
         status: "idle",
+        activeTurnId: null,
+        stopRequested: false,
+        lastError: null,
+        lastPreview: null,
         createdAt: "2026-04-12T10:00:00.000Z",
         updatedAt: "2026-04-12T10:00:00.000Z",
         lastActivityAt: "2026-04-12T10:00:00.000Z",
-        memorySummary: null,
-        interruptionMode: "adaptive",
       },
     ];
     mockStore.messagesBySession = { "session-1": [] };

@@ -179,6 +179,12 @@ For the consolidated dated list of known gaps and unfinished areas, see
   `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured, later sync imports
   those notes as non-executing history, and optional builds can still bundle the old
   on-device model only when explicitly requested.
+- The stand-alone relay lane now authenticates hosted speech fallback with the same
+  `FREEDOM_RELAY_SHARED_SECRET` used for relay chat and LiveKit token minting, so
+  disconnected spoken replies have a real server path instead of falling silent.
+- The slim build no longer advertises stand-alone `cloud` mode when the relay secret is
+  missing or still a placeholder; it now falls back truthfully to `notes_only` rather
+  than entering a broken fake-cloud state.
 - During stand-alone review/import flow, Freedom Anywhere can now queue conservative
   durable `learning` candidates locally and sync them back into Freedom's canonical
   learning store once the paired desktop path is available again.
@@ -186,8 +192,9 @@ For the consolidated dated list of known gaps and unfinished areas, see
   governed `A3` operator runs locally and import them later into the canonical
   desktop-backed ledger as `awaiting-approval` work instead of pretending the phone
   already executed them.
-- The current live slim build still compiles the offline-safe fallback as `notes_only` because no
-  explicit `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is configured in the active repo env.
+- The current live slim build only resolves to relay-backed stand-alone `cloud` mode when
+  both an explicit disconnected host and a usable relay shared secret are configured in
+  the active repo env.
 - Freedom Anywhere now emphasizes:
   command-and-capture from the phone, a sparse Start surface, a dedicated Talk canvas,
   and a hidden utility sheet instead of a dashboard-style shell.

@@ -70,6 +70,7 @@ import {
   createLocalStandaloneSession,
   getStandaloneAssistantMode,
   getStandaloneCompanionBaseUrl,
+  getStandaloneRelaySharedSecret,
   isLocalOnlySession,
   mergeRemoteAndLocalSessions,
   standaloneSurfaceHint
@@ -383,7 +384,7 @@ function getDisconnectedAssistantMode(): DisconnectedAssistantMode {
 
 function getDisconnectedAssistantRuntimeMode(): MobileVoiceRuntimeMode {
   if (getDisconnectedAssistantMode() === "bundled_model") return "on_device_offline";
-  if (RELAY_BASE_URL) return "realtime_primary";
+  if (getDisconnectedAssistantMode() === "cloud") return "realtime_primary";
   return "device_fallback";
 }
 
@@ -393,10 +394,10 @@ function getDisconnectedAssistantReadyState(): { state: OfflineModelState; detai
       return offlineAssistant.getStatus();
     case "cloud":
       return {
-        state: RELAY_BASE_URL ? "ready" : "missing",
-        detail: RELAY_BASE_URL
-          ? `Freedom relay ready at ${RELAY_BASE_URL}.`
-          : "No relay configured. Set MOBILE_RELAY_BASE_URL in your .env and rebuild."
+        state: getConfiguredDisconnectedAssistantBaseUrl() ? "ready" : "missing",
+        detail: getConfiguredDisconnectedAssistantBaseUrl()
+          ? `Freedom relay ready at ${getConfiguredDisconnectedAssistantBaseUrl()}.`
+          : "No usable relay is configured. Set MOBILE_RELAY_BASE_URL and FREEDOM_RELAY_SHARED_SECRET in your .env, then rebuild."
       };
     default:
       return {
@@ -870,6 +871,7 @@ function getFreedomSpeechProvider(state: Pick<AppState, "baseUrl" | "offlineMode
   return {
     endpointUrl: standaloneBaseUrl,
     authorization: null,
+    sharedSecret: getStandaloneRelaySharedSecret(),
     voiceProfile: getEffectiveFreedomVoiceProfile(state),
     label: "this phone while the desktop is away"
   };

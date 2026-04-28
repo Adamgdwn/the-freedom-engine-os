@@ -5,6 +5,7 @@ import {
   LOCAL_ONLY_SESSION_ROOT_PATH,
   LOCAL_ONLY_SESSION_TITLE,
   createLocalStandaloneSession,
+  isUsableStandaloneRelaySecret,
   isLocalOnlySession,
   mergeRemoteAndLocalSessions
 } from "../src/services/mobile/standalone";
@@ -68,6 +69,12 @@ describe("standalone mobile helpers", () => {
       hostId: "desktop-host",
       title: "Freedom"
     });
+  });
+
+  test("treats missing or placeholder relay secrets as unusable", () => {
+    expect(isUsableStandaloneRelaySecret("")).toBe(false);
+    expect(isUsableStandaloneRelaySecret("PUT_A_LONG_RANDOM_SECRET_HERE")).toBe(false);
+    expect(isUsableStandaloneRelaySecret("actual-shared-secret")).toBe(true);
   });
 });
 

@@ -8,7 +8,11 @@ import { AccessToken } from "livekit-server-sdk";
 import OpenAI from "openai";
 
 const relayDir = path.dirname(fileURLToPath(import.meta.url));
-for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(relayDir, "../../../.env")]) {
+for (const envPath of [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(relayDir, "../../../.env"),
+  path.resolve(os.homedir(), ".freedom-relay.env")
+]) {
   dotenv.config({ path: envPath, override: true });
 }
 
@@ -29,6 +33,83 @@ const relayVoiceBootstraps = new Map();
 
 let firebaseMessaging = null;
 
+const assistantVoicePresetIds = ["alloy", "ash", "ballad", "cedar", "coral", "echo", "marin", "sage", "shimmer", "verse"];
+const legacyAssistantVoiceAliases = {
+  nova: "marin"
+};
+const assistantVoiceCatalog = [
+  {
+    id: "alloy",
+    accentHints: ["international", "general"],
+    toneHints: ["clear", "direct", "neutral"],
+    warmth: "medium",
+    pace: "steady"
+  },
+  {
+    id: "ash",
+    accentHints: ["general", "international"],
+    toneHints: ["grounded", "calm", "measured"],
+    warmth: "medium",
+    pace: "steady"
+  },
+  {
+    id: "ballad",
+    accentHints: ["general", "international"],
+    toneHints: ["warm", "storytelling", "expressive"],
+    warmth: "high",
+    pace: "slower"
+  },
+  {
+    id: "cedar",
+    accentHints: ["general", "international"],
+    toneHints: ["direct", "dry", "steady"],
+    warmth: "low",
+    pace: "steady"
+  },
+  {
+    id: "coral",
+    accentHints: ["general", "international"],
+    toneHints: ["warm", "upbeat", "friendly"],
+    warmth: "high",
+    pace: "adaptive"
+  },
+  {
+    id: "echo",
+    accentHints: ["general", "international"],
+    toneHints: ["plainspoken", "direct", "focused"],
+    warmth: "low",
+    pace: "brisk"
+  },
+  {
+    id: "marin",
+    accentHints: ["general", "international"],
+    toneHints: ["warm", "capable", "assured"],
+    warmth: "high",
+    pace: "steady"
+  },
+  {
+    id: "sage",
+    accentHints: ["general", "international"],
+    toneHints: ["calm", "measured", "thoughtful"],
+    warmth: "medium",
+    pace: "slower"
+  },
+  {
+    id: "shimmer",
+    accentHints: ["general", "international"],
+    toneHints: ["bright", "energetic", "light"],
+    warmth: "medium",
+    pace: "brisk"
+  },
+  {
+    id: "verse",
+    accentHints: ["general", "international"],
+    toneHints: ["expressive", "dramatic", "textured"],
+    warmth: "medium",
+    pace: "adaptive"
+  }
+];
+
 async function loadFirebaseMessaging() {
   if (firebaseMessaging || !firebaseProjectId || !firebaseServiceAccountPath) {
     return firebaseMessaging;
@@ -43,6 +124,46 @@ async function loadFirebaseMessaging() {
   });
   firebaseMessaging = admin.default.messaging();
   return firebaseMessaging;
+}
+
+function normalizeAssistantVoicePresetId(value) {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  const aliased = legacyAssistantVoiceAliases[normalized] ?? normalized;
+  return assistantVoicePresetIds.includes(aliased) ? aliased : "marin";
+}
+
+function getAssistantVoiceCatalogEntry(voiceId) {
+  const normalized = normalizeAssistantVoicePresetId(voiceId);
+  return assistantVoiceCatalog.find((voice) => voice.id === normalized) ?? assistantVoiceCatalog[0];
+}
+
+function buildAssistantSpeechInstructions(profile) {
+  const entry = getAssistantVoiceCatalogEntry(profile.targetVoice);
+  const accentHint = profile.accent?.trim() || entry.accentHints[0] || "general";
+  const toneHint = profile.tone?.trim() || entry.toneHints.join(", ");
+  const warmth = profile.warmth ?? entry.warmth;
+  const pace = profile.pace ?? entry.pace;
+  const notes = profile.notes?.trim();
+  const parts = [
+    "Sound natural, warm, and human. Avoid robotic delivery.",
+    accentHint === "international" ? "Keep the accent light and international." : `Accent hint: ${accentHint}.`,
+    toneHint ? `Tone: ${toneHint}.` : null,
+    warmth === "high"
+      ? "Keep the delivery warm and textured."
+      : warmth === "low"
+        ? "Keep the delivery lean and dry."
+        : "Keep the delivery balanced and calm.",
+    pace === "slower"
+      ? "Speak a little slower than average."
+      : pace === "brisk"
+        ? "Speak a little brisker than average."
+        : pace === "adaptive"
+          ? "Adapt the pace naturally to the sentence."
+          : "Keep a steady speaking pace.",
+    notes ? `Operator note: ${notes}.` : null
+  ];
+
+  return parts.filter((part) => Boolean(part && part.trim())).join(" ");
 }
 
 const openai = openaiApiKey ? new OpenAI({ apiKey: openaiApiKey }) : null;
@@ -104,6 +225,10 @@ const server = http.createServer(async (req, res) => {
       return handleVoiceRuntimeBootstrap(req, res, url);
     }
 
+    if (req.method === "GET" && url.pathname === "/api/mobile-companion/speech") {
+      return handleMobileCompanionSpeech(req, res);
+    }
+
     if (req.method === "POST" && url.pathname === "/chat") {
       return handleChat(req, res);
     }
@@ -148,6 +273,41 @@ async function handleChat(req, res) {
     model: completion.model,
     usage: completion.usage ?? null
   });
+}
+
+async function handleMobileCompanionSpeech(req, res) {
+  if (!requireSharedSecret(req, res)) return;
+  if (!openaiApiKey) {
+    return sendJson(res, 503, { error: "OPENAI_API_KEY is not configured on the relay." });
+  }
+
+  const text = readSpeechTextHeader(req.headers);
+  const voiceProfile = readSpeechVoiceProfileHeader(req.headers);
+  const response = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${openaiApiKey}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      model: process.env.MOBILE_DISCONNECTED_ASSISTANT_TTS_MODEL?.trim() || "gpt-4o-mini-tts",
+      voice: voiceProfile.targetVoice,
+      input: text,
+      instructions: buildAssistantSpeechInstructions(voiceProfile),
+      response_format: "mp3"
+    })
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    return sendJson(res, 502, { error: detail || `Freedom speech request failed (${response.status}).` });
+  }
+
+  const audioBuffer = Buffer.from(await response.arrayBuffer());
+  res.statusCode = 200;
+  res.setHeader("content-type", response.headers.get("content-type")?.trim() || "audio/mpeg");
+  res.setHeader("cache-control", "no-store");
+  res.end(audioBuffer);
 }
 
 async function handleLivekitToken(req, res) {
@@ -342,6 +502,45 @@ function normalizeRecentMessages(value) {
 
     return [{ id, role, content, createdAt }];
   }).slice(-10);
+}
+
+function readSpeechTextHeader(rawHeaders) {
+  const value = rawHeaders["x-freedom-speech-input"];
+  const encoded = Array.isArray(value) ? value[0]?.trim() ?? "" : value?.trim() ?? "";
+  if (!encoded) {
+    throw new Error("Freedom speech input header is required.");
+  }
+
+  try {
+    return decodeURIComponent(encoded).trim();
+  } catch {
+    throw new Error("Freedom speech input header is malformed.");
+  }
+}
+
+function readSpeechVoiceProfileHeader(rawHeaders) {
+  const value = rawHeaders["x-freedom-speech-profile"];
+  const encoded = Array.isArray(value) ? value[0]?.trim() ?? "" : value?.trim() ?? "";
+  if (!encoded) {
+    return normalizeSpeechVoiceProfile({ targetVoice: "marin" });
+  }
+
+  try {
+    return normalizeSpeechVoiceProfile(JSON.parse(decodeURIComponent(encoded)));
+  } catch {
+    return normalizeSpeechVoiceProfile({ targetVoice: "marin" });
+  }
+}
+
+function normalizeSpeechVoiceProfile(profile) {
+  return {
+    targetVoice: normalizeAssistantVoicePresetId(profile?.targetVoice ?? "marin"),
+    accent: profile?.accent?.trim() || null,
+    tone: profile?.tone?.trim() || null,
+    warmth: profile?.warmth?.trim() || null,
+    pace: profile?.pace?.trim() || null,
+    notes: profile?.notes?.trim() || null
+  };
 }
 
 async function readJson(req) {

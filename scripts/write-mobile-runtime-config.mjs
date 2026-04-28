@@ -8,18 +8,28 @@ dotenv.config({ path: path.join(repoRoot, ".env"), override: true });
 const defaultBaseUrl = process.env.MOBILE_DEFAULT_BASE_URL?.trim() || "";
 const relayBaseUrl = process.env.MOBILE_RELAY_BASE_URL?.trim() || "";
 const relaySharedSecret = process.env.FREEDOM_RELAY_SHARED_SECRET?.trim() || "";
+const bundledOfflineEnabled = process.env.MOBILE_BUNDLED_OFFLINE_ENABLED?.trim() === "true";
+const relaySecretPlaceholder = "PUT_A_LONG_RANDOM_SECRET_HERE";
 const configuredDisconnectedAssistantBaseUrl =
   process.env.MOBILE_DISCONNECTED_ASSISTANT_BASE_URL?.trim() || relayBaseUrl;
-const disconnectedAssistantBaseUrl = configuredDisconnectedAssistantBaseUrl;
-const disconnectedAssistantMode = configuredDisconnectedAssistantBaseUrl ? "cloud" : "notes_only";
-if (disconnectedAssistantMode !== "cloud") {
+const hasUsableRelaySecret = Boolean(relaySharedSecret) && relaySharedSecret !== relaySecretPlaceholder;
+const hostedStandaloneConfigured = Boolean(configuredDisconnectedAssistantBaseUrl) && hasUsableRelaySecret;
+const disconnectedAssistantMode = bundledOfflineEnabled
+  ? "bundled_model"
+  : hostedStandaloneConfigured
+    ? "cloud"
+    : "notes_only";
+const disconnectedAssistantBaseUrl = hostedStandaloneConfigured ? configuredDisconnectedAssistantBaseUrl : "";
+const effectiveRelayBaseUrl = hostedStandaloneConfigured ? relayBaseUrl : "";
+const effectiveRelaySharedSecret = hostedStandaloneConfigured ? relaySharedSecret : "";
+if (!bundledOfflineEnabled && !configuredDisconnectedAssistantBaseUrl) {
   process.stderr.write(
     "warn: MOBILE_RELAY_BASE_URL is not set; this build falls back to notes_only and Freedom Anywhere will not have a stand-alone brain.\n"
   );
 }
-if (disconnectedAssistantMode === "cloud" && !relaySharedSecret) {
+if (!bundledOfflineEnabled && configuredDisconnectedAssistantBaseUrl && !hasUsableRelaySecret) {
   process.stderr.write(
-    "warn: FREEDOM_RELAY_SHARED_SECRET is empty; relay calls from the mobile app will be rejected by the relay.\n"
+    "warn: FREEDOM_RELAY_SHARED_SECRET is missing or still set to the placeholder value; this build falls back to notes_only.\n"
   );
 }
 const requestedVoiceRuntimeMode = process.env.MOBILE_VOICE_RUNTIME_MODE?.trim();
@@ -44,11 +54,11 @@ const targetPath = path.join(repoRoot, "apps/mobile/src/generated/runtimeConfig.
 await fs.mkdir(path.dirname(targetPath), { recursive: true });
 await fs.writeFile(
   targetPath,
-  `export const DEFAULT_BASE_URL = ${JSON.stringify(defaultBaseUrl)};\n` +
+    `export const DEFAULT_BASE_URL = ${JSON.stringify(defaultBaseUrl)};\n` +
     `export const DISCONNECTED_ASSISTANT_MODE = ${JSON.stringify(disconnectedAssistantMode)};\n` +
     `export const DISCONNECTED_ASSISTANT_BASE_URL = ${JSON.stringify(disconnectedAssistantBaseUrl)};\n` +
-    `export const RELAY_BASE_URL = ${JSON.stringify(relayBaseUrl)};\n` +
-    `export const RELAY_SHARED_SECRET = ${JSON.stringify(relaySharedSecret)};\n` +
+    `export const RELAY_BASE_URL = ${JSON.stringify(effectiveRelayBaseUrl)};\n` +
+    `export const RELAY_SHARED_SECRET = ${JSON.stringify(effectiveRelaySharedSecret)};\n` +
     `export const FCM_ENABLED = ${JSON.stringify(fcmEnabled)};\n` +
     `export const MOBILE_APP_VERSION_NAME = ${JSON.stringify(mobileAppVersionName)};\n` +
     `export const MOBILE_APP_VERSION_CODE = ${Number.isFinite(mobileAppVersionCode) ? mobileAppVersionCode : 0};\n` +

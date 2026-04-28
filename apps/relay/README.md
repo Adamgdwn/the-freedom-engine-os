@@ -17,6 +17,8 @@ without pretending it has the full governed desktop execution surface.
 - `POST /chat` — bounded stand-alone chat / summary fallback for the phone while
   the desktop is unavailable. This path should stay behaviorally aligned with
   the main Freedom runtime and not evolve into a separate assistant identity.
+- `GET /api/mobile-companion/speech` — hosted fallback speech for stand-alone
+  phone replies when realtime voice is unavailable but the relay is reachable.
 - `POST /livekit-token` — mints a short-lived LiveKit room token so the phone
   can run premium voice without the desktop gateway.
 - `POST /desktop-pulse` — desktop gateway posts here on startup; relay fans out
@@ -46,7 +48,8 @@ FIREBASE_SERVICE_ACCOUNT_JSON=/absolute/path/to/service-account.json
 ```
 
 The shared secret must also be set on the desktop gateway (for `/desktop-pulse`)
-and passed into the mobile build (for `/chat` and `/livekit-token`).
+and passed into the mobile build (for `/chat`, `/livekit-token`, and hosted
+speech fallback).
 
 ## Integration Notes
 
@@ -97,9 +100,25 @@ ssh u0_aXXX@<tailscale-ip> \
    env $(grep -v "^#" ~/.freedom-relay.env | xargs) nohup node src/server.js > relay.log 2>&1 &'
 ```
 
-The relay reads `~/.freedom-relay.env` at startup via the `env $(...)` wrapper — the
-env file must be sourced explicitly because the process runs as `node`, not as a named
-service. The same wrapper must be used for manual restarts in Termux.
+The relay now reads `~/.freedom-relay.env` itself on startup in addition to the
+repo-root `.env` locations used in local development. That means direct Termux
+starts such as `node src/server.js` can still pick up the relay env file
+without relying on an outer `env $(...)` wrapper. Keeping the wrapper in the
+boot script is still fine, but it is no longer required for secrets to load.
+
+On the current OnePlus Termux deployment, the most reliable live-update path is:
+
+1. Keep `~/.freedom-relay.env` on the phone with the same
+   `FREEDOM_RELAY_SHARED_SECRET` used in desktop `.env` and the mobile build.
+2. Replace `~/freedom-relay/src/server.js` and `~/freedom-relay/package.json`
+   from the workstation.
+3. Start the relay directly in Termux with `node ~/freedom-relay/src/server.js`
+   or via `~/.termux/boot/start-relay.sh`.
+4. Confirm `GET /health` reports all required secrets as configured.
+
+If the relay host is a self-contained Termux copy instead of a full monorepo
+checkout, the relay source must stay self-contained. The current `server.js`
+does not rely on monorepo-only imports for voice fallback.
 
 Then hit `http://<tailscale-ip>:43311/health` from any Tailscale peer and confirm
 `secretsConfigured` lights up for the keys you populated.

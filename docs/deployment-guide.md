@@ -21,6 +21,9 @@ Document status: live reference
    `npm run build`
 3. Confirm repo-root `.env` contains the desktop, gateway, and mobile runtime secrets.
    Keep `.env.example` as placeholders only.
+   For stand-alone relay-backed Freedom Anywhere, also confirm
+   `MOBILE_RELAY_BASE_URL`, `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL`, and
+   `FREEDOM_RELAY_SHARED_SECRET` are real values rather than placeholders.
 4. Confirm `.env.local` points at the linked Supabase project
    `basbwglynuyfxcqxfyur` when web-only overrides are needed.
 5. Confirm `SUPABASE_SERVICE_ROLE_KEY` is available for server-side Freedom memory persistence.
@@ -54,6 +57,9 @@ When publishing a new Freedom Android APK:
    `ANDROID_PUBLISH_VERIFY_URL=http://host:port/downloads/android/latest.apk npm run publish:android-release`
 7. Confirm the install page shows the intended Android build identifier:
    `versionName`, `versionCode`, and the unique build-specific APK filename.
+8. If the current relay host is the phone's Termux runtime, confirm
+   `~/.freedom-relay.env` contains the same `FREEDOM_RELAY_SHARED_SECRET` as the desktop
+   build before shipping the APK.
 
 ## Rollback
 

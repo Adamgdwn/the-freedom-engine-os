@@ -48,10 +48,17 @@ For the consolidated dated list of currently known deficiencies, see
 - Brand icon refresh:
   the new robot owl mark now ships as the desktop tray/launcher icon and the
   Freedom Anywhere phone app icon across Expo, Android, and iOS assets
+- Stand-alone relay truth pass:
+  Freedom Anywhere now requires a real relay shared secret before advertising
+  stand-alone hosted mode, the phone-hosted Termux relay now serves authenticated
+  fallback speech, and the relay source can run as a self-contained Termux copy
+  without monorepo-only imports
 
 ## Now
 
 - verify APK sideload on device and confirm voice + gateway pairing work end-to-end
+- run a fresh real-device pass for stand-alone conversation quality now that the
+  phone-hosted relay and hosted speech fallback are both live again
 - validate conversational voice-profile updates end to end: review current profile,
   save a new one in voice, restart the session, and confirm the next live voice uses
   the expected preset mapping

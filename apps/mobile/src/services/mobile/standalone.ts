@@ -6,27 +6,52 @@ import {
   type MobileConnectionState
 } from "@freedom/shared";
 import { normalizeBaseUrl } from "../../config";
-import { DISCONNECTED_ASSISTANT_BASE_URL, DISCONNECTED_ASSISTANT_MODE } from "../../generated/runtimeConfig";
+import {
+  DISCONNECTED_ASSISTANT_BASE_URL,
+  DISCONNECTED_ASSISTANT_MODE,
+  RELAY_SHARED_SECRET
+} from "../../generated/runtimeConfig";
 import { sortSessionsForDisplay } from "../../utils/operatorConsole";
 import { sanitizeSessionsForFreedom } from "./sessionSanitizer";
 
 export type StandaloneAssistantMode = "bundled_model" | "cloud" | "notes_only";
+const RELAY_SECRET_PLACEHOLDER = "PUT_A_LONG_RANDOM_SECRET_HERE";
 
 export const LOCAL_ONLY_SESSION_HOST_ID = "mobile-standalone";
 export const LOCAL_ONLY_SESSION_DEVICE_ID = "mobile-standalone-device";
 export const LOCAL_ONLY_SESSION_ROOT_PATH = "mobile://standalone";
 export const LOCAL_ONLY_SESSION_TITLE = `${FREEDOM_PRODUCT_NAME} on this phone`;
 
+function getRawStandaloneCompanionBaseUrl(): string {
+  return normalizeBaseUrl(DISCONNECTED_ASSISTANT_BASE_URL || "");
+}
+
+export function isUsableStandaloneRelaySecret(secret: string | null | undefined): boolean {
+  const trimmed = secret?.trim() ?? "";
+  return Boolean(trimmed) && trimmed !== RELAY_SECRET_PLACEHOLDER;
+}
+
+export function hasConfiguredStandaloneHostedCompanion(): boolean {
+  return Boolean(getRawStandaloneCompanionBaseUrl()) && isUsableStandaloneRelaySecret(RELAY_SHARED_SECRET);
+}
+
+export function getStandaloneRelaySharedSecret(): string | null {
+  return hasConfiguredStandaloneHostedCompanion() ? RELAY_SHARED_SECRET.trim() : null;
+}
+
 export function getStandaloneAssistantMode(): StandaloneAssistantMode {
   const configuredMode = String(DISCONNECTED_ASSISTANT_MODE);
-  if (configuredMode === "bundled_model" || configuredMode === "cloud") {
-    return configuredMode;
+  if (configuredMode === "bundled_model") {
+    return "bundled_model";
+  }
+  if (configuredMode === "cloud" && hasConfiguredStandaloneHostedCompanion()) {
+    return "cloud";
   }
   return "notes_only";
 }
 
 export function getStandaloneCompanionBaseUrl(): string {
-  return normalizeBaseUrl(DISCONNECTED_ASSISTANT_BASE_URL || "");
+  return hasConfiguredStandaloneHostedCompanion() ? getRawStandaloneCompanionBaseUrl() : "";
 }
 
 export function isLocalOnlySession(session: ChatSession | null | undefined): boolean {

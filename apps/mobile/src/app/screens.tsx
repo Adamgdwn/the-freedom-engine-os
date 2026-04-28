@@ -21,8 +21,7 @@ import { isValidExternalEmail } from "../utils/externalSend";
 import { findStopTargetSession, formatMessageTimestamp, isOperatorSession, isSessionBusy } from "../utils/operatorConsole";
 import { Banner, LabeledInput, MessageBubble, StatusChip, WorkingBubble } from "./components";
 import { styles } from "./mobileStyles";
-import { DISCONNECTED_ASSISTANT_MODE } from "../generated/runtimeConfig";
-import { standaloneSurfaceHint } from "../services/mobile/standalone";
+import { getStandaloneAssistantMode, standaloneSurfaceHint } from "../services/mobile/standalone";
 
 const keyboardDismissMode: "interactive" | "on-drag" = Platform.OS === "ios" ? "interactive" : "on-drag";
 export const refreshScrollInteractionProps = {
@@ -33,7 +32,7 @@ export const refreshScrollInteractionProps = {
 };
 
 function disconnectedHint(fallbackTitle: string | null): string {
-  const disconnectedMode = String(DISCONNECTED_ASSISTANT_MODE);
+  const disconnectedMode = getStandaloneAssistantMode();
   if (fallbackTitle) {
     return fallbackTitle;
   }
@@ -48,7 +47,7 @@ function disconnectedHint(fallbackTitle: string | null): string {
 }
 
 function disconnectedCompanionLabel(state: AppState): string {
-  const disconnectedMode = String(DISCONNECTED_ASSISTANT_MODE);
+  const disconnectedMode = getStandaloneAssistantMode();
   if (disconnectedMode === "bundled_model") {
     return state.offlineModelState === "ready"
       ? "On-device model ready"
@@ -65,7 +64,7 @@ function disconnectedCompanionLabel(state: AppState): string {
 }
 
 function disconnectedCompanionTone(state: AppState): "teal" | "orange" {
-  const disconnectedMode = String(DISCONNECTED_ASSISTANT_MODE);
+  const disconnectedMode = getStandaloneAssistantMode();
   if (disconnectedMode === "bundled_model") {
     return state.offlineModelState === "ready" ? "teal" : "orange";
   }

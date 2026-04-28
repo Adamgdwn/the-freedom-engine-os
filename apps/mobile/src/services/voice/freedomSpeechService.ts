@@ -20,6 +20,7 @@ export interface FreedomSpeechVoiceProfile {
 export interface FreedomSpeechProvider {
   endpointUrl: string;
   authorization?: string | null;
+  sharedSecret?: string | null;
   voiceProfile: FreedomSpeechVoiceProfile;
   label: string;
 }
@@ -161,6 +162,11 @@ function buildSpeechHeaders(text: string, provider: FreedomSpeechProvider): Reco
   const authorization = provider.authorization?.trim();
   if (authorization) {
     headers.authorization = authorization;
+  }
+
+  const sharedSecret = provider.sharedSecret?.trim();
+  if (sharedSecret) {
+    headers["x-freedom-relay-secret"] = sharedSecret;
   }
 
   return headers;

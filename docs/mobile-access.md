@@ -69,6 +69,12 @@ surface than a one-shot relay:
   support path; hosted offline lookup now activates only when
   `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured, while optional builds
   can still bundle the heavy on-device model and the default fallback remains notes-only
+- stand-alone hosted speech now uses the relay's authenticated
+  `GET /api/mobile-companion/speech` endpoint, so disconnected spoken replies can still
+  work when realtime voice is unavailable but the relay is reachable
+- the slim release only advertises stand-alone `cloud` mode when both a disconnected
+  host and a real `FREEDOM_RELAY_SHARED_SECRET` are present; placeholder or missing
+  relay secrets now force a truthful `notes_only` fallback instead of a broken fake-cloud state
 - offline mobile work is now review-first and safe by design:
   importing it writes non-executing `system` notes into canonical history and drafts one
   explicit `Continue with Freedom` follow-up instead of auto-replaying offline turns into
@@ -134,6 +140,16 @@ For premium mobile voice, repo-root `.env` must also contain:
 
 Keep `.env.example` as placeholders only. The live runtime does not read secrets from the
 template file.
+
+For stand-alone relay-backed fallback, repo-root `.env` must also contain:
+
+- `MOBILE_RELAY_BASE_URL`
+- `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL`
+- `FREEDOM_RELAY_SHARED_SECRET`
+
+That same `FREEDOM_RELAY_SHARED_SECRET` must also exist in the relay host's
+`~/.freedom-relay.env`. The current Termux deployment on the phone uses that shared secret
+for stand-alone chat, LiveKit token minting, and hosted speech fallback.
 
 The desktop host now autostarts the Python LiveKit/OpenAI worker when those runtime
 credentials are present. The default command is:
@@ -215,6 +231,13 @@ network routing is unavailable.
   desktop worker is reading secrets from repo-root `.env`, confirm the desktop-host logs
   show `[voice-worker] starting ...`, and reinstall the latest APK so the latest Android
   speech/runtime fixes are present on the phone.
+- If stand-alone text replies work but you hear no voice while the desktop is unavailable,
+  verify the relay directly before debugging the app UI:
+  `GET /health`,
+  authenticated `POST /chat`,
+  and authenticated `GET /api/mobile-companion/speech`.
+  On the current OnePlus Termux relay, those calls should all succeed on port `43311`
+  with the same `FREEDOM_RELAY_SHARED_SECRET` used by the desktop and mobile build.
 - If `Talk` connects but stays on `Listening`, treat that as a missing or stalled desktop
   voice worker first. The phone can connect to the LiveKit room successfully even when
   nobody is there yet to answer.
@@ -230,13 +253,14 @@ This gives you phone access to Freedom in two postures:
   with the workstation runtime, including the governed operator-run ledger
 - stand-alone on the phone, where voice capture and saved notes stay available even
   without any desktop link, hosted lookup or hosted spoken replies come online only
-  when an explicit offline support host is configured, and deferred operator work stays
-  explicitly local until a later import into the desktop-backed governed lane
+  when an explicit offline support host plus relay secret are configured, and deferred
+  operator work stays explicitly local until a later import into the desktop-backed
+  governed lane
 
 Independent hosted lookup now uses the dedicated offline support endpoint only when
 `MOBILE_DISCONNECTED_ASSISTANT_BASE_URL` is explicitly configured. Without that explicit
-host, the phone falls back to notes-only capture instead of silently depending
-on the desktop URL.
+host and a usable relay secret, the phone falls back to notes-only capture instead of
+silently depending on the desktop URL.
 
 ## Next Improvements
 

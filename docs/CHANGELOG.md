@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-04-27 (stand-alone relay truth + hosted speech recovery)
+
+- fixed Freedom Anywhere stand-alone mode so the slim build only advertises
+  relay-backed `cloud` fallback when a real `FREEDOM_RELAY_SHARED_SECRET` is present;
+  placeholder or missing relay secrets now force a truthful `notes_only` posture
+- added authenticated relay-hosted fallback speech at
+  `GET /api/mobile-companion/speech`, which restores spoken replies for stand-alone
+  sessions when realtime voice is unavailable but the relay is reachable
+- made the relay source self-contained for the current phone-hosted Termux deployment by
+  removing the monorepo-only shared voice-profile import and teaching the relay to read
+  `~/.freedom-relay.env` directly on startup
+- regenerated the mobile runtime config against the real relay secret, rebuilt the
+  Android APK, redeployed the phone install, and revalidated authenticated relay
+  `/health`, `/chat`, and hosted-speech flows end to end
+- bumped the Android release metadata to `versionCode 84` / `versionName 0.2.77`
+  for the rebuilt standalone-fix APK
+
 ## 2026-04-26 (desktop and phone app icon refresh)
 
 - replaced the generated Freedom desktop tray/launcher icon with the new robot owl

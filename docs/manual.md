@@ -136,6 +136,10 @@ that ties business outcomes back to freedom outcomes.
   now stays usable in `Offline / On-device` mode instead of failing closed. That offline
   path is intentionally limited to cached-context ideation, drafting, summaries, and
   high-level reasoning from the bundled local model.
+- The stand-alone hosted relay path is now more truthful:
+  placeholder or missing `FREEDOM_RELAY_SHARED_SECRET` values no longer let the phone
+  pretend relay-backed chat or speech is ready, and the relay now exposes an authenticated
+  hosted speech fallback endpoint for disconnected spoken replies.
 - Offline mobile work is not replayed into live desktop execution automatically. The safe
   handoff path is: review the offline summary and draft turns, import them into canonical
   history as non-executing `system` notes, then use the explicit `Continue with Freedom`

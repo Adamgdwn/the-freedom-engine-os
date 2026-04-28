@@ -214,6 +214,33 @@ env $(grep -v '^#' ~/.freedom-relay.env | xargs) node src/server.js
 
 The `env $(...)` wrapper injects the file's variables into the child process's environment before it starts. This is why `pkill` + naive restart didn't work for most of the session — the relay kept restarting without its secrets.
 
+### 2026-04-27 continuation
+
+The follow-up recovery pass changed two important things about this Termux story:
+
+1. The relay now loads `~/.freedom-relay.env` itself via `dotenv`, so direct
+   Termux starts such as `node ~/freedom-relay/src/server.js` can still pick up
+   the relay secrets without an outer `env $(...)` wrapper.
+2. The relay source was made self-contained for the phone-hosted copy by
+   removing the monorepo-only `@freedom/shared` dependency from `server.js`.
+
+That mattered because the OnePlus relay is not a full monorepo checkout. It is a
+small copied `~/freedom-relay/` directory in Termux. When the relay started using
+hosted speech fallback, the first Termux restart crashed because that shared
+workspace import did not exist on the phone.
+
+The recovery also validated the full hosted stand-alone voice fallback surface:
+
+- `GET /health` on the Termux relay reported all required secrets as configured
+- authenticated `POST /chat` returned a valid reply
+- authenticated `GET /api/mobile-companion/speech` returned `200 OK` with
+  `audio/mpeg`
+
+That means stand-alone spoken replies no longer depend on the desktop worker
+just to synthesize fallback audio. Realtime voice still benefits from the desktop
+or another full voice-agent host, but disconnected speech playback now has a real
+relay-backed server path.
+
 ### Port confusion resolved
 
 KDE Connect uses port `43211` on the phone. The relay was originally configured on `43211` and collided with it. We moved the relay to `43311`. These are permanently different:
