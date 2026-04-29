@@ -23,7 +23,10 @@ For a fast operator-facing view of what is actually live right now, use
   see `docs/voice-realtime-architecture.md` and `docs/specs/voice-layer-v1-spec.md`.
 - Device and host runtime:
   `apps/mobile`, `apps/gateway`, `apps/desktop`, `apps/desktop-host`, and
-  `apps/wake-relay` provide the phone, pairing, desktop-shell, host, and wake surfaces.
+  `apps/wake-relay` provide the phone, pairing, desktop cockpit, host, and wake surfaces.
+  The gateway root route is the local Freedom cockpit fallback: it exposes the robot owl
+  brand mark, manual command composer, mission brief, voice/phone state, connect/install
+  controls, and build prompts without requiring the full web control plane.
 - Shared runtime contracts:
   `packages/shared` holds shared contracts, runtime helpers, and cross-surface utility code.
 - Persistence and governance:
@@ -94,6 +97,9 @@ For a fast operator-facing view of what is actually live right now, use
 
 - V1 uses a seeded in-repo data layer to create a working governed slice quickly.
 - The UI is a control plane, not a chat shell or siloed SaaS dashboard.
+- The gateway desktop route is an operator cockpit, not a redundant dashboard: it should
+  keep manual command, voice/phone handoff, build prompts, install, and decision context
+  visible while avoiding inactive buttons or duplicate panels.
 - Human approval is preserved for reprioritization, policy edits, spending, and
   irreversible external commitments.
 - External email is draft-first and confirmation-gated. Freedom can prepare the send,
@@ -106,6 +112,8 @@ For a fast operator-facing view of what is actually live right now, use
   for durable history later.
 - Freedom is the product identity on desktop and phone; the runtime surfaces
   (gateway, desktop-host, mobile, wake-relay) are transport and pairing infrastructure.
+- The robot owl mark is the current brand asset across desktop and phone surfaces; the
+  gateway serves its cockpit copy from `apps/gateway/assets/robot-origin-logo.png`.
 - Mobile and desktop conversations land in Freedom-owned session contexts with shared
   audit correlation.
 - The earlier companion repo has been fully absorbed into this repo (2026-04-15) and is

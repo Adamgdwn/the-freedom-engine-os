@@ -53,9 +53,16 @@ For the consolidated dated list of currently known deficiencies, see
   stand-alone hosted mode, the phone-hosted Termux relay now serves authenticated
   fallback speech, and the relay source can run as a self-contained Termux copy
   without monorepo-only imports
+- Desktop cockpit cleanup:
+  the gateway browser fallback now presents a single Freedom cockpit with the robot
+  owl logo, mission brief, manual command composer, voice/phone context, build prompts,
+  connect/install access, and reduced redundant desktop panels/copy
 
 ## Now
 
+- validate the refreshed desktop cockpit in the full Electron shell as well as the
+  gateway browser fallback, including logo visibility, command send, stop-run behavior,
+  pairing copy buttons, install/download links, and tab switching
 - verify APK sideload on device and confirm voice + gateway pairing work end-to-end
 - run a fresh real-device pass for stand-alone conversation quality now that the
   phone-hosted relay and hosted speech fallback are both live again

@@ -2,7 +2,7 @@
 
 Document status: live reference
 
-Last updated: 2026-04-26
+Last updated: 2026-04-28
 
 This document is the working reference for what Freedom can actually do today.
 Update it whenever a change materially affects live behavior, operator workflows,
@@ -167,6 +167,13 @@ For the consolidated dated list of known gaps and unfinished areas, see
 ### Native Runtime Surfaces
 
 - Desktop shell, desktop host, gateway, wake relay, and Freedom Anywhere all live in this monorepo.
+- The gateway-served desktop fallback is now the Freedom cockpit:
+  a sleek local operator surface with the robot owl logo, mission brief, one manual
+  command composer, voice/phone pairing state, build prompts, decision/activity views,
+  settings, and Android install access.
+- The cockpit deliberately removes redundant workspaces/devices panels, stale `Studio`
+  framing, inactive placeholder branding, and dashboard-era copy from the live desktop
+  gateway route.
 - Phone and desktop pair into one Freedom-owned session identity through the Connect runtime.
 - Governed session routing, pairing, and activity surfaces are visible in the control plane.
 - Desktop-host and gateway runtime stores now bootstrap missing local state from committed,

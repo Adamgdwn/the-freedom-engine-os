@@ -1,6 +1,11 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createReadStream } from "node:fs";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
+import { createReadStream, existsSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import {
   autonomousOperatorRunSchema,
@@ -22,13 +27,13 @@ import {
   registerPushTokenRequestSchema,
   registerHostRequestSchema,
   renameDeviceRequestSchema,
-    sendExternalMessageRequestSchema,
-    sendTestNotificationRequestSchema,
-    syncMobileConversationMemoriesRequestSchema,
-    syncMobileLearningSignalsRequestSchema,
+  sendExternalMessageRequestSchema,
+  sendTestNotificationRequestSchema,
+  syncMobileConversationMemoriesRequestSchema,
+  syncMobileLearningSignalsRequestSchema,
   updateHostVoiceProfileRequestSchema,
   updateNotificationPrefsRequestSchema,
-  updateSessionRequestSchema
+  updateSessionRequestSchema,
 } from "@freedom/shared";
 import { WebSocketServer } from "ws";
 import {
@@ -38,32 +43,48 @@ import {
   findAndroidArtifact,
   renderDesktopPage,
   renderInstallPage,
-  renderInstallQrSvg
+  renderInstallQrSvg,
 } from "./installPage.js";
 import { GatewayStore } from "./store.js";
 import {
   isReplyRequest,
   isSummaryRequest,
   requestMobileCompanionReply,
-  requestMobileCompanionSummary
+  requestMobileCompanionSummary,
 } from "./mobileCompanion.js";
 import {
   readSpeechTextHeader as readGatewaySpeechTextHeader,
   readSpeechVoiceProfileHeader as readGatewaySpeechVoiceProfileHeader,
-  requestMobileCompanionSpeech as requestGatewayMobileCompanionSpeech
+  requestMobileCompanionSpeech as requestGatewayMobileCompanionSpeech,
 } from "./mobileCompanionSpeech.js";
 
-for (const envPath of [path.resolve(process.cwd(), ".env"), path.resolve(process.cwd(), "../../.env")]) {
+for (const envPath of [
+  path.resolve(process.cwd(), ".env"),
+  path.resolve(process.cwd(), "../../.env"),
+]) {
   dotenv.config({ path: envPath, override: true });
 }
 
 const port = Number(process.env.GATEWAY_PORT ?? 43111);
 const host = process.env.GATEWAY_HOST ?? "0.0.0.0";
 const dataDir = process.env.GATEWAY_DATA_DIR ?? ".local-data/gateway";
+const gatewayRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const robotOriginLogoPath = path.join(
+  gatewayRoot,
+  "assets",
+  "robot-origin-logo.png",
+);
 const store = new GatewayStore(dataDir);
 const subscriptions = new Map<string, Set<import("ws").WebSocket>>();
 
-function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
+function sendJson(
+  res: ServerResponse,
+  statusCode: number,
+  body: unknown,
+): void {
   res.statusCode = statusCode;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
@@ -85,7 +106,7 @@ function sendBuffer(
   res: ServerResponse,
   statusCode: number,
   body: ArrayBuffer,
-  contentType: string
+  contentType: string,
 ): void {
   res.statusCode = statusCode;
   res.setHeader("content-type", contentType);
@@ -98,7 +119,9 @@ async function readJson<T>(req: IncomingMessage): Promise<T> {
   for await (const chunk of req) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
-  return chunks.length ? (JSON.parse(Buffer.concat(chunks).toString("utf8")) as T) : ({} as T);
+  return chunks.length
+    ? (JSON.parse(Buffer.concat(chunks).toString("utf8")) as T)
+    : ({} as T);
 }
 
 function readBearer(req: IncomingMessage): string {
@@ -112,12 +135,15 @@ function readBearer(req: IncomingMessage): string {
 function assertLoopbackRequest(req: IncomingMessage): void {
   const remoteAddress = req.socket.remoteAddress ?? "";
   if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remoteAddress)) {
-    throw new Error("Desktop shell controls are only available on this desktop.");
+    throw new Error(
+      "Desktop shell controls are only available on this desktop.",
+    );
   }
 }
 
 function addSubscription(hostId: string, socket: import("ws").WebSocket): void {
-  const sockets = subscriptions.get(hostId) ?? new Set<import("ws").WebSocket>();
+  const sockets =
+    subscriptions.get(hostId) ?? new Set<import("ws").WebSocket>();
   sockets.add(socket);
   subscriptions.set(hostId, sockets);
   socket.on("close", () => {
@@ -156,7 +182,11 @@ const server = createServer(async (req, res) => {
         res.end();
         return;
       }
-      sendHtml(res, 200, renderDesktopPage(await buildInstallPageModel(req, overview)));
+      sendHtml(
+        res,
+        200,
+        renderDesktopPage(await buildInstallPageModel(req, overview)),
+      );
       return;
     }
 
@@ -168,7 +198,11 @@ const server = createServer(async (req, res) => {
         res.end();
         return;
       }
-      sendHtml(res, 200, renderInstallPage(await buildInstallPageModel(req, overview)));
+      sendHtml(
+        res,
+        200,
+        renderInstallPage(await buildInstallPageModel(req, overview)),
+      );
       return;
     }
 
@@ -181,6 +215,27 @@ const server = createServer(async (req, res) => {
         return;
       }
       sendSvg(res, 200, await renderInstallQrSvg(req, overview));
+      return;
+    }
+
+    if (
+      requestMethod === "GET" &&
+      url.pathname === "/assets/robot-origin-logo.png"
+    ) {
+      if (!existsSync(robotOriginLogoPath)) {
+        res.statusCode = 404;
+        res.setHeader("content-type", "text/plain; charset=utf-8");
+        res.end("Logo asset not found.");
+        return;
+      }
+      res.statusCode = 200;
+      res.setHeader("content-type", "image/png");
+      res.setHeader("cache-control", "public, max-age=86400");
+      if (isReadOnlyHead) {
+        res.end();
+        return;
+      }
+      createReadStream(robotOriginLogoPath).pipe(res);
       return;
     }
 
@@ -212,7 +267,7 @@ const server = createServer(async (req, res) => {
       const voiceProfile = readGatewaySpeechVoiceProfileHeader(req.headers);
       const payload = await requestGatewayMobileCompanionSpeech({
         text,
-        voiceProfile
+        voiceProfile,
       });
       sendBuffer(res, 200, payload.audio, payload.contentType);
       return;
@@ -224,14 +279,29 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === "POST" && url.pathname === "/host/learning-signals/sync") {
-      const parsed = syncMobileLearningSignalsRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.syncMobileLearningSignals(readBearer(req), parsed));
+      const parsed = syncMobileLearningSignalsRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.syncMobileLearningSignals(readBearer(req), parsed),
+      );
       return;
     }
 
-    if (method === "POST" && url.pathname === "/host/conversation-memories/sync") {
-      const parsed = syncMobileConversationMemoriesRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.syncMobileConversationMemories(readBearer(req), parsed));
+    if (
+      method === "POST" &&
+      url.pathname === "/host/conversation-memories/sync"
+    ) {
+      const parsed = syncMobileConversationMemoriesRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.syncMobileConversationMemories(readBearer(req), parsed),
+      );
       return;
     }
 
@@ -254,7 +324,10 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (method === "POST" && /^\/api\/operator-runs\/[^/]+\/update$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/api\/operator-runs\/[^/]+\/update$/.test(url.pathname)
+    ) {
       assertLoopbackRequest(req);
       const runId = decodeURIComponent(url.pathname.split("/")[3] ?? "");
       const parsed = operatorRunPatchSchema.parse(await readJson(req));
@@ -268,15 +341,25 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (method === "POST" && /^\/api\/desktop-shell\/sessions\/[^/]+\/messages$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/api\/desktop-shell\/sessions\/[^/]+\/messages$/.test(url.pathname)
+    ) {
       assertLoopbackRequest(req);
       const sessionId = url.pathname.split("/")[4];
       const parsed = postMessageRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.postDesktopShellMessage(sessionId, parsed));
+      sendJson(
+        res,
+        200,
+        await store.postDesktopShellMessage(sessionId, parsed),
+      );
       return;
     }
 
-    if (method === "POST" && /^\/api\/desktop-shell\/sessions\/[^/]+\/stop$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/api\/desktop-shell\/sessions\/[^/]+\/stop$/.test(url.pathname)
+    ) {
       assertLoopbackRequest(req);
       const sessionId = url.pathname.split("/")[4];
       sendJson(res, 200, await store.stopDesktopShellSession(sessionId));
@@ -294,30 +377,51 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (requestMethod === "GET" && url.pathname === "/control-plane/runtime-summary") {
+    if (
+      requestMethod === "GET" &&
+      url.pathname === "/control-plane/runtime-summary"
+    ) {
       assertLoopbackRequest(req);
       sendJson(res, 200, await loadControlPlaneRuntimeSummary());
       return;
     }
 
-    if (requestMethod === "GET" && (url.pathname === "/downloads/android/latest.apk" || /^\/downloads\/android\/[^/]+\.apk$/.test(url.pathname))) {
+    if (
+      requestMethod === "GET" &&
+      (url.pathname === "/downloads/android/latest.apk" ||
+        /^\/downloads\/android\/[^/]+\.apk$/.test(url.pathname))
+    ) {
       const artifact = await findAndroidArtifact();
       if (!artifact) {
-        sendJson(res, 404, { error: "Android APK not found on this desktop yet." });
+        sendJson(res, 404, {
+          error: "Android APK not found on this desktop yet.",
+        });
         return;
       }
-      if (url.pathname !== "/downloads/android/latest.apk" && url.pathname !== buildAndroidArtifactDownloadPath(artifact)) {
-        sendJson(res, 404, { error: "Requested Android APK build is not available on this desktop." });
+      if (
+        url.pathname !== "/downloads/android/latest.apk" &&
+        url.pathname !== buildAndroidArtifactDownloadPath(artifact)
+      ) {
+        sendJson(res, 404, {
+          error:
+            "Requested Android APK build is not available on this desktop.",
+        });
         return;
       }
 
       res.statusCode = 200;
       res.setHeader("content-type", "application/vnd.android.package-archive");
       res.setHeader("content-length", String(artifact.sizeBytes));
-      res.setHeader("content-disposition", `attachment; filename="${artifact.downloadFileName}"`);
+      res.setHeader(
+        "content-disposition",
+        `attachment; filename="${artifact.downloadFileName}"`,
+      );
       res.setHeader("x-content-type-options", "nosniff");
       res.setHeader("x-download-options", "noopen");
-      res.setHeader("cache-control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+      res.setHeader(
+        "cache-control",
+        "no-store, no-cache, must-revalidate, proxy-revalidate",
+      );
       res.setHeader("pragma", "no-cache");
       res.setHeader("expires", "0");
       res.setHeader("surrogate-control", "no-store");
@@ -339,7 +443,11 @@ const server = createServer(async (req, res) => {
 
     if (method === "POST" && url.pathname === "/pairing/complete") {
       const parsed = pairingCompleteRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.completePairing(parsed.pairingCode, parsed.deviceName));
+      sendJson(
+        res,
+        200,
+        await store.completePairing(parsed.pairingCode, parsed.deviceName),
+      );
       return;
     }
 
@@ -365,14 +473,25 @@ const server = createServer(async (req, res) => {
 
     if (method === "POST" && url.pathname === "/host/operator-runs") {
       const parsed = autonomousOperatorRunSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.upsertHostOperatorRun(readBearer(req), parsed));
+      sendJson(
+        res,
+        200,
+        await store.upsertHostOperatorRun(readBearer(req), parsed),
+      );
       return;
     }
 
-    if (method === "POST" && /^\/host\/operator-runs\/[^/]+\/update$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/host\/operator-runs\/[^/]+\/update$/.test(url.pathname)
+    ) {
       const runId = decodeURIComponent(url.pathname.split("/")[3] ?? "");
       const parsed = operatorRunPatchSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.updateHostOperatorRun(readBearer(req), runId, parsed));
+      sendJson(
+        res,
+        200,
+        await store.updateHostOperatorRun(readBearer(req), runId, parsed),
+      );
       return;
     }
 
@@ -381,31 +500,58 @@ const server = createServer(async (req, res) => {
       if (!roomName) {
         throw new Error("roomName is required.");
       }
-      sendJson(res, 200, await store.getVoiceRuntimeBootstrap(readBearer(req), roomName));
+      sendJson(
+        res,
+        200,
+        await store.getVoiceRuntimeBootstrap(readBearer(req), roomName),
+      );
       return;
     }
 
     if (method === "POST" && url.pathname === "/host/voice-profile") {
-      const parsed = updateHostVoiceProfileRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.updateVoiceProfile(readBearer(req), parsed));
+      const parsed = updateHostVoiceProfileRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.updateVoiceProfile(readBearer(req), parsed),
+      );
       return;
     }
 
-    if (method === "POST" && url.pathname === "/host/voice-runtime-transcript") {
+    if (
+      method === "POST" &&
+      url.pathname === "/host/voice-runtime-transcript"
+    ) {
       const parsed = await readJson<{
         roomName?: unknown;
         messageId?: unknown;
         role?: unknown;
         text?: unknown;
       }>(req);
-      const roomName = typeof parsed.roomName === "string" ? parsed.roomName.trim() : "";
-      const messageId = typeof parsed.messageId === "string" ? parsed.messageId.trim() : "";
-      const role = parsed.role === "user" || parsed.role === "assistant" ? parsed.role : null;
+      const roomName =
+        typeof parsed.roomName === "string" ? parsed.roomName.trim() : "";
+      const messageId =
+        typeof parsed.messageId === "string" ? parsed.messageId.trim() : "";
+      const role =
+        parsed.role === "user" || parsed.role === "assistant"
+          ? parsed.role
+          : null;
       const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
       if (!roomName || !messageId || !role || !text) {
         throw new Error("roomName, messageId, role, and text are required.");
       }
-      sendJson(res, 200, await store.appendVoiceRuntimeTranscript(readBearer(req), { roomName, messageId, role, text }));
+      sendJson(
+        res,
+        200,
+        await store.appendVoiceRuntimeTranscript(readBearer(req), {
+          roomName,
+          messageId,
+          role,
+          text,
+        }),
+      );
       return;
     }
 
@@ -415,8 +561,14 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === "POST" && url.pathname === "/voice/runtime/session") {
-      const parsed = createVoiceRuntimeSessionRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.createVoiceRuntimeSession(readBearer(req), parsed));
+      const parsed = createVoiceRuntimeSessionRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.createVoiceRuntimeSession(readBearer(req), parsed),
+      );
       return;
     }
 
@@ -448,7 +600,11 @@ const server = createServer(async (req, res) => {
 
     if (method === "POST" && url.pathname === "/host/turn/delta") {
       const parsed = hostAssistantDeltaRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.appendAssistantDelta(readBearer(req), parsed));
+      sendJson(
+        res,
+        200,
+        await store.appendAssistantDelta(readBearer(req), parsed),
+      );
       return;
     }
 
@@ -483,7 +639,11 @@ const server = createServer(async (req, res) => {
     if (method === "PATCH" && /^\/devices\/[^/]+$/.test(url.pathname)) {
       const deviceId = url.pathname.split("/")[2];
       const parsed = renameDeviceRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.renameDevice(readBearer(req), deviceId, parsed));
+      sendJson(
+        res,
+        200,
+        await store.renameDevice(readBearer(req), deviceId, parsed),
+      );
       return;
     }
 
@@ -493,24 +653,53 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (method === "POST" && /^\/devices\/[^/]+\/push-token$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/devices\/[^/]+\/push-token$/.test(url.pathname)
+    ) {
       const deviceId = url.pathname.split("/")[2];
       const parsed = registerPushTokenRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.registerPushToken(readBearer(req), deviceId, parsed));
+      sendJson(
+        res,
+        200,
+        await store.registerPushToken(readBearer(req), deviceId, parsed),
+      );
       return;
     }
 
-    if (method === "POST" && /^\/devices\/[^/]+\/notification-prefs$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/devices\/[^/]+\/notification-prefs$/.test(url.pathname)
+    ) {
       const deviceId = url.pathname.split("/")[2];
-      const parsed = updateNotificationPrefsRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.updateNotificationPrefs(readBearer(req), deviceId, parsed));
+      const parsed = updateNotificationPrefsRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.updateNotificationPrefs(readBearer(req), deviceId, parsed),
+      );
       return;
     }
 
-    if (method === "POST" && /^\/devices\/[^/]+\/test-notification$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/devices\/[^/]+\/test-notification$/.test(url.pathname)
+    ) {
       const deviceId = url.pathname.split("/")[2];
-      const parsed = sendTestNotificationRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.sendTestNotification(readBearer(req), deviceId, parsed.event));
+      const parsed = sendTestNotificationRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.sendTestNotification(
+          readBearer(req),
+          deviceId,
+          parsed.event,
+        ),
+      );
       return;
     }
 
@@ -520,26 +709,51 @@ const server = createServer(async (req, res) => {
     }
 
     if (method === "POST" && url.pathname === "/outbound/recipients") {
-      const parsed = createOutboundRecipientRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.createOutboundRecipient(readBearer(req), parsed));
+      const parsed = createOutboundRecipientRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.createOutboundRecipient(readBearer(req), parsed),
+      );
       return;
     }
 
-    if (method === "DELETE" && /^\/outbound\/recipients\/[^/]+$/.test(url.pathname)) {
+    if (
+      method === "DELETE" &&
+      /^\/outbound\/recipients\/[^/]+$/.test(url.pathname)
+    ) {
       const recipientId = url.pathname.split("/")[3];
-      sendJson(res, 200, await store.deleteOutboundRecipient(readBearer(req), recipientId));
+      sendJson(
+        res,
+        200,
+        await store.deleteOutboundRecipient(readBearer(req), recipientId),
+      );
       return;
     }
 
     if (method === "POST" && url.pathname === "/outbound/send") {
-      const parsed = sendExternalMessageRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.sendExternalMessage(readBearer(req), parsed));
+      const parsed = sendExternalMessageRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.sendExternalMessage(readBearer(req), parsed),
+      );
       return;
     }
 
     if (method === "POST" && url.pathname === "/contacts/capture") {
-      const parsed = captureContactFromTextRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.captureContactFromText(readBearer(req), parsed));
+      const parsed = captureContactFromTextRequestSchema.parse(
+        await readJson(req),
+      );
+      sendJson(
+        res,
+        200,
+        await store.captureContactFromText(readBearer(req), parsed),
+      );
       return;
     }
 
@@ -552,7 +766,11 @@ const server = createServer(async (req, res) => {
     if (method === "PATCH" && /^\/sessions\/[^/]+$/.test(url.pathname)) {
       const sessionId = url.pathname.split("/")[2];
       const parsed = updateSessionRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.updateSession(readBearer(req), sessionId, parsed));
+      sendJson(
+        res,
+        200,
+        await store.updateSession(readBearer(req), sessionId, parsed),
+      );
       return;
     }
 
@@ -562,23 +780,40 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (method === "GET" && /^\/sessions\/[^/]+\/messages$/.test(url.pathname)) {
+    if (
+      method === "GET" &&
+      /^\/sessions\/[^/]+\/messages$/.test(url.pathname)
+    ) {
       const sessionId = url.pathname.split("/")[2];
       sendJson(res, 200, await store.listMessages(readBearer(req), sessionId));
       return;
     }
 
-    if (method === "POST" && /^\/sessions\/[^/]+\/messages$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/sessions\/[^/]+\/messages$/.test(url.pathname)
+    ) {
       const sessionId = url.pathname.split("/")[2];
       const parsed = postMessageRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.postMessage(readBearer(req), sessionId, parsed));
+      sendJson(
+        res,
+        200,
+        await store.postMessage(readBearer(req), sessionId, parsed),
+      );
       return;
     }
 
-    if (method === "POST" && /^\/sessions\/[^/]+\/offline-import$/.test(url.pathname)) {
+    if (
+      method === "POST" &&
+      /^\/sessions\/[^/]+\/offline-import$/.test(url.pathname)
+    ) {
       const sessionId = url.pathname.split("/")[2];
       const parsed = offlineImportRequestSchema.parse(await readJson(req));
-      sendJson(res, 200, await store.importOfflineSession(readBearer(req), sessionId, parsed));
+      sendJson(
+        res,
+        200,
+        await store.importOfflineSession(readBearer(req), sessionId, parsed),
+      );
       return;
     }
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-04-28 (desktop cockpit cleanup + gateway logo)
+
+- refreshed the gateway-served Freedom Desktop surface into a cockpit-first operator
+  layout with one manual command console, high-level mission brief, voice/phone context,
+  build prompts, activity, settings, and connect/install access
+- removed stale visible `Partner Desk`, `Studio`, placeholder `F`, and dashboard-era
+  labels from the desktop gateway shell so the code and copy now point at the cockpit
+  concept instead of older redundant surfaces
+- added the supplied robot owl mark as `apps/gateway/assets/robot-origin-logo.png` and
+  surfaced it in the cockpit header, mission brief, and voice/phone context panel
+- added a gateway asset route for `/assets/robot-origin-logo.png` with a clean missing
+  asset response so stale or missing branding is easier to diagnose
+- restarted and verified the live gateway at `http://127.0.0.1:43111/` so the browser
+  fallback serves the updated cockpit and logo instead of the stale built output
+
 ## 2026-04-27 (stand-alone voice loop recovery + relay health truth)
 
 - changed Freedom Anywhere stand-alone `cloud` voice so it uses the local-capture plus

@@ -57,7 +57,11 @@ When publishing a new Freedom Android APK:
    `ANDROID_PUBLISH_VERIFY_URL=http://host:port/downloads/android/latest.apk npm run publish:android-release`
 7. Confirm the install page shows the intended Android build identifier:
    `versionName`, `versionCode`, and the unique build-specific APK filename.
-8. If the current relay host is the phone's Termux runtime, confirm
+8. Confirm the desktop cockpit at `http://127.0.0.1:43111/` is serving the current
+   gateway shell, including the robot owl logo from `/assets/robot-origin-logo.png`,
+   the manual command composer, pairing code/URL copy controls, and the Android install
+   link.
+9. If the current relay host is the phone's Termux runtime, confirm
    `~/.freedom-relay.env` contains the same `FREEDOM_RELAY_SHARED_SECRET` as the desktop
    build before shipping the APK.
 
@@ -91,3 +95,5 @@ When publishing a new Freedom Android APK:
 - Confirm the freshly built APK reports the intended `versionCode` / `versionName`
 - Confirm the gateway install page is serving the expected unique APK filename for that build,
   not just the generic `latest.apk` alias
+- Confirm the gateway desktop cockpit is not serving stale desktop copy or placeholder
+  branding after release; `/assets/robot-origin-logo.png` should return `200 OK`

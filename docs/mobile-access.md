@@ -22,7 +22,7 @@ The current repo now handles:
 - Repo:
   `/home/adamgoodwin/code/agents/the-freedom-engine-os`
 - Current supported desktop GUI:
-  Freedom Desktop shell launched from this repo, with a browser fallback at
+  Freedom Desktop launched from this repo, with the gateway cockpit browser fallback at
   `http://127.0.0.1:43111/`
 - Current phone app:
   Freedom Anywhere Android app built from this monorepo at `apps/mobile`
@@ -33,6 +33,9 @@ The current Freedom Anywhere behavior is now closer to a real Freedom operator
 surface than a one-shot relay:
 
 - continuous voice loop instead of one-tap transcript capture
+- desktop pairing and install access now sit beside the local Freedom cockpit's
+  mission brief, manual command composer, robot owl logo, build prompts, and review
+  context instead of a redundant dashboard-style gateway shell
 - explicit barge-in interruption with immediate TTS stop and visible acknowledgment
 - recognizer continuity now stays live through stand-alone assistant playback so Android
   barge-in and post-reply recovery do not depend on a full stop/start every turn
@@ -174,9 +177,9 @@ Optional control knobs:
 1. In this repo, run `npm run launch`.
 2. Confirm Codex is logged in on the desktop machine.
 3. Confirm Tailscale or another private network path is available from the phone.
-4. Pair the phone from the dashboard.
-5. Open the Freedom desktop shell and create or restore the primary Freedom session.
-6. Install the latest Freedom Android APK from this repo or the dashboard.
+4. Pair the phone from the desktop cockpit.
+5. Open the Freedom desktop cockpit and create or restore the primary Freedom session.
+6. Install the latest Freedom Android APK from this repo or the cockpit install page.
 7. Chat with the local Freedom Engine workspace from Freedom Anywhere.
 8. For premium voice, prefer the `Talk` canvas. The current realtime lane defaults to
    `gpt-realtime-mini` and normalizes legacy unsupported voice ids such as `nova` back
@@ -276,7 +279,7 @@ silently depending on the desktop URL.
 - keep Freedom as the visible product identity while the integrated runtime remains the transport layer
 - connect the modeled parallel-skill and self-evolving-function registry to the
   live runtime so Freedom can branch governed work in practice
-- add clearer builder-first actions from the desktop shell into Freedom-governed
+- validate builder-first actions from the desktop cockpit into Freedom-governed
   build requests
 - continue real-device Android validation for the current offline companion and realtime
   interrupt/recovery pass, especially under conference-grade network and noise conditions

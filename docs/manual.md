@@ -17,13 +17,15 @@ that ties business outcomes back to freedom outcomes.
 4. Copy `.env.example` to `.env` for desktop, gateway, mobile, and voice-worker runtime
    secrets. Use `.env.local` only for web-specific overrides.
 5. Start the control plane with `npm run dev`.
-6. When changing behavior, update the nearest matching controlled document in `docs/`.
-6. Before finishing, run:
+6. Start the local desktop cockpit and paired runtime with `npm run launch`, or run the
+   gateway fallback directly with `npm run dev --workspace @freedom/gateway`.
+7. When changing behavior, update the nearest matching controlled document in `docs/`.
+8. Before finishing, run:
    `npm run lint`
    `npm run typecheck`
    `npm test`
    `npm run build`
-7. For user-visible Android mobile changes, do not stop at source validation. Ship the APK:
+9. For user-visible Android mobile changes, do not stop at source validation. Ship the APK:
    `npm run release:android-live`
    Then confirm:
    `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`
@@ -82,6 +84,14 @@ that ties business outcomes back to freedom outcomes.
 - The web control plane now uses a denser operator workbench shell:
   Portfolio Home acts as a launcher, deeper routes use list/detail layouts, and the
   desktop voice surface lives in the shell instead of a decorative marketing panel.
+- The gateway fallback at `http://127.0.0.1:43111/` is now the desktop cockpit:
+  use it for the manual Freedom command surface, mission brief, voice/phone status,
+  pairing code/URL, build prompts, review queue, activity, settings, and Android
+  install access.
+- The desktop cockpit uses the robot owl logo from
+  `apps/gateway/assets/robot-origin-logo.png`; if the logo disappears, verify
+  `/assets/robot-origin-logo.png` returns `200 OK` from the running gateway before
+  chasing CSS or browser cache issues.
 - The Android companion now treats the phone as command-and-capture:
   launch opens on a sparse Start screen, live conversation stays on a dedicated Talk
   canvas, and secondary controls live behind the hidden utility sheet.

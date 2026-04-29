@@ -20,6 +20,11 @@ Operate the Freedom Engine OS safely as a governed internal decision system.
 - Phone access fails through Freedom Desktop:
   verify Codex login, Tailscale reachability, and that Freedom Engine's repo root is
   present in `DESKTOP_APPROVED_ROOTS`.
+- Desktop cockpit logo or shell copy looks stale:
+  hit `http://127.0.0.1:43111/assets/robot-origin-logo.png` and confirm it returns
+  `200 OK`, then refresh `http://127.0.0.1:43111/`. If old `Partner Desk`, `Studio`,
+  placeholder `F`, or dashboard-era labels still appear, restart the gateway listener
+  so the running `tsx` process reloads `apps/gateway/src/installPage.ts`.
 - Desktop shell or install page suddenly reverts to an old build:
   inspect `~/.local/share/applications/freedom-desktop.desktop` first and confirm its
   `Exec`, `Path`, and `Icon` all point at `the-freedom-engine-os`, not an absorbed repo.

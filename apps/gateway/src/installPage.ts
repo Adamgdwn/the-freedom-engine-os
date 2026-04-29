@@ -3,23 +3,36 @@ import type { IncomingMessage } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import QRCode from "qrcode";
-import type { ChatMessage, ChatSession, DesktopOverviewResponse, GatewayOverview, RecentSessionActivity } from "@freedom/shared";
+import type {
+  ChatMessage,
+  ChatSession,
+  DesktopOverviewResponse,
+  GatewayOverview,
+  RecentSessionActivity,
+} from "@freedom/shared";
 import {
   FREEDOM_PHONE_PRODUCT_NAME,
   FREEDOM_PRIMARY_SESSION_TITLE,
   FREEDOM_PRODUCT_NAME,
   humanizeDeferredExecutionState,
   humanizeMobileConnectionState,
-  humanizeMobileVoiceState
+  humanizeMobileVoiceState,
 } from "@freedom/shared";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
+const robotOriginLogoSrc = "/assets/robot-origin-logo.png";
 
 const defaultArtifactCandidates = [
   "apps/mobile/android/app/build/outputs/apk/release/app-release.apk",
-  "apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+  "apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk",
 ];
-const androidBuildGradlePath = path.resolve(repoRoot, "apps/mobile/android/app/build.gradle");
+const androidBuildGradlePath = path.resolve(
+  repoRoot,
+  "apps/mobile/android/app/build.gradle",
+);
 
 interface AndroidArtifact {
   filePath: string;
@@ -44,7 +57,7 @@ interface InstallPageModel {
 
 export async function buildInstallPageModel(
   req: IncomingMessage,
-  overview: GatewayOverview
+  overview: GatewayOverview,
 ): Promise<InstallPageModel> {
   const publicBaseUrl = resolvePublicBaseUrl(req, overview);
   const dashboardUrl = `${publicBaseUrl}/`;
@@ -59,29 +72,32 @@ export async function buildInstallPageModel(
       margin: 1,
       color: {
         dark: "#11243e",
-        light: "#fdf8ef"
-      }
+        light: "#fdf8ef",
+      },
     }),
     androidArtifact: await findAndroidArtifact(),
-    desktopConsoleEnabled: isLoopbackRequest(req)
+    desktopConsoleEnabled: isLoopbackRequest(req),
   };
 }
 
-export async function renderInstallQrSvg(req: IncomingMessage, overview: GatewayOverview): Promise<string> {
+export async function renderInstallQrSvg(
+  req: IncomingMessage,
+  overview: GatewayOverview,
+): Promise<string> {
   const publicBaseUrl = resolvePublicBaseUrl(req, overview);
   return QRCode.toString(`${publicBaseUrl}/install`, {
     type: "svg",
     margin: 1,
     color: {
       dark: "#11243e",
-      light: "#fdf8ef"
-    }
+      light: "#fdf8ef",
+    },
   });
 }
 
 export async function buildDesktopOverviewResponse(
   req: IncomingMessage,
-  overview: GatewayOverview
+  overview: GatewayOverview,
 ): Promise<DesktopOverviewResponse> {
   const model = await buildInstallPageModel(req, overview);
   const localBaseUrl = resolveLocalBaseUrl(req);
@@ -91,37 +107,61 @@ export async function buildDesktopOverviewResponse(
     dashboardUrl: `${localBaseUrl}/`,
     installUrl: model.installUrl,
     qrUrl: `${localBaseUrl}/install/qr.svg`,
-    apkDownloadUrl: model.androidArtifact ? buildAndroidArtifactDownloadUrl(model.publicBaseUrl, model.androidArtifact) : null,
+    apkDownloadUrl: model.androidArtifact
+      ? buildAndroidArtifactDownloadUrl(
+          model.publicBaseUrl,
+          model.androidArtifact,
+        )
+      : null,
     androidArtifact: model.androidArtifact
       ? {
           fileName: model.androidArtifact.downloadFileName,
-          sizeBytes: model.androidArtifact.sizeBytes
+          sizeBytes: model.androidArtifact.sizeBytes,
         }
-      : null
+      : null,
   };
 }
 
 export function renderDesktopPage(model: InstallPageModel): string {
-  const { overview, dashboardUrl, installUrl, publicBaseUrl, qrSvg, androidArtifact, desktopConsoleEnabled } = model;
+  const {
+    overview,
+    dashboardUrl,
+    installUrl,
+    publicBaseUrl,
+    qrSvg,
+    androidArtifact,
+    desktopConsoleEnabled,
+  } = model;
   const hostStatus = overview.hostStatus;
   const connectUrl = publicBaseUrl;
   const recoveryUrl =
-    hostStatus?.tailscale.suggestedUrl && stripTrailingSlash(hostStatus.tailscale.suggestedUrl) !== stripTrailingSlash(publicBaseUrl)
+    hostStatus?.tailscale.suggestedUrl &&
+    stripTrailingSlash(hostStatus.tailscale.suggestedUrl) !==
+      stripTrailingSlash(publicBaseUrl)
       ? stripTrailingSlash(hostStatus.tailscale.suggestedUrl)
       : null;
-  const apkDownloadUrl = androidArtifact ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact) : null;
+  const apkDownloadUrl = androidArtifact
+    ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact)
+    : null;
   const pairingCode = hostStatus?.host.pairingCode ?? "Waiting";
   const codexState = humanizeAuth(hostStatus?.auth.status ?? "logged_out");
-  const codexDetail = hostStatus?.auth.detail ?? "Desktop host has not published Freedom runtime status yet.";
-  const tailscaleDetail = hostStatus?.tailscale.detail ?? "Waiting for Tailscale status.";
+  const codexDetail =
+    hostStatus?.auth.detail ??
+    "Desktop host has not published Freedom runtime status yet.";
+  const tailscaleDetail =
+    hostStatus?.tailscale.detail ?? "Waiting for Tailscale status.";
   const roots = hostStatus?.host.approvedRoots ?? [];
   const recentSessionActivity = overview.recentSessionActivity;
   const recentDevices = overview.recentDevices;
   const auditEvents = overview.auditEvents;
   const primaryActivity = recentSessionActivity[0] ?? null;
-  const attentionEvents = auditEvents.filter((event) => /(approval|repair|failed|error)/i.test(event.type));
+  const attentionEvents = auditEvents.filter((event) =>
+    /(approval|repair|failed|error)/i.test(event.type),
+  );
   const recentPartnerSummary = primaryActivity
-    ? primaryActivity.latestAssistantMessage?.content?.trim() || primaryActivity.session.lastPreview || primaryActivity.session.title
+    ? primaryActivity.latestAssistantMessage?.content?.trim() ||
+      primaryActivity.session.lastPreview ||
+      primaryActivity.session.title
     : "No active Freedom conversation yet. Pair the phone or open the desktop shell to begin.";
   const partnerPosture =
     hostStatus?.connectionState === "desktop_linked"
@@ -130,33 +170,34 @@ export function renderDesktopPage(model: InstallPageModel): string {
 
   return renderPage({
     title: "Freedom Desktop",
-    description: "Launch, monitor, and pair Freedom from a clean desktop dashboard.",
+    description:
+      "Launch, monitor, and pair Freedom from a clean desktop cockpit.",
     body: `
-      <main class="shell shell-studio">
-        <header class="studio-topbar panel">
-          <div class="studio-brand">
-            <span class="brand-mark">F</span>
+      <main class="shell shell-cockpit">
+        <header class="cockpit-topbar panel">
+          <div class="cockpit-brand">
+            <img class="origin-logo origin-logo-large" src="${robotOriginLogoSrc}" alt="Freedom Engine logo" />
             <div class="brand-copy">
               <strong>Freedom Engine</strong>
-              <span>Desktop operator shell</span>
+              <span>Executive command cockpit</span>
             </div>
           </div>
-          <label class="studio-search">
-            <span>Command</span>
-            <input type="text" value="" placeholder="Search commands, projects, agents, memory, files..." readonly />
-          </label>
-          <div class="studio-top-status">
+          <div class="cockpit-command-summary">
+            <span class="eyebrow">Primary partner channel</span>
+            <strong>${escapeHtml(FREEDOM_PRIMARY_SESSION_TITLE)}</strong>
+            <span>${escapeHtml(recentPartnerSummary)}</span>
+          </div>
+          <div class="cockpit-status">
             <span class="pill pill-teal">${hostStatus?.host.isOnline ? "Host online" : "Host offline"}</span>
             <span class="pill pill-navy">${escapeHtml(codexState)}</span>
-            <span class="pill pill-navy">${hostStatus?.activeSessionCount ?? 0} live</span>
+            <span class="pill pill-navy">${attentionEvents.length} decision${attentionEvents.length === 1 ? "" : "s"}</span>
             <span class="pill pill-navy">${hostStatus?.pairedDeviceCount ?? 0} mobile</span>
           </div>
         </header>
 
-        <nav class="studio-nav panel" aria-label="Desktop functions" role="tablist">
-          ${renderDesktopTabButton("workspaces", "Overview")}
-          ${renderDesktopTabButton("operator", "Studio", true)}
-          ${renderDesktopTabButton("projects", "Active Projects")}
+        <nav class="cockpit-nav panel" aria-label="Desktop functions" role="tablist">
+          ${renderDesktopTabButton("operator", "Cockpit", true)}
+          ${renderDesktopTabButton("projects", "Projects")}
           ${renderDesktopTabButton("build", "Build")}
           ${renderDesktopTabButton("phone-setup", "Connect")}
           ${renderDesktopTabButton("activity", "Activity")}
@@ -165,199 +206,143 @@ export function renderDesktopPage(model: InstallPageModel): string {
 
         <section class="tab-shell">
           <div class="tab-panel active" data-tab-panel="operator" role="tabpanel" aria-labelledby="tab-operator">
-            <section class="studio-workspace">
-              <aside class="studio-rail panel">
-                <button class="studio-rail-button active" type="button" data-tab-open="operator" data-studio-open="desk">Home</button>
-                <button class="studio-rail-button" type="button" data-tab-open="projects">Active Projects</button>
-                <button class="studio-rail-button" type="button" data-tab-open="build">Build</button>
-                <button class="studio-rail-button" type="button" data-tab-open="operator" data-studio-open="map">Memory</button>
-                <button class="studio-rail-button" type="button" data-tab-open="phone-setup">Connect</button>
-              </aside>
-
-              <aside class="studio-sidebar panel">
-                <details class="accordion-card" open>
-                  <summary>Mission Brief</summary>
-                  <div class="accordion-body">
-                    <p>${escapeHtml(partnerPosture)}</p>
-                    <p>${escapeHtml(recentPartnerSummary)}</p>
-                  </div>
-                </details>
-                <details class="accordion-card" open>
-                  <summary>Execution Signals</summary>
-                  <div class="accordion-body stack gap-sm">
-                    ${renderWorkbenchSignalCard("Connection", humanizeMobileConnectionState(hostStatus?.connectionState ?? "reconnecting"), `${humanizeMobileVoiceState(hostStatus?.voiceState ?? "voice_unavailable")} · ${humanizeDeferredExecutionState(hostStatus?.deferredExecutionState ?? "failed_needs_review")}`)}
-                    ${renderWorkbenchSignalCard("Decision queue", `${attentionEvents.length} item${attentionEvents.length === 1 ? "" : "s"}`, attentionEvents.length ? "Approvals, repairs, or failures are waiting for review." : "No urgent approvals or failures are waiting right now.")}
-                    ${renderWorkbenchSignalCard("Phone sync", `${recentDevices.length} trusted phone${recentDevices.length === 1 ? "" : "s"}`, recentDevices.length ? `${FREEDOM_PHONE_PRODUCT_NAME} devices are attached to this desktop host.` : "No phone is paired yet.")}
-                  </div>
-                </details>
-                <details class="accordion-card">
-                  <summary>Recent Threads</summary>
-                  <div class="accordion-body stack gap-sm">
-                    ${
-                      recentSessionActivity.length
-                        ? recentSessionActivity.slice(0, 4).map(renderWorkbenchSessionCard).join("")
-                        : `<div class="empty-state">No active work threads yet.</div>`
-                    }
-                  </div>
-                </details>
-              </aside>
-
-              <section class="studio-main panel">
-                <div class="editor-tabs">
-                  <button class="editor-tab active" type="button" data-studio-tab-target="desk">Partner Desk</button>
-                  <button class="editor-tab" type="button" data-studio-tab-target="map">Mission Map</button>
-                  <button class="editor-tab" type="button" data-studio-tab-target="ops">Ops Pulse</button>
-                </div>
-
-                <div class="studio-panel active" data-studio-panel="desk">
-                  <div class="studio-stats-grid">
-                    <div class="glow-card">
-                      <span class="glow-label">Pairing</span>
-                      <strong>${escapeHtml(pairingCode)}</strong>
-                      <p>Current ${escapeHtml(FREEDOM_PHONE_PRODUCT_NAME)} pairing code.</p>
-                    </div>
-                    <div class="glow-card">
-                      <span class="glow-label">Phone URL</span>
-                      <strong>${escapeHtml(truncatePreview(connectUrl, 28))}</strong>
-                      <p>Shared ${escapeHtml(FREEDOM_PHONE_PRODUCT_NAME)} connection path.</p>
-                    </div>
-                    <div class="glow-card">
-                      <span class="glow-label">Approvals</span>
-                      <strong>${attentionEvents.length}</strong>
-                      <p>Items waiting for a decision.</p>
-                    </div>
-                    <div class="glow-card">
-                      <span class="glow-label">Roots</span>
-                      <strong>${roots.length}</strong>
-                      <p>Approved desktop workspaces.</p>
-                    </div>
-                  </div>
-
-                  <div class="quick-prompt-row studio-prompt-row">
-                    <button class="quick-prompt" type="button" data-partner-prompt="Give me the clearest picture of what matters most today across my active work.">Daily brief</button>
-                    <button class="quick-prompt" type="button" data-partner-prompt="Review the current work and tell me what needs my decision next.">Needs decision</button>
-                    <button class="quick-prompt" type="button" data-partner-prompt="Convert the current priorities into a practical execution plan with owners, dependencies, and risks.">Execution plan</button>
-                    <button class="quick-prompt" type="button" data-partner-prompt="Challenge my current direction and tell me what I am underestimating.">Challenge me</button>
-                  </div>
-
-                  ${
-                    desktopConsoleEnabled
-                      ? `
-                        <div
-                          class="stack gap-md"
-                          data-desktop-console
-                          data-state-url="/api/desktop-shell/state"
-                          data-session-url="/api/desktop-shell/session"
-                          data-session-base="/api/desktop-shell/sessions"
-                        >
-                          <div class="partner-topline">
-                            <div class="status-card partner-summary-card">
-                              <strong id="partner-session-title">${escapeHtml(FREEDOM_PRIMARY_SESSION_TITLE)}</strong>
-                              <p id="partner-session-meta">Opening the local partner desk on this desktop.</p>
-                            </div>
-                            <div class="partner-mini-metrics">
-                              <div class="mini-kpi">
-                                <span class="mini-kpi-label">Messages</span>
-                                <strong id="partner-message-count">0</strong>
-                              </div>
-                              <div class="mini-kpi">
-                                <span class="mini-kpi-label">Latest focus</span>
-                                <strong id="partner-focus-summary">Loading</strong>
-                              </div>
-                            </div>
-                          </div>
-                          <div class="studio-console-shell">
-                            <div class="partner-transcript" id="partner-messages">
-                              <div class="empty-state">Loading the Freedom conversation on this desktop.</div>
-                            </div>
-                            <form class="partner-composer" id="partner-composer">
-                              <label class="composer-label" for="partner-input">What should Freedom work on right now?</label>
-                              <div class="command-bar-frame">
-                                <textarea id="partner-input" rows="5" placeholder="Ask for priorities, a plan, a draft, a hard call, or the next concrete move."></textarea>
-                                <div class="command-bar-help">
-                                  <span>Compact command surface for strategy, approvals, planning, and execution.</span>
-                                  <span class="keyboard-hint">Ctrl/Cmd + K</span>
-                                </div>
-                              </div>
-                              <div class="button-row">
-                                <button class="button button-primary" id="partner-send" type="submit">Send To Freedom</button>
-                                <button class="button button-secondary" id="partner-stop" type="button">Stop Run</button>
-                              </div>
-                            </form>
-                          </div>
-                        </div>
-                      `
-                      : `
-                        <div class="status-card">
-                          <strong>Interactive partner controls are local-only</strong>
-                          <p>This page is in read-only mode from a remote browser. Open the native Freedom Desktop shell on the computer itself to use the live partner conversation surface.</p>
-                        </div>
-                      `
-                  }
-                </div>
-
-                <div class="studio-panel" data-studio-panel="map" hidden>
-                  <div class="studio-grid-two">
-                    <div class="glow-card glow-card-large">
-                      <span class="glow-label">Mission map</span>
-                      <strong>What Freedom is carrying</strong>
-                      <p>${escapeHtml(recentPartnerSummary)}</p>
-                    </div>
-                    <div class="stack gap-sm">
-                      ${renderWorkbenchSignalCard("Desktop readiness", codexState, codexDetail)}
-                      ${renderWorkbenchSignalCard("Transport", hostStatus?.tailscale.connected ? "Tailscale ready" : "Needs attention", tailscaleDetail)}
-                    </div>
+            <section class="cockpit-workspace">
+              <section class="cockpit-mission panel">
+                <div class="mission-identity">
+                  <img class="origin-logo" src="${robotOriginLogoSrc}" alt="" />
+                  <div>
+                    <span class="eyebrow">Mission brief</span>
+                    <h1>Freedom is your operating partner.</h1>
                   </div>
                 </div>
-
-                <div class="studio-panel" data-studio-panel="ops" hidden>
-                  <div class="studio-grid-two">
-                    <div class="stack gap-sm">
-                      ${
-                        attentionEvents.length
-                          ? attentionEvents.slice(0, 5).map(renderAttentionEventCard).join("")
-                          : `<div class="empty-state">No urgent review items. Freedom is clear to keep executing.</div>`
-                      }
-                    </div>
-                    <div class="stack gap-sm">
-                      ${
-                        recentSessionActivity.length
-                          ? recentSessionActivity.slice(0, 4).map(renderWorkbenchSessionCard).join("")
-                          : `<div class="empty-state">No recent session activity yet.</div>`
-                      }
-                    </div>
+                <p class="lede">${escapeHtml(partnerPosture)}</p>
+                <p class="cockpit-focus">${escapeHtml(recentPartnerSummary)}</p>
+                <div class="cockpit-kpi-grid">
+                  <div class="glow-card">
+                    <span class="glow-label">Decisions</span>
+                    <strong>${attentionEvents.length}</strong>
+                    <p>${attentionEvents.length ? "Needs operator judgment." : "No urgent approval holds."}</p>
                   </div>
+                  <div class="glow-card">
+                    <span class="glow-label">Live work</span>
+                    <strong>${hostStatus?.activeSessionCount ?? 0}</strong>
+                    <p>Active desktop sessions.</p>
+                  </div>
+                  <div class="glow-card">
+                    <span class="glow-label">Roots</span>
+                    <strong>${roots.length}</strong>
+                    <p>Approved workspaces.</p>
+                  </div>
+                </div>
+                <div class="quick-prompt-row cockpit-prompt-row">
+                  <button class="quick-prompt" type="button" data-partner-prompt="Give me the clearest picture of what matters most today across my active work.">Brief me</button>
+                  <button class="quick-prompt" type="button" data-partner-prompt="Review the current work and tell me what needs my decision next.">Decisions</button>
+                  <button class="quick-prompt" type="button" data-partner-prompt="Convert the current priorities into a practical execution plan with owners, dependencies, and risks.">Plan</button>
+                  <button class="quick-prompt" type="button" data-partner-prompt="Build a new agent for me. Start by asking the minimum clarifying questions, then produce the build brief, architecture, and first implementation plan.">Build</button>
                 </div>
               </section>
 
-              <aside class="studio-inspector panel">
-                <details class="accordion-card" open>
-                  <summary>Connect</summary>
-                  <div class="accordion-body stack gap-sm">
-                    <div class="token-row"><code>${escapeHtml(connectUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(connectUrl)}">Copy URL</button></div>
-                    ${
-                      recoveryUrl
-                        ? `<div class="token-row"><code>${escapeHtml(recoveryUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(recoveryUrl)}">Copy Recovery</button></div>`
-                        : ""
-                    }
-                    <div class="token-row emphasized"><strong class="pair-code">${escapeHtml(pairingCode)}</strong><button class="icon-button" type="button" data-copy="${escapeAttribute(pairingCode)}">Copy Code</button></div>
-                    ${
-                      apkDownloadUrl
-                        ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="${escapeAttribute(androidArtifact?.downloadFileName ?? "freedom.apk")}">Download APK</a>${renderAndroidArtifactBadge(androidArtifact)}`
-                        : `<span class="button button-muted">Android APK not built yet</span>`
-                    }
+              <section class="cockpit-console panel">
+                ${
+                  desktopConsoleEnabled
+                    ? `
+                      <div
+                        class="stack gap-md"
+                        data-desktop-console
+                        data-state-url="/api/desktop-shell/state"
+                        data-session-url="/api/desktop-shell/session"
+                        data-session-base="/api/desktop-shell/sessions"
+                      >
+                        <div class="partner-topline">
+                          <div class="status-card partner-summary-card">
+                            <span class="eyebrow">Manual command</span>
+                            <strong id="partner-session-title">${escapeHtml(FREEDOM_PRIMARY_SESSION_TITLE)}</strong>
+                            <p id="partner-session-meta">Opening the local Freedom cockpit on this desktop.</p>
+                          </div>
+                          <div class="partner-mini-metrics">
+                            <div class="mini-kpi">
+                              <span class="mini-kpi-label">Messages</span>
+                              <strong id="partner-message-count">0</strong>
+                            </div>
+                            <div class="mini-kpi">
+                              <span class="mini-kpi-label">Latest focus</span>
+                              <strong id="partner-focus-summary">Loading</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="cockpit-console-shell">
+                          <div class="partner-transcript" id="partner-messages">
+                            <div class="empty-state">Loading the Freedom conversation on this desktop.</div>
+                          </div>
+                          <form class="partner-composer" id="partner-composer">
+                            <label class="composer-label" for="partner-input">What should Freedom work on right now?</label>
+                            <div class="command-bar-frame">
+                              <textarea id="partner-input" rows="6" placeholder="Ask for priorities, scheduling help, a build plan, a decision, a draft, or the next concrete move."></textarea>
+                              <div class="command-bar-help">
+                                <span>One command surface for strategy, voice handoff, scheduling, builds, and execution.</span>
+                                <span class="keyboard-hint">Ctrl/Cmd + K</span>
+                              </div>
+                            </div>
+                            <div class="button-row cockpit-actions">
+                              <button class="button button-primary" id="partner-send" type="submit">Send To Freedom</button>
+                              <button class="button button-secondary" id="partner-stop" type="button">Stop Run</button>
+                            </div>
+                          </form>
+                        </div>
+                      </div>
+                    `
+                    : `
+                      <div class="status-card">
+                        <strong>Interactive partner controls are local-only</strong>
+                        <p>This page is in read-only mode from a remote browser. Open the native Freedom Desktop shell on the computer itself to use the live partner conversation surface.</p>
+                      </div>
+                    `
+                }
+              </section>
+
+              <aside class="cockpit-context panel">
+                <div class="context-card logo-context">
+                  <img class="origin-logo" src="${robotOriginLogoSrc}" alt="" />
+                  <div>
+                    <span class="eyebrow">Voice and phone</span>
+                    <strong>${escapeHtml(humanizeMobileVoiceState(hostStatus?.voiceState ?? "voice_unavailable"))}</strong>
+                    <p>${escapeHtml(humanizeMobileConnectionState(hostStatus?.connectionState ?? "reconnecting"))} · ${escapeHtml(humanizeDeferredExecutionState(hostStatus?.deferredExecutionState ?? "failed_needs_review"))}</p>
                   </div>
-                </details>
-                <details class="accordion-card" open>
-                  <summary>Approved roots</summary>
-                  <div class="accordion-body stack gap-sm">
-                    ${
-                      roots.length
-                        ? roots.slice(0, 4).map(renderWorkspaceContextCard).join("")
-                        : `<div class="empty-state">No approved roots yet.</div>`
-                    }
-                  </div>
-                </details>
+                </div>
+                <div class="token-row emphasized"><strong class="pair-code">${escapeHtml(pairingCode)}</strong><button class="icon-button" type="button" data-copy="${escapeAttribute(pairingCode)}">Copy Code</button></div>
+                <div class="token-row"><code>${escapeHtml(connectUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(connectUrl)}">Copy URL</button></div>
+                ${
+                  recoveryUrl
+                    ? `<div class="token-row"><code>${escapeHtml(recoveryUrl)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(recoveryUrl)}">Copy Recovery</button></div>`
+                    : ""
+                }
+                ${
+                  apkDownloadUrl
+                    ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="${escapeAttribute(androidArtifact?.downloadFileName ?? "freedom.apk")}">Download APK</a>`
+                    : `<span class="button button-muted">Android APK not built yet</span>`
+                }
+                <div class="context-card">
+                  <span class="eyebrow">Approved roots</span>
+                  ${
+                    roots.length
+                      ? roots
+                          .slice(0, 3)
+                          .map((root) => `<code>${escapeHtml(root)}</code>`)
+                          .join("")
+                      : `<p>No approved roots yet.</p>`
+                  }
+                </div>
+                <div class="context-card">
+                  <span class="eyebrow">Review queue</span>
+                  ${
+                    attentionEvents.length
+                      ? attentionEvents
+                          .slice(0, 3)
+                          .map(renderAttentionEventCard)
+                          .join("")
+                      : `<p>No urgent review items. Freedom is clear to keep executing.</p>`
+                  }
+                </div>
               </aside>
             </section>
           </div>
@@ -400,7 +385,7 @@ export function renderDesktopPage(model: InstallPageModel): string {
                     </details>
                     <div class="qr-box qr-box-large" aria-label="Freedom phone setup QR code">${qrSvg}</div>
                   </div>
-                `
+                `,
               )}
             </section>
           </div>
@@ -412,52 +397,14 @@ export function renderDesktopPage(model: InstallPageModel): string {
                 "See what Freedom and the phone have been doing",
                 recentSessionActivity.length
                   ? `<div class="list-grid">${recentSessionActivity.map(renderSessionCard).join("")}</div>`
-                  : `<div class="empty-state">No chat sessions yet. Pair the phone, start a chat, and it will show up here.</div>`
+                  : `<div class="empty-state">No chat sessions yet. Pair the phone, start a chat, and it will show up here.</div>`,
               )}
               ${renderAccordionPanel(
                 "Audit Timeline",
                 "Repairs, runs, and device activity",
                 auditEvents.length
                   ? `<div class="list-grid compact">${auditEvents.map(renderAuditCard).join("")}</div>`
-                  : `<div class="empty-state">No operator events have been recorded yet.</div>`
-              )}
-            </section>
-          </div>
-
-          <div class="tab-panel" data-tab-panel="workspaces" role="tabpanel" aria-labelledby="tab-workspaces" hidden>
-            <section class="content-grid wide">
-              ${renderAccordionPanel(
-                "Overview",
-                "Desktop posture, business state, and system summary",
-                `
-                  <details class="accordion-card" open>
-                    <summary>Current posture</summary>
-                    <div class="accordion-body">
-                      <p>${escapeHtml(partnerPosture)}</p>
-                      <p>${escapeHtml(codexDetail)}</p>
-                    </div>
-                  </details>
-                  <details class="accordion-card" open>
-                    <summary>System metrics</summary>
-                    <div class="accordion-body stack gap-sm">
-                      ${renderWorkbenchSignalCard("Connection", humanizeMobileConnectionState(hostStatus?.connectionState ?? "reconnecting"), `${humanizeMobileVoiceState(hostStatus?.voiceState ?? "voice_unavailable")} · ${humanizeDeferredExecutionState(hostStatus?.deferredExecutionState ?? "failed_needs_review")}`)}
-                      ${renderWorkbenchSignalCard("Pairing", pairingCode, `Current ${FREEDOM_PHONE_PRODUCT_NAME} pairing code for reconnect and onboarding.`)}
-                      ${renderWorkbenchSignalCard(FREEDOM_PHONE_PRODUCT_NAME, hostStatus?.pairedDeviceCount === 1 ? "1 phone" : `${hostStatus?.pairedDeviceCount ?? 0} phones`, `Connected ${FREEDOM_PHONE_PRODUCT_NAME} devices.`)}
-                    </div>
-                  </details>
-                `
-              )}
-              ${renderAccordionPanel(
-                "Workspaces",
-                "Desktop workspaces exposed to the phone",
-                roots.length
-                  ? `<div class="stack gap-sm">${roots
-                      .map(
-                        (root) =>
-                          `<div class="token-row"><code>${escapeHtml(root)}</code><button class="icon-button" type="button" data-copy="${escapeAttribute(root)}">Copy</button></div>`
-                      )
-                      .join("")}</div>`
-                  : `<div class="empty-state">No approved roots have been registered yet.</div>`
+                  : `<div class="empty-state">No operator events have been recorded yet.</div>`,
               )}
             </section>
           </div>
@@ -469,14 +416,14 @@ export function renderDesktopPage(model: InstallPageModel): string {
                 "Live work that Freedom is already carrying",
                 recentSessionActivity.length
                   ? `<div class="list-grid">${recentSessionActivity.map(renderSessionCard).join("")}</div>`
-                  : `<div class="empty-state">No active projects yet. Start one from Studio or Build and it will appear here.</div>`
+                  : `<div class="empty-state">No active projects yet. Start one from Cockpit or Build and it will appear here.</div>`,
               )}
               ${renderAccordionPanel(
                 "Decision Queue",
                 "Approvals, failures, repairs, and pending intervention",
                 attentionEvents.length
                   ? `<div class="stack gap-sm">${attentionEvents.map(renderAttentionEventCard).join("")}</div>`
-                  : `<div class="empty-state">Nothing urgent is waiting for review.</div>`
+                  : `<div class="empty-state">Nothing urgent is waiting for review.</div>`,
               )}
             </section>
           </div>
@@ -490,18 +437,18 @@ export function renderDesktopPage(model: InstallPageModel): string {
                   <details class="accordion-card" open>
                     <summary>Agent build actions</summary>
                     <div class="accordion-body stack gap-sm">
-                      <button class="button button-primary" type="button" data-tab-open="operator" data-studio-open="desk" data-partner-prompt="Build a new agent for me. Start by asking the minimum clarifying questions, then produce the build brief, architecture, and first implementation plan.">Build New Agent</button>
-                      <button class="button button-secondary" type="button" data-tab-open="operator" data-studio-open="desk" data-partner-prompt="Improve an existing Freedom agent. Review the current capability, identify gaps, and propose the next governed build iteration.">Improve Existing Agent</button>
-                      <button class="button button-secondary" type="button" data-tab-open="operator" data-studio-open="desk" data-partner-prompt="Take an agent idea from concept to build brief. Define scope, interfaces, dependencies, validation, and the first execution steps.">Turn Idea Into Build Brief</button>
+                      <button class="button button-primary" type="button" data-tab-open="operator" data-partner-prompt="Build a new agent for me. Start by asking the minimum clarifying questions, then produce the build brief, architecture, and first implementation plan.">Build New Agent</button>
+                      <button class="button button-secondary" type="button" data-tab-open="operator" data-partner-prompt="Improve an existing Freedom agent. Review the current capability, identify gaps, and propose the next governed build iteration.">Improve Existing Agent</button>
+                      <button class="button button-secondary" type="button" data-tab-open="operator" data-partner-prompt="Take an agent idea from concept to build brief. Define scope, interfaces, dependencies, validation, and the first execution steps.">Turn Idea Into Build Brief</button>
                     </div>
                   </details>
                   <details class="accordion-card" open>
                     <summary>What this build surface is for</summary>
                     <div class="accordion-body">
-                      <p>Use this area when you want Freedom to design, plan, or execute a new agent build. The action buttons above drop you straight into the Studio command surface with a build-focused prompt.</p>
+                      <p>Use this area when you want Freedom to design, plan, or execute a new agent build. The action buttons above drop you straight into the Cockpit command surface with a build-focused prompt.</p>
                     </div>
                   </details>
-                `
+                `,
               )}
               ${renderAccordionPanel(
                 "Build Pipeline",
@@ -531,14 +478,14 @@ export function renderDesktopPage(model: InstallPageModel): string {
                                     <p>Repair count ${device.repairCount} · ${device.pushToken ? "Push ready" : "Push not set"}</p>
                                     <span class="micro">${escapeHtml(device.id)}</span>
                                   </div>
-                                `
+                                `,
                               )
                               .join("")}</div>`
                           : `<div class="empty-state">No phone has paired yet.</div>`
                       }
                     </div>
                   </details>
-                `
+                `,
               )}
               ${renderAccordionPanel(
                 "Build Notes",
@@ -552,30 +499,7 @@ export function renderDesktopPage(model: InstallPageModel): string {
                       ${renderWorkbenchSignalCard("Approved roots", `${roots.length}`, roots.length ? "Freedom has approved workspace context available for builds." : "Add approved roots so Freedom can execute against the right project folders.")}
                     </div>
                   </details>
-                `
-              )}
-            </section>
-          </div>
-
-          <div class="tab-panel" data-tab-panel="devices" role="tabpanel" aria-labelledby="tab-devices" hidden>
-            <section class="content-grid single">
-              ${renderAccordionPanel(
-                "Trusted devices",
-                "Recent paired phones and sync state",
-                recentDevices.length
-                  ? `<div class="list-grid compact">${recentDevices
-                        .map(
-                          (device) => `
-                            <div class="list-card">
-                              <strong>${escapeHtml(device.deviceName)}</strong>
-                              <p>Last seen ${escapeHtml(timeAgo(device.lastSeenAt))}</p>
-                            <p>Repair count ${device.repairCount} · ${device.pushToken ? "Push ready" : "Push not set"}</p>
-                            <span class="micro">${escapeHtml(device.id)}</span>
-                          </div>
-                        `
-                        )
-                        .join("")}</div>`
-                  : `<div class="empty-state">No phone has paired yet.</div>`
+                `,
               )}
             </section>
           </div>
@@ -599,7 +523,7 @@ export function renderDesktopPage(model: InstallPageModel): string {
                       <p>Transport security: ${escapeHtml(hostStatus?.tailscale.transportSecurity ?? "unknown")}</p>
                     </div>
                   </details>
-                `
+                `,
               )}
               ${renderAccordionPanel(
                 "Support surfaces",
@@ -614,13 +538,13 @@ export function renderDesktopPage(model: InstallPageModel): string {
                         : `<div class="empty-state">Android APK not built yet.</div>`
                     }
                   </div>
-                `
+                `,
               )}
             </section>
           </div>
         </section>
       </main>
-    `
+    `,
   });
 }
 
@@ -629,16 +553,21 @@ export function renderInstallPage(model: InstallPageModel): string {
   const hostStatus = overview.hostStatus;
   const connectUrl = publicBaseUrl;
   const recoveryUrl =
-    hostStatus?.tailscale.suggestedUrl && stripTrailingSlash(hostStatus.tailscale.suggestedUrl) !== stripTrailingSlash(publicBaseUrl)
+    hostStatus?.tailscale.suggestedUrl &&
+    stripTrailingSlash(hostStatus.tailscale.suggestedUrl) !==
+      stripTrailingSlash(publicBaseUrl)
       ? stripTrailingSlash(hostStatus.tailscale.suggestedUrl)
       : null;
-  const apkDownloadUrl = androidArtifact ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact) : null;
+  const apkDownloadUrl = androidArtifact
+    ? buildAndroidArtifactDownloadUrl(publicBaseUrl, androidArtifact)
+    : null;
   const pairingCode = hostStatus?.host.pairingCode ?? "Waiting";
   const authLabel = humanizeAuth(hostStatus?.auth.status ?? "logged_out");
 
   return renderPage({
     title: "Install Freedom",
-    description: "Phone setup page for Freedom over local network or Tailscale.",
+    description:
+      "Phone setup page for Freedom over local network or Tailscale.",
     body: `
       <main class="shell narrow">
         <section class="hero panel compact-hero">
@@ -655,7 +584,7 @@ export function renderInstallPage(model: InstallPageModel): string {
                   ? `<a class="button button-primary" href="${escapeHtml(apkDownloadUrl)}" download="${escapeAttribute(androidArtifact?.downloadFileName ?? "freedom.apk")}">Download Android APK</a>`
                   : `<span class="button button-muted">Android APK not available yet</span>`
               }
-              <a class="button button-secondary" href="${escapeHtml(publicBaseUrl)}">Back to Desktop Dashboard</a>
+              <a class="button button-secondary" href="${escapeHtml(publicBaseUrl)}">Back to Desktop Cockpit</a>
             </div>
             ${renderAndroidArtifactBadge(androidArtifact)}
           </div>
@@ -735,13 +664,15 @@ export function renderInstallPage(model: InstallPageModel): string {
           </article>
         </section>
       </main>
-    `
+    `,
   });
 }
 
 export async function findAndroidArtifact(): Promise<AndroidArtifact | null> {
   const configuredPath = process.env.GATEWAY_ANDROID_APK_PATH?.trim();
-  const candidates = configuredPath ? [configuredPath, ...defaultArtifactCandidates] : defaultArtifactCandidates;
+  const candidates = configuredPath
+    ? [configuredPath, ...defaultArtifactCandidates]
+    : defaultArtifactCandidates;
   const versionMetadata = await readAndroidVersionMetadata();
 
   for (const candidate of candidates) {
@@ -753,9 +684,13 @@ export async function findAndroidArtifact(): Promise<AndroidArtifact | null> {
         const builtAt = fileStat.mtime.toISOString();
         const buildStamp = formatBuildStamp(fileStat.mtime);
         const buildId = [
-          versionMetadata.versionName ? `v${slugifyArtifactSegment(versionMetadata.versionName)}` : "vunknown",
-          versionMetadata.versionCode ? `b${versionMetadata.versionCode}` : "bunknown",
-          buildStamp
+          versionMetadata.versionName
+            ? `v${slugifyArtifactSegment(versionMetadata.versionName)}`
+            : "vunknown",
+          versionMetadata.versionCode
+            ? `b${versionMetadata.versionCode}`
+            : "bunknown",
+          buildStamp,
         ].join("-");
         return {
           filePath,
@@ -765,7 +700,7 @@ export async function findAndroidArtifact(): Promise<AndroidArtifact | null> {
           versionName: versionMetadata.versionName,
           builtAt,
           buildId,
-          downloadFileName: `freedom-${buildId}.apk`
+          downloadFileName: `freedom-${buildId}.apk`,
         };
       }
     } catch {
@@ -776,27 +711,35 @@ export async function findAndroidArtifact(): Promise<AndroidArtifact | null> {
   return null;
 }
 
-export function buildAndroidArtifactDownloadPath(artifact: AndroidArtifact): string {
+export function buildAndroidArtifactDownloadPath(
+  artifact: AndroidArtifact,
+): string {
   return `/downloads/android/${artifact.downloadFileName}`;
 }
 
-function buildAndroidArtifactDownloadUrl(publicBaseUrl: string, artifact: AndroidArtifact): string {
+function buildAndroidArtifactDownloadUrl(
+  publicBaseUrl: string,
+  artifact: AndroidArtifact,
+): string {
   return `${stripTrailingSlash(publicBaseUrl)}${buildAndroidArtifactDownloadPath(artifact)}`;
 }
 
-async function readAndroidVersionMetadata(): Promise<{ versionCode: number | null; versionName: string | null }> {
+async function readAndroidVersionMetadata(): Promise<{
+  versionCode: number | null;
+  versionName: string | null;
+}> {
   try {
     const source = await readFile(androidBuildGradlePath, "utf8");
     const versionCodeMatch = source.match(/versionCode\s+(\d+)/);
     const versionNameMatch = source.match(/versionName\s+"([^"]+)"/);
     return {
       versionCode: versionCodeMatch ? Number(versionCodeMatch[1]) : null,
-      versionName: versionNameMatch?.[1] ?? null
+      versionName: versionNameMatch?.[1] ?? null,
     };
   } catch {
     return {
       versionCode: null,
-      versionName: null
+      versionName: null,
     };
   }
 }
@@ -845,10 +788,19 @@ function formatTimestamp(value: string): string {
 }
 
 function slugifyArtifactSegment(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "unknown";
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "unknown"
+  );
 }
 
-function renderPage(input: { title: string; description: string; body: string }): string {
+function renderPage(input: {
+  title: string;
+  description: string;
+  body: string;
+}): string {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -858,22 +810,22 @@ function renderPage(input: { title: string; description: string; body: string })
     <meta name="description" content="${escapeAttribute(input.description)}" />
     <style>
       :root {
-        --navy-950: #081224;
-        --navy-900: #0d1b31;
-        --navy-800: #132744;
-        --navy-700: #1e416d;
-        --navy-600: #2f6ea8;
-        --panel: rgba(245, 249, 255, 0.88);
-        --panel-strong: rgba(255, 255, 255, 0.94);
-        --line: rgba(19, 39, 68, 0.12);
-        --line-strong: rgba(89, 143, 204, 0.24);
-        --text: #12233b;
-        --muted: #556883;
-        --teal: #1f8fa3;
-        --teal-soft: rgba(72, 176, 214, 0.16);
-        --orange: #5e89bb;
-        --orange-soft: rgba(87, 130, 186, 0.16);
-        --shadow: 0 18px 44px rgba(7, 21, 44, 0.14);
+        --navy-950: #061014;
+        --navy-900: #0b171c;
+        --navy-800: #10252c;
+        --navy-700: #17424a;
+        --navy-600: #197f82;
+        --panel: rgba(236, 244, 246, 0.9);
+        --panel-strong: rgba(250, 253, 252, 0.95);
+        --line: rgba(151, 191, 198, 0.18);
+        --line-strong: rgba(54, 221, 216, 0.28);
+        --text: #102027;
+        --muted: #536a70;
+        --teal: #24c6bd;
+        --teal-soft: rgba(36, 198, 189, 0.16);
+        --orange: #d59a3b;
+        --orange-soft: rgba(213, 154, 59, 0.16);
+        --shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
         --radius-xl: 14px;
         --radius-lg: 10px;
         --radius-md: 8px;
@@ -888,9 +840,12 @@ function renderPage(input: { title: string; description: string; body: string })
         color: var(--text);
         font-family: Calibri, "Segoe UI", sans-serif;
         background:
-          radial-gradient(circle at top left, rgba(64, 130, 210, 0.18), transparent 28%),
-          radial-gradient(circle at top right, rgba(91, 181, 214, 0.14), transparent 24%),
-          linear-gradient(180deg, #f7fbff 0%, #e6eef8 100%);
+          linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+          radial-gradient(circle at top left, rgba(36, 198, 189, 0.18), transparent 30%),
+          radial-gradient(circle at 88% 0%, rgba(213, 154, 59, 0.13), transparent 28%),
+          linear-gradient(180deg, #071013 0%, #101a1e 52%, #15120c 100%);
+        background-size: 42px 42px, 42px 42px, 100% 100%, 100% 100%, 100% 100%;
       }
 
       a {
@@ -913,8 +868,8 @@ function renderPage(input: { title: string; description: string; body: string })
         max-width: 1440px;
       }
 
-      .shell-studio {
-        max-width: 1520px;
+      .shell-cockpit {
+        max-width: 1560px;
       }
 
       .shell.narrow {
@@ -929,30 +884,38 @@ function renderPage(input: { title: string; description: string; body: string })
         backdrop-filter: blur(18px);
       }
 
-      .studio-topbar {
+      .cockpit-topbar {
         display: grid;
-        grid-template-columns: auto minmax(320px, 1fr) auto;
+        grid-template-columns: minmax(240px, auto) minmax(320px, 1fr) auto;
         gap: 14px;
         align-items: center;
-        padding: 12px 16px;
+        padding: 14px 16px;
+        background: rgba(237, 245, 247, 0.92);
       }
 
-      .studio-brand {
+      .cockpit-brand {
         display: flex;
         align-items: center;
         gap: 12px;
       }
 
-      .brand-mark {
-        display: grid;
-        place-items: center;
-        width: 38px;
-        height: 38px;
-        border-radius: 8px;
-        background: linear-gradient(135deg, var(--navy-800), #51a8d0);
-        color: #f8fbff;
-        font-weight: 700;
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+      .origin-logo {
+        width: 42px;
+        height: 42px;
+        padding: 4px;
+        border-radius: 10px;
+        object-fit: contain;
+        background: rgba(249, 252, 253, 0.9);
+        box-shadow:
+          inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+          0 10px 24px rgba(0, 0, 0, 0.16);
+      }
+
+      .origin-logo-large {
+        width: 54px;
+        height: 54px;
+        padding: 5px;
+        border-radius: 14px;
       }
 
       .brand-copy {
@@ -969,35 +932,39 @@ function renderPage(input: { title: string; description: string; body: string })
         font-size: 0.82rem;
       }
 
-      .studio-search {
+      .cockpit-command-summary {
         display: grid;
-        gap: 6px;
+        gap: 4px;
+        min-width: 0;
+        padding: 0 4px;
       }
 
-      .studio-search span {
+      .cockpit-command-summary strong {
+        color: var(--navy-950);
+        font-size: 1rem;
+      }
+
+      .cockpit-command-summary > span:last-child {
         color: var(--muted);
-        font-size: 0.76rem;
-        font-weight: 800;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      .studio-search input {
-        width: 100%;
-        min-height: 40px;
-        border-radius: 8px;
-        border: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(231, 239, 249, 0.92));
-        color: var(--text);
-        padding: 0 14px;
-        font: inherit;
-      }
-
-      .studio-top-status {
+      .cockpit-status {
         display: flex;
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: 8px;
+      }
+
+      .cockpit-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+        padding: 8px;
+        background: rgba(237, 245, 247, 0.9);
       }
 
       .hero {
@@ -1302,49 +1269,104 @@ function renderPage(input: { title: string; description: string; body: string })
         margin: 0;
       }
 
-      .studio-workspace {
+      .cockpit-workspace {
         display: grid;
-        grid-template-columns: 72px minmax(260px, 0.85fr) minmax(0, 1.8fr) minmax(280px, 0.95fr);
+        grid-template-columns: minmax(280px, 0.78fr) minmax(520px, 1.55fr) minmax(280px, 0.78fr);
         gap: 12px;
         align-items: start;
       }
 
-      .studio-rail,
-      .studio-sidebar,
-      .studio-main,
-      .studio-inspector {
-        min-height: calc(100vh - 220px);
+      .cockpit-mission,
+      .cockpit-console,
+      .cockpit-context {
+        min-height: calc(100vh - 172px);
       }
 
-      .studio-rail {
+      .cockpit-mission,
+      .cockpit-context {
         display: grid;
         align-content: start;
-        gap: 8px;
-        padding: 10px;
+        gap: 14px;
+        padding: 16px;
       }
 
-      .studio-rail-button {
-        min-height: 52px;
-        border-radius: 8px;
-        border: 1px solid transparent;
-        background: transparent;
+      .cockpit-console {
+        padding: 0;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at top right, rgba(36, 198, 189, 0.2), transparent 34%),
+          linear-gradient(180deg, rgba(7, 16, 19, 0.98), rgba(15, 27, 32, 0.98));
+        border-color: rgba(65, 227, 221, 0.18);
+      }
+
+      .mission-identity,
+      .logo-context {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .mission-identity h1 {
+        margin: 10px 0 0;
+        max-width: 10ch;
+        color: var(--navy-950);
+        font-size: clamp(2rem, 3vw, 3.25rem);
+      }
+
+      .cockpit-focus {
+        margin: 0;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: rgba(255, 255, 255, 0.64);
         color: var(--muted);
-        font: inherit;
-        font-weight: 700;
-        cursor: pointer;
+        line-height: 1.6;
       }
 
-      .studio-rail-button.active {
-        color: #f8fbff;
-        background: linear-gradient(135deg, var(--navy-800), var(--navy-600));
-      }
-
-      .studio-sidebar,
-      .studio-inspector {
+      .cockpit-kpi-grid {
         display: grid;
-        align-content: start;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
-        padding: 12px;
+      }
+
+      .cockpit-prompt-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .cockpit-actions {
+        margin-top: 0;
+      }
+
+      .cockpit-context .button {
+        width: 100%;
+      }
+
+      .context-card {
+        display: grid;
+        gap: 10px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .context-card strong {
+        color: var(--navy-950);
+      }
+
+      .context-card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .context-card .attention-card {
+        padding: 10px 0 0;
+        border: 0;
+        border-top: 1px solid var(--line);
+        border-radius: 0;
+        background: transparent;
       }
 
       .accordion-card {
@@ -1370,60 +1392,12 @@ function renderPage(input: { title: string; description: string; body: string })
         padding: 0 16px 16px;
       }
 
-      .studio-main {
-        padding: 0;
-        overflow: hidden;
-        background:
-          radial-gradient(circle at top right, rgba(79, 184, 227, 0.22), transparent 28%),
-          linear-gradient(180deg, rgba(13, 27, 49, 0.98), rgba(18, 35, 59, 0.98));
-        border-color: rgba(98, 170, 224, 0.18);
-      }
-
-      .editor-tabs {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 10px 12px;
-        border-bottom: 1px solid rgba(134, 173, 219, 0.14);
-        background: rgba(4, 11, 24, 0.3);
-      }
-
-      .editor-tab {
-        min-height: 38px;
-        border-radius: 6px 6px 0 0;
-        border: 1px solid transparent;
-        background: rgba(118, 148, 191, 0.12);
-        color: rgba(230, 240, 255, 0.72);
-        padding: 0 14px;
-        font: inherit;
-        font-weight: 700;
-        cursor: pointer;
-      }
-
-      .editor-tab.active {
-        background: rgba(15, 33, 58, 0.88);
-        color: #eff7ff;
-        border-color: rgba(128, 193, 233, 0.2);
-      }
-
-      .studio-panel {
-        display: grid;
-        gap: 16px;
-        padding: 16px;
-      }
-
-      .studio-stats-grid {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: 12px;
-      }
-
       .glow-card {
         padding: 16px;
         border-radius: 10px;
-        border: 1px solid rgba(123, 180, 224, 0.16);
-        background: linear-gradient(180deg, rgba(18, 35, 59, 0.82), rgba(12, 24, 41, 0.92));
-        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 0 28px rgba(47, 124, 198, 0.12);
+        border: 1px solid rgba(36, 198, 189, 0.18);
+        background: linear-gradient(180deg, rgba(12, 29, 34, 0.9), rgba(7, 17, 20, 0.96));
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 0 28px rgba(36, 198, 189, 0.11);
       }
 
       .glow-card strong {
@@ -1445,63 +1419,12 @@ function renderPage(input: { title: string; description: string; body: string })
         text-transform: uppercase;
       }
 
-      .glow-card-large {
-        min-height: 220px;
-      }
-
-      .studio-console-shell {
+      .cockpit-console-shell {
         display: grid;
-        grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.95fr);
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
         gap: 14px;
         align-items: start;
-      }
-
-      .studio-grid-two {
-        display: grid;
-        grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
-        gap: 14px;
-      }
-
-      .workbench-grid {
-        display: grid;
-        grid-template-columns: minmax(240px, 0.9fr) minmax(0, 1.7fr) minmax(280px, 1fr);
-        gap: 14px;
-        margin-top: 14px;
-        align-items: start;
-      }
-
-      .workbench-column,
-      .workbench-main {
-        display: grid;
-        gap: 14px;
-      }
-
-      .workbench-main {
-        min-width: 0;
-      }
-
-      .workbench-command {
-        overflow: hidden;
-        position: relative;
-      }
-
-      .workbench-command::after {
-        content: "";
-        position: absolute;
-        right: -80px;
-        top: -80px;
-        width: 220px;
-        height: 220px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(15, 118, 110, 0.16), transparent 68%);
-        pointer-events: none;
-      }
-
-      .workbench-stat-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 12px;
-        margin-top: 16px;
+        padding: 0 16px 16px;
       }
 
       .mini-stat,
@@ -1532,13 +1455,6 @@ function renderPage(input: { title: string; description: string; body: string })
         font-weight: 800;
         letter-spacing: 0.05em;
         text-transform: uppercase;
-      }
-
-      .workbench-shortcuts {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 16px;
       }
 
       .tab-shell {
@@ -1615,17 +1531,6 @@ function renderPage(input: { title: string; description: string; body: string })
         height: auto;
       }
 
-      .inline-qr-card {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        padding: 14px 16px;
-        border: 1px solid var(--line);
-        border-radius: var(--radius-lg);
-        background: rgba(255, 255, 255, 0.72);
-      }
-
       .qr-box-compact {
         margin: 0;
         padding: 8px;
@@ -1638,11 +1543,6 @@ function renderPage(input: { title: string; description: string; body: string })
 
       .qr-box-large svg {
         width: min(100%, 320px);
-      }
-
-      .qr-panel {
-        display: flex;
-        flex-direction: column;
       }
 
       .list-grid {
@@ -1675,14 +1575,11 @@ function renderPage(input: { title: string; description: string; body: string })
         margin-top: 12px;
       }
 
-      .partner-console {
-        flex: 1 1 100%;
-      }
-
       .partner-topline {
         display: grid;
         grid-template-columns: minmax(0, 1.3fr) minmax(240px, 0.9fr);
         gap: 12px;
+        padding: 16px 16px 0;
       }
 
       .partner-summary-card {
@@ -1692,13 +1589,6 @@ function renderPage(input: { title: string; description: string; body: string })
       .partner-mini-metrics {
         display: grid;
         gap: 12px;
-      }
-
-      .partner-status-cluster {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 6px;
       }
 
       .command-bar-frame {
@@ -1716,22 +1606,26 @@ function renderPage(input: { title: string; description: string; body: string })
       }
 
       .quick-prompt {
-        border: 1px solid rgba(17, 36, 62, 0.12);
+        border: 1px solid rgba(36, 198, 189, 0.2);
         border-radius: 8px;
         min-height: 38px;
         padding: 0 14px;
-        background: rgba(36, 76, 123, 0.38);
-        color: #e7f1ff;
+        background: rgba(11, 23, 28, 0.9);
+        color: #e7fffc;
         cursor: pointer;
         font-weight: 700;
         font-size: 0.88rem;
       }
 
+      .quick-prompt:hover {
+        background: rgba(25, 127, 130, 0.82);
+      }
+
       .partner-transcript {
         display: grid;
         gap: 12px;
-        max-height: 560px;
-        min-height: 420px;
+        max-height: 620px;
+        min-height: 470px;
         padding-right: 4px;
         overflow: auto;
       }
@@ -1739,20 +1633,20 @@ function renderPage(input: { title: string; description: string; body: string })
       .partner-bubble {
         padding: 14px 16px;
         border-radius: 10px;
-        border: 1px solid rgba(126, 173, 219, 0.16);
-        background: rgba(15, 27, 44, 0.84);
+        border: 1px solid rgba(36, 198, 189, 0.16);
+        background: rgba(8, 18, 22, 0.86);
       }
 
       .partner-bubble.user {
-        background: rgba(30, 54, 82, 0.88);
+        background: rgba(17, 44, 50, 0.9);
       }
 
       .partner-bubble.assistant {
-        background: rgba(14, 40, 70, 0.88);
+        background: rgba(12, 50, 54, 0.9);
       }
 
       .partner-bubble.system {
-        background: rgba(26, 46, 73, 0.88);
+        background: rgba(34, 33, 24, 0.9);
       }
 
       .partner-bubble-header {
@@ -1764,7 +1658,7 @@ function renderPage(input: { title: string; description: string; body: string })
       }
 
       .partner-bubble-label {
-        color: rgba(194, 222, 255, 0.88);
+        color: rgba(188, 248, 244, 0.88);
         font-size: 0.74rem;
         font-weight: 800;
         letter-spacing: 0.05em;
@@ -1790,6 +1684,7 @@ function renderPage(input: { title: string; description: string; body: string })
 
       .composer-label {
         font-weight: 700;
+        color: #e8fbf8;
       }
 
       .partner-composer textarea {
@@ -1970,22 +1865,20 @@ function renderPage(input: { title: string; description: string; body: string })
       }
 
       @media (max-width: 940px) {
-        .studio-topbar,
-        .studio-workspace,
-        .studio-console-shell,
-        .studio-grid-two,
-        .studio-stats-grid {
+        .cockpit-topbar,
+        .cockpit-workspace,
+        .cockpit-console-shell,
+        .cockpit-kpi-grid {
           grid-template-columns: 1fr;
         }
 
-        .studio-rail,
-        .studio-sidebar,
-        .studio-main,
-        .studio-inspector {
+        .cockpit-mission,
+        .cockpit-console,
+        .cockpit-context {
           min-height: auto;
         }
 
-        .studio-top-status {
+        .cockpit-status {
           justify-content: flex-start;
         }
 
@@ -1999,9 +1892,7 @@ function renderPage(input: { title: string; description: string; body: string })
 
         .app-header,
         .command-ribbon,
-        .workbench-grid,
-        .partner-topline,
-        .workbench-stat-grid {
+        .partner-topline {
           grid-template-columns: 1fr;
         }
 
@@ -2019,7 +1910,11 @@ function renderPage(input: { title: string; description: string; body: string })
           padding: 18px 12px 36px;
         }
 
-        .studio-topbar {
+        .cockpit-topbar {
+          grid-template-columns: 1fr;
+        }
+
+        .cockpit-prompt-row {
           grid-template-columns: 1fr;
         }
 
@@ -2032,7 +1927,6 @@ function renderPage(input: { title: string; description: string; body: string })
         .token-row,
         .section-head,
         .status-line,
-        .inline-qr-card,
         .command-bar-help {
           align-items: flex-start;
           flex-direction: column;
@@ -2061,7 +1955,6 @@ function renderPage(input: { title: string; description: string; body: string })
       let toastTimer;
       const tabs = Array.from(document.querySelectorAll("[data-tab-target]"));
       const panels = Array.from(document.querySelectorAll("[data-tab-panel]"));
-      const studioRailButtons = Array.from(document.querySelectorAll(".studio-rail-button"));
       const storageKey = "freedom-desktop-tab";
       const showToast = (message) => {
         if (!toast) return;
@@ -2096,7 +1989,6 @@ function renderPage(input: { title: string; description: string; body: string })
         try {
           localStorage.setItem(storageKey, targetId);
         } catch {}
-        syncStudioRail();
       };
       tabs.forEach((button) => {
         button.addEventListener("click", () => activateTab(button.getAttribute("data-tab-target")));
@@ -2107,10 +1999,6 @@ function renderPage(input: { title: string; description: string; body: string })
           const targetId = link.getAttribute("data-tab-open");
           if (!targetId) return;
           activateTab(targetId);
-          const studioTarget = link.getAttribute("data-studio-open");
-          if (studioTarget) {
-            activateStudioTab(studioTarget);
-          }
           window.location.hash = targetId;
         });
       });
@@ -2129,50 +2017,6 @@ function renderPage(input: { title: string; description: string; body: string })
             return "operator";
           }
         })();
-      const studioTabs = Array.from(document.querySelectorAll("[data-studio-tab-target]"));
-      const studioPanels = Array.from(document.querySelectorAll("[data-studio-panel]"));
-      const syncStudioRail = () => {
-        const activeTopTab = tabs.find((button) => button.classList.contains("active"))?.getAttribute("data-tab-target");
-        const activeStudioTab = studioTabs.find((button) => button.classList.contains("active"))?.getAttribute("data-studio-tab-target");
-        studioRailButtons.forEach((button) => {
-          const topTarget = button.getAttribute("data-tab-open");
-          const studioTarget = button.getAttribute("data-studio-open");
-          const active =
-            topTarget === activeTopTab &&
-            (!studioTarget || studioTarget === activeStudioTab || activeTopTab !== "operator");
-          button.classList.toggle("active", Boolean(active));
-        });
-      };
-      const activateStudioTab = (tabId) => {
-        const targetId = studioTabs.some((button) => button.getAttribute("data-studio-tab-target") === tabId)
-          ? tabId
-          : studioTabs[0]?.getAttribute("data-studio-tab-target");
-        if (!targetId) return;
-        studioTabs.forEach((button) => {
-          const active = button.getAttribute("data-studio-tab-target") === targetId;
-          button.classList.toggle("active", active);
-        });
-        studioPanels.forEach((panel) => {
-          const active = panel.getAttribute("data-studio-panel") === targetId;
-          panel.classList.toggle("active", active);
-          panel.toggleAttribute("hidden", !active);
-        });
-        syncStudioRail();
-      };
-      studioTabs.forEach((button) => {
-        button.addEventListener("click", () => activateStudioTab(button.getAttribute("data-studio-tab-target")));
-      });
-      studioRailButtons.forEach((button) => {
-        button.addEventListener("click", () => {
-          const studioTarget = button.getAttribute("data-studio-open");
-          if (studioTarget) {
-            activateStudioTab(studioTarget);
-          } else {
-            syncStudioRail();
-          }
-        });
-      });
-      activateStudioTab("desk");
       activateTab(initialTab);
       document.querySelectorAll("[data-copy]").forEach((button) => {
         button.addEventListener("click", async () => {
@@ -2193,8 +2037,6 @@ function renderPage(input: { title: string; description: string; body: string })
         const sessionBase = desktopConsole.getAttribute("data-session-base");
         const sessionTitle = document.getElementById("partner-session-title");
         const sessionMeta = document.getElementById("partner-session-meta");
-        const sessionStatusPill = document.getElementById("partner-status-pill");
-        const sessionLastActivity = document.getElementById("partner-last-activity");
         const sessionMessageCount = document.getElementById("partner-message-count");
         const sessionFocusSummary = document.getElementById("partner-focus-summary");
         const messageList = document.getElementById("partner-messages");
@@ -2233,29 +2075,6 @@ function renderPage(input: { title: string; description: string; body: string })
           return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
         };
 
-        const relativeTime = (iso) => {
-          if (!iso) return "Just now";
-          const date = new Date(iso);
-          if (Number.isNaN(date.getTime())) return "Just now";
-          const deltaSeconds = Math.max(1, Math.round((Date.now() - date.getTime()) / 1000));
-          if (deltaSeconds < 60) return deltaSeconds + "s ago";
-          const deltaMinutes = Math.round(deltaSeconds / 60);
-          if (deltaMinutes < 60) return deltaMinutes + "m ago";
-          const deltaHours = Math.round(deltaMinutes / 60);
-          if (deltaHours < 24) return deltaHours + "h ago";
-          const deltaDays = Math.round(deltaHours / 24);
-          return deltaDays + "d ago";
-        };
-
-        const pillClassForStatus = (status) =>
-          ({
-            running: "pill-teal",
-            queued: "pill-orange",
-            stopping: "pill-orange",
-            error: "pill-orange",
-            idle: "pill-navy"
-          })[status] || "pill-navy";
-
         const updateComposerState = () => {
           const hasSession = Boolean(currentSessionId);
           const busy = ["queued", "running", "stopping"].includes(currentSessionStatus);
@@ -2275,7 +2094,7 @@ function renderPage(input: { title: string; description: string; body: string })
         const renderMessages = (messages) => {
           if (!messageList) return;
           if (!messages?.length) {
-            messageList.innerHTML = '<div class="empty-state">The partner desk is ready. Ask Freedom to brief you, challenge a plan, or drive the next move.</div>';
+            messageList.innerHTML = '<div class="empty-state">The Freedom cockpit is ready. Ask Freedom to brief you, challenge a plan, or drive the next move.</div>';
             return;
           }
           messageList.innerHTML = messages
@@ -2321,14 +2140,7 @@ function renderPage(input: { title: string; description: string; body: string })
           if (sessionMeta) {
             sessionMeta.textContent = session
               ? humanizeSessionStatus(session.status) + " • " + session.rootPath
-              : "Open the partner desk on this desktop to start a working session with Freedom.";
-          }
-          if (sessionStatusPill) {
-            sessionStatusPill.textContent = session ? humanizeSessionStatus(session.status) : "Preparing";
-            sessionStatusPill.className = "pill " + pillClassForStatus(session?.status || "idle");
-          }
-          if (sessionLastActivity) {
-            sessionLastActivity.textContent = session?.updatedAt ? "Updated " + relativeTime(session.updatedAt) : "Opening the local partner desk.";
+              : "Open the Freedom cockpit on this desktop to start a working session with Freedom.";
           }
           if (sessionMessageCount) {
             sessionMessageCount.textContent = String(messages.length);
@@ -2346,7 +2158,7 @@ function renderPage(input: { title: string; description: string; body: string })
 
         const ensureSession = async () => {
           if (!sessionUrl) {
-            throw new Error("Partner desk is not configured.");
+            throw new Error("Freedom cockpit is not configured.");
           }
           const response = await fetch(sessionUrl, { method: "POST" });
           if (!response.ok) {
@@ -2465,7 +2277,11 @@ function renderPage(input: { title: string; description: string; body: string })
 </html>`;
 }
 
-function renderDesktopTabButton(id: string, label: string, active = false): string {
+function renderDesktopTabButton(
+  id: string,
+  label: string,
+  active = false,
+): string {
   return `
     <button
       class="tab-button ${active ? "active" : ""}"
@@ -2481,7 +2297,11 @@ function renderDesktopTabButton(id: string, label: string, active = false): stri
   `;
 }
 
-function renderAccordionPanel(label: string, title: string, body: string): string {
+function renderAccordionPanel(
+  label: string,
+  title: string,
+  body: string,
+): string {
   return `
     <article class="panel section">
       <div class="section-head">
@@ -2497,7 +2317,11 @@ function renderAccordionPanel(label: string, title: string, body: string): strin
   `;
 }
 
-function renderWorkbenchSignalCard(title: string, value: string, detail: string): string {
+function renderWorkbenchSignalCard(
+  title: string,
+  value: string,
+  detail: string,
+): string {
   return `
     <div class="status-card">
       <strong>${escapeHtml(title)}</strong>
@@ -2528,7 +2352,9 @@ function renderWorkbenchSessionCard(activity: RecentSessionActivity): string {
   `;
 }
 
-function renderAttentionEventCard(event: DesktopOverviewResponse["overview"]["auditEvents"][number]): string {
+function renderAttentionEventCard(
+  event: DesktopOverviewResponse["overview"]["auditEvents"][number],
+): string {
   return `
     <div class="attention-card">
       <strong>${escapeHtml(event.type.replace(/_/g, " "))}</strong>
@@ -2538,21 +2364,12 @@ function renderAttentionEventCard(event: DesktopOverviewResponse["overview"]["au
   `;
 }
 
-function renderWorkspaceContextCard(root: string): string {
-  return `
-    <div class="workspace-card">
-      <strong>Approved root</strong>
-      <p class="workspace-copy">Freedom can plan and execute against this workspace from desktop and companion surfaces.</p>
-      <code>${escapeHtml(root)}</code>
-    </div>
-  `;
-}
-
 function renderSessionCard(activity: RecentSessionActivity): string {
-  const { session, latestUserMessage, latestAssistantMessage, lastMessageAt } = activity;
+  const { session, latestUserMessage, latestAssistantMessage, lastMessageAt } =
+    activity;
   const assistantPreview = session.lastError
     ? `Latest run stopped with an error: ${session.lastError}`
-      : latestAssistantMessage?.content?.trim()
+    : latestAssistantMessage?.content?.trim()
       ? latestAssistantMessage.content
       : session.status === "running" || session.status === "queued"
         ? `${FREEDOM_PRODUCT_NAME} is working on the latest turn.`
@@ -2584,9 +2401,10 @@ function renderMessagePreview(
   label: string,
   message: ChatMessage | string | null,
   emptyState: string,
-  variant: "user" | "assistant"
+  variant: "user" | "assistant",
 ): string {
-  const content = typeof message === "string" ? message : message?.content ?? "";
+  const content =
+    typeof message === "string" ? message : (message?.content ?? "");
   const value = content.trim() ? truncatePreview(content.trim()) : emptyState;
   const emptyClass = content.trim() ? "" : " empty";
   return `
@@ -2604,7 +2422,9 @@ function truncatePreview(value: string, maxLength = 220): string {
   return `${value.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function renderAuditCard(event: DesktopOverviewResponse["overview"]["auditEvents"][number]): string {
+function renderAuditCard(
+  event: DesktopOverviewResponse["overview"]["auditEvents"][number],
+): string {
   return `
     <div class="list-card">
       <strong>${escapeHtml(event.type.replace(/_/g, " "))}</strong>
@@ -2614,7 +2434,10 @@ function renderAuditCard(event: DesktopOverviewResponse["overview"]["auditEvents
   `;
 }
 
-function resolvePublicBaseUrl(req: IncomingMessage, overview: GatewayOverview): string {
+function resolvePublicBaseUrl(
+  req: IncomingMessage,
+  overview: GatewayOverview,
+): string {
   const suggestedUrl = overview.hostStatus?.tailscale.suggestedUrl;
   if (isLoopbackRequest(req) && suggestedUrl) {
     return stripTrailingSlash(suggestedUrl);
@@ -2641,61 +2464,6 @@ function humanizeAuth(value: string): string {
     return "Freedom needs attention";
   }
   return "Freedom login required";
-}
-
-function humanizeAvailability(value: string): string {
-  switch (value) {
-    case "codex_unavailable":
-      return "Freedom unavailable";
-    case "offline":
-      return "Desktop offline";
-    case "ready":
-      return "Ready";
-    case "reconnecting":
-      return "Reconnecting";
-    case "repair_needed":
-      return "Repair needed";
-    case "tailscale_unavailable":
-      return "Tailscale unavailable";
-    default:
-      return "Needs attention";
-  }
-}
-
-function humanizeRepairState(value: string): string {
-  switch (value) {
-    case "repair_required":
-      return "Repair required";
-    case "reconnecting":
-      return "Reconnecting";
-    case "repaired":
-      return "Repaired";
-    default:
-      return "Healthy";
-  }
-}
-
-function humanizeRunState(value: string): string {
-  switch (value) {
-    case "failed":
-      return "Failed";
-    case "running":
-      return "Running";
-    case "sending":
-      return "Sending";
-    case "speaking":
-      return "Speaking";
-    case "stopping":
-      return "Stopping";
-    case "review":
-      return "Review";
-    case "listening":
-      return "Listening";
-    case "completed":
-      return "Completed";
-    default:
-      return "Ready";
-  }
 }
 
 function humanizeSessionStatus(value: ChatSession["status"]): string {

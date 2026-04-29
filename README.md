@@ -32,12 +32,19 @@ Freedom in this system is tracked as outcomes, not slogans:
 - Phone access:
   use the integrated Freedom desktop-host, gateway, and mobile companion from this
   monorepo
+- Desktop cockpit:
+  use the gateway-served Freedom cockpit at `http://127.0.0.1:43111/` as the compact
+  operator surface for manual commands, voice/phone status, build prompts, pairing,
+  activity, and install access
 
 ## What V1 Includes
 
 - A Next.js 16 control-plane UI with the required views:
   Portfolio Home, Venture Detail, Workflow Lab, Agent Control, Governance Console,
   Evidence Room, and Weekly Review
+- A gateway desktop cockpit with the Freedom Engine robot owl logo, a manual command
+  console, high-level mission brief, voice/phone pairing context, build actions, and
+  the Android install path in one local operator surface
 - A seeded venture registry and opportunity scoring engine with versioned weight sets
 - Workflow intelligence, agent registry, policy registry, approvals, evidence logging,
   execution logs, overrides, and recommendation generation
@@ -73,10 +80,10 @@ Freedom in this system is tracked as outcomes, not slogans:
 
 ## Mobile Access
 
-Freedom Engine can already be reached from your phone through the Freedom desktop shell
-and Freedom mobile companion shipped from this monorepo. See `docs/mobile-access.md`
-for the current launch path, pairing flow, realtime voice requirements, and APK install
-surface.
+Freedom Engine can already be reached from your phone through the Freedom desktop
+cockpit and Freedom mobile companion shipped from this monorepo. See
+`docs/mobile-access.md` for the current launch path, pairing flow, realtime voice
+requirements, and APK install surface.
 
 ## Documentation
 
